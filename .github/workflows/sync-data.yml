@@ -1,54 +1,52 @@
-name: Triagem Diária de Licitações PNCP
+name: Triagem Diária e Recursiva PNCP
 
 on:
   schedule:
-    # Executa todos os dias às 09:00 UTC (06:00 Horário de Brasília)
-    - cron: '0 9 * * *' 
-  workflow_dispatch: # Permite execução manual pelo botão "Run workflow"
+    - cron: '0 9 * * *' # Roda todo dia às 06:00 AM (Horário de Brasília)
+  workflow_dispatch: # Permite iniciar manualmente para começar o ciclo
 
 jobs:
   coleta_dados:
     runs-on: ubuntu-latest
     
-    # Permissões necessárias para o robô escrever no repositório
     permissions:
       contents: write
+      actions: write # Necessário para o robô poder iniciar a próxima ação
 
     steps:
-      - name: 1. Checkout do Repositório
+      - name: Checkout do Repositório
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # Baixa todo o histórico para evitar erros de push
 
-      - name: 2. Configurar Ambiente Python
+      - name: Configurar Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: 3. Instalar Dependências
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests pandas
+      - name: Instalar Dependências
+        run: pip install requests pandas
 
-      - name: 4. Executar Script de Triagem (app.py)
+      - name: Executar Robô (Um Dia)
         run: python app.py
 
-      - name: 5. Sincronizar e Salvar Oportunidades
+      - name: Salvar Progresso (Commit)
         run: |
-          # Configura a identidade do robô
           git config --global user.name "COLETA-PNCP-BOT"
           git config --global user.email "bot@github.com"
+          git add dados/oportunidades.json checkpoint.txt
           
-          # Adiciona o arquivo gerado/atualizado
-          git add dados/oportunidades.json
-          
-          # Verifica se há algo novo para commitar
+          # Verifica se há algo para commitar
           if ! git diff --cached --quiet; then
-            git commit -m "Update: Novas licitações triadas em $(date +'%d/%m/%Y')"
-            
-            # Estratégia de correção de conflito: Pull com rebase antes do Push
+            git commit -m "Auto: Varredura concluída"
             git pull --rebase origin main
             git push origin main
           else
-            echo "Nenhuma nova oportunidade de saúde encontrada hoje."
+            echo "Nenhuma alteração nos dados hoje."
           fi
+
+      - name: Iniciar Próximo Dia (Recursão)
+        if: env.CONTINUAR_EXECUCAO == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Detectado atraso na varredura. Iniciando próxima ação..."
+          gh workflow run sync-data.yml
