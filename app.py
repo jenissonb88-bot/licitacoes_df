@@ -4,86 +4,75 @@ import json
 import os
 from datetime import datetime
 
-# CONFIGURAÇÕES SEGUNDO MANUAL 2.3.9
-# O Pregão na Nova Lei (14.133) é obrigatoriamente código 6
-MODALIDADE_ALVO = "6" 
-DATA_INICIO = "2026-01-01" # Formato ISO costuma ser mais aceito em APIs REST
-URL_BASE = "https://pncp.gov.br/api/pncp/v1/licitacoes"
+# CONFIGURAÇÕES ANALÍTICAS - LEI 14.133/2021
+DATA_CORTE = "20260101"
+MODALIDADE_PREGAO = "6" # Conforme lembrete: Pregão é 6
+# URL base corrigida para o serviço de consulta de publicações v1
+URL_API = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacoes"
 
-# Termos para triagem automática (Saúde e Higiene)
-TERMOS_SAUDE = ["medicamento", "hospitalar", "saude", "farmacia", "insumos", "higiene", "medico", "soro"]
+TERMOS_SAUDE = ["medicamento", "hospitalar", "farmacia", "insumos", "saude", "higiene", "medico", "soro"]
 
-def extrair_keywords_csv():
+def carregar_portfolio():
     try:
-        # Tenta carregar o portfólio para triagem refinada
         df = pd.read_csv('Exportar Dados.csv', encoding='utf-8')
-        keywords = df['Descrição'].dropna().str.split().str[0].unique().tolist()
-        return [str(k).lower() for k in keywords if len(str(k)) > 2]
+        return df['Descrição'].dropna().str.split().str[0].unique().tolist()
     except:
         return []
 
-def realizar_coleta():
-    print(f"Iniciando varredura PNCP (Modalidade: {MODALIDADE_ALVO}) desde {DATA_INICIO}...")
-    keywords_portfolio = extrair_keywords_csv()
+def buscar_licitacoes():
+    print(f"Iniciando varredura técnica PNCP 2026 (Pregão 6)...")
+    portfolio = carregar_portfolio()
     
-    # Parâmetros conforme Manual de Integração 2.3.9
     params = {
-        "dataInicial": "20260101", # Formato AAAAMMDD para a consulta
-        "dataFinal": datetime.now().strftime("%Y%m%d"),
-        "codigoModalidade": MODALIDADE_ALVO,
+        "dataPublicacaoInicial": DATA_CORTE,
+        "dataPublicacaoFinal": datetime.now().strftime("%Y%m%d"),
+        "codigoModalidade": MODALIDADE_PREGAO,
         "pagina": 1,
         "tamanhoPagina": 50
     }
 
-    headers = {
-        "accept": "*/*",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    }
+    headers = {"accept": "*/*", "User-Agent": "ColetaPNCP/1.0"}
 
     try:
-        # Tenta o endpoint principal de licitações
-        response = requests.get(URL_BASE, params=params, headers=headers, timeout=30)
+        response = requests.get(URL_API, params=params, headers=headers, timeout=30)
         
-        # Se 404, tenta o endpoint de consultas (fallback)
+        # Fallback caso o endpoint de publicações mude
         if response.status_code == 404:
-            url_fallback = "https://pncp.gov.br/api/pncp/v1/consultas/licitacoes"
-            print(f"Endpoint principal 404. Tentando fallback: {url_fallback}")
-            response = requests.get(url_fallback, params=params, headers=headers, timeout=30)
+            print("Tentando endpoint alternativo de contratações...")
+            alt_url = "https://pncp.gov.br/api/pncp/v1/consultas/licitacoes"
+            response = requests.get(alt_url, params=params, headers=headers, timeout=30)
 
         response.raise_for_status()
-        dados = response.json()
+        dados = response.json().get('data', [])
         
-        # Algumas versões da API retornam os dados em 'data', outras diretamente na lista
-        lista_editais = dados.get('data', dados) if isinstance(dados, dict) else dados
-        
-        resultados = []
-        for edital in lista_editais:
-            objeto = edital.get('objeto', '').lower()
+        oportunidades = []
+        for item in dados:
+            # Triagem por texto
+            txt = (item.get('objeto') or "").lower()
+            match = any(t.lower() in txt for t in TERMOS_SAUDE) or any(p.lower() in txt for p in portfolio)
             
-            # Triagem Técnica: Saúde ou Itens do Portfólio
-            match_saude = any(t in objeto for t in TERMOS_SAUDE)
-            match_port = any(k in objeto for k in keywords_portfolio)
-            
-            if match_saude or match_port:
-                resultados.append({
-                    "uf": edital.get('orgaoEntidade', {}).get('unidadeFederativaId'),
-                    "orgao": edital.get('orgaoEntidade', {}).get('razaoSocial'),
-                    "numero": edital.get('numeroSequencial'),
-                    "ano": edital.get('ano'),
-                    "objeto": edital.get('objeto'),
-                    "link": f"https://pncp.gov.br/app/editais/{edital.get('orgaoEntidade', {}).get('cnpj')}/{edital.get('ano')}/{edital.get('numeroSequencial')}",
-                    "modalidade": "Pregão (6)"
+            if match:
+                oportunidades.append({
+                    "uf": item.get('unidadeFederativaId'),
+                    "orgao": item.get('orgaoEntidade', {}).get('razaoSocial'),
+                    "cnpj": item.get('orgaoEntidade', {}).get('cnpj'),
+                    "ano": item.get('ano'),
+                    "sequencial": item.get('sequencial'),
+                    "numero": item.get('numeroSequencial'),
+                    "objeto": item.get('objeto'),
+                    "data_pub": item.get('dataPublicacaoPncp'),
+                    "situacao": item.get('situacaoNome'),
+                    "link": f"https://pncp.gov.br/app/editais/{item.get('orgaoEntidade', {}).get('cnpj')}/{item.get('ano')}/{item.get('sequencial')}"
                 })
 
-        # Salva o resultado para o frontend
         os.makedirs('dados', exist_ok=True)
         with open('dados/oportunidades.json', 'w', encoding='utf-8') as f:
-            json.dump(resultados, f, ensure_ascii=False, indent=4)
+            json.dump(oportunidades, f, ensure_ascii=False, indent=4)
         
-        print(f"Varredura concluída. Encontradas {len(resultados)} oportunidades pertinentes.")
+        print(f"Sucesso: {len(oportunidades)} licitações de saúde identificadas.")
 
     except Exception as e:
-        print(f"Erro na execução: {e}")
+        print(f"Erro na coleta: {e}")
 
 if __name__ == "__main__":
-    realizar_coleta()
+    buscar_licitacoes()
