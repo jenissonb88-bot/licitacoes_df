@@ -4,83 +4,86 @@ import json
 import os
 from datetime import datetime
 
-# CONFIGURAÇÕES TÉCNICAS (LEI 14.133/2021)
-DATA_CORTE = "20260101"
-MODALIDADE_PREGAO = "6"  # PREGÃO conforme Manual PNCP V1
+# CONFIGURAÇÕES SEGUNDO MANUAL 2.3.9
+# O Pregão na Nova Lei (14.133) é obrigatoriamente código 6
+MODALIDADE_ALVO = "6" 
+DATA_INICIO = "2026-01-01" # Formato ISO costuma ser mais aceito em APIs REST
+URL_BASE = "https://pncp.gov.br/api/pncp/v1/licitacoes"
 
-# Lista de termos para triagem automática (Saúde/Higiene)
-TERMOS_SAUDE = ["medicamento", "hospitalar", "farmacia", "insumos", "saude", "higiene", "medico", "soro", "gaze", "luva"]
+# Termos para triagem automática (Saúde e Higiene)
+TERMOS_SAUDE = ["medicamento", "hospitalar", "saude", "farmacia", "insumos", "higiene", "medico", "soro"]
 
-def extrair_portfolio():
+def extrair_keywords_csv():
     try:
-        # Tenta carregar do CSV enviado pelo usuário
+        # Tenta carregar o portfólio para triagem refinada
         df = pd.read_csv('Exportar Dados.csv', encoding='utf-8')
-        palavras = df['Descrição'].dropna().str.split().str[0].unique().tolist()
-        return [str(p).lower() for p in palavras if len(str(p)) > 2]
+        keywords = df['Descrição'].dropna().str.split().str[0].unique().tolist()
+        return [str(k).lower() for k in keywords if len(str(k)) > 2]
     except:
         return []
 
-def buscar_oportunidades():
-    print(f"Varredura PNCP: Modalidade {MODALIDADE_PREGAO} desde {DATA_CORTE}...")
-    portfolio = extrair_portfolio()
+def realizar_coleta():
+    print(f"Iniciando varredura PNCP (Modalidade: {MODALIDADE_ALVO}) desde {DATA_INICIO}...")
+    keywords_portfolio = extrair_keywords_csv()
     
-    # Endpoints possíveis para contornar o erro 404
-    endpoints = [
-        "https://pncp.gov.br/api/pncp/v1/consultas/licitacoes",
-        "https://pncp.gov.br/api/pncp/v1/consultas/publicacoes/licitacoes"
-    ]
-    
-    sucesso = False
-    resultados = []
+    # Parâmetros conforme Manual de Integração 2.3.9
+    params = {
+        "dataInicial": "20260101", # Formato AAAAMMDD para a consulta
+        "dataFinal": datetime.now().strftime("%Y%m%d"),
+        "codigoModalidade": MODALIDADE_ALVO,
+        "pagina": 1,
+        "tamanhoPagina": 50
+    }
 
-    for url in endpoints:
-        if sucesso: break
+    headers = {
+        "accept": "*/*",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
+
+    try:
+        # Tenta o endpoint principal de licitações
+        response = requests.get(URL_BASE, params=params, headers=headers, timeout=30)
         
-        params = {
-            "dataInicial": DATA_CORTE,
-            "dataFinal": datetime.now().strftime("%Y%m%d"),
-            "codigoModalidade": MODALIDADE_PREGAO,
-            "pagina": 1,
-            "tamanhoPagina": 100
-        }
+        # Se 404, tenta o endpoint de consultas (fallback)
+        if response.status_code == 404:
+            url_fallback = "https://pncp.gov.br/api/pncp/v1/consultas/licitacoes"
+            print(f"Endpoint principal 404. Tentando fallback: {url_fallback}")
+            response = requests.get(url_fallback, params=params, headers=headers, timeout=30)
 
-        try:
-            print(f"Tentando endpoint: {url}")
-            response = requests.get(url, params=params, timeout=20)
+        response.raise_for_status()
+        dados = response.json()
+        
+        # Algumas versões da API retornam os dados em 'data', outras diretamente na lista
+        lista_editais = dados.get('data', dados) if isinstance(dados, dict) else dados
+        
+        resultados = []
+        for edital in lista_editais:
+            objeto = edital.get('objeto', '').lower()
             
-            if response.status_code == 200:
-                dados_api = response.json()
-                itens = dados_api.get('data', [])
-                
-                for item in itens:
-                    objeto = item.get('objeto', '').lower()
-                    
-                    # TRIAGEM: Termos de Saúde OR Itens do CSV
-                    match_saude = any(t in objeto for t in TERMOS_SAUDE)
-                    match_prod = any(p in objeto for p in portfolio)
-                    
-                    if match_saude or match_prod:
-                        resultados.append({
-                            "numero": item.get('numeroSequencial'),
-                            "ano": item.get('ano'),
-                            "orgao": item.get('orgaoEntidade', {}).get('razaoSocial'),
-                            "uf": item.get('orgaoEntidade', {}).get('unidadeFederativaId'),
-                            "objeto": item.get('objeto'),
-                            "data": item.get('dataPublicacaoPncp'),
-                            "link": f"https://pncp.gov.br/app/editais/{item.get('orgaoEntidade', {}).get('cnpj')}/{item.get('ano')}/{item.get('numeroSequencial')}"
-                        })
-                sucesso = True
-            else:
-                print(f"Status {response.status_code} para {url}")
-        except Exception as e:
-            print(f"Erro ao conectar em {url}: {e}")
+            # Triagem Técnica: Saúde ou Itens do Portfólio
+            match_saude = any(t in objeto for t in TERMOS_SAUDE)
+            match_port = any(k in objeto for k in keywords_portfolio)
+            
+            if match_saude or match_port:
+                resultados.append({
+                    "uf": edital.get('orgaoEntidade', {}).get('unidadeFederativaId'),
+                    "orgao": edital.get('orgaoEntidade', {}).get('razaoSocial'),
+                    "numero": edital.get('numeroSequencial'),
+                    "ano": edital.get('ano'),
+                    "objeto": edital.get('objeto'),
+                    "link": f"https://pncp.gov.br/app/editais/{edital.get('orgaoEntidade', {}).get('cnpj')}/{edital.get('ano')}/{edital.get('numeroSequencial')}",
+                    "modalidade": "Pregão (6)"
+                })
 
-    # Salva o arquivo JSON para o Index.html
-    os.makedirs('dados', exist_ok=True)
-    with open('dados/oportunidades.json', 'w', encoding='utf-8') as f:
-        json.dump(resultados, f, ensure_ascii=False, indent=4)
-    
-    print(f"Finalizado. {len(resultados)} pregões de saúde encontrados.")
+        # Salva o resultado para o frontend
+        os.makedirs('dados', exist_ok=True)
+        with open('dados/oportunidades.json', 'w', encoding='utf-8') as f:
+            json.dump(resultados, f, ensure_ascii=False, indent=4)
+        
+        print(f"Varredura concluída. Encontradas {len(resultados)} oportunidades pertinentes.")
+
+    except Exception as e:
+        print(f"Erro na execução: {e}")
 
 if __name__ == "__main__":
-    buscar_oportunidades()
+    realizar_coleta()
