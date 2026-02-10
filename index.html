@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COLETA PNCP | Analista de Licitações</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .cascata-enter { animation: slideDown 0.3s ease-out forwards; }
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <header class="bg-slate-900 text-white p-4 shadow-lg">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                <i class="fas fa-microscope text-blue-400"></i> COLETA PNCP <span class="text-sm font-light text-gray-400">| Saúde & Medicamentos</span>
+            </h1>
+            <div id="status-update" class="text-xs text-gray-400">
+                Aguardando dados...
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto p-4 md:p-6">
+        
+        <section class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-gray-500 mb-1">UF</label>
+                    <select id="filter-uf" class="w-full border rounded-lg p-2 bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none">
+                        <option value="">Todas as UFs</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-gray-500 mb-1">Órgão / Ente</label>
+                    <input type="text" id="filter-orgao" placeholder="Ex: Hospital Municipal" class="w-full border rounded-lg p-2 bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-gray-500 mb-1">Objeto / Item</label>
+                    <input type="text" id="filter-objeto" placeholder="Ex: Soro, AAS..." class="w-full border rounded-lg p-2 bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div class="flex items-end gap-2">
+                    <button onclick="aplicarFiltros()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition">
+                        <i class="fas fa-search mr-2"></i> Buscar
+                    </button>
+                    <button onclick="limparFiltros()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded-lg transition">
+                        <i class="fas fa-eraser"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <div class="flex justify-end gap-4 mb-4">
+            <button class="text-sm text-blue-600 hover:underline font-medium"><i class="fas fa-plus-circle"></i> Inclusão Manual</button>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <table class="w-full text-left border-collapse">
+                <thead class="bg-gray-100 border-b border-gray-200">
+                    <tr>
+                        <th class="p-4 text-xs font-bold uppercase text-gray-600">UF</th>
+                        <th class="p-4 text-xs font-bold uppercase text-gray-600">Órgão / Edital</th>
+                        <th class="p-4 text-xs font-bold uppercase text-gray-600">Objeto da Licitação</th>
+                        <th class="p-4 text-xs font-bold uppercase text-gray-600">Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="lista-licitacoes">
+                    </tbody>
+            </table>
+            
+            <div class="p-4 border-t border-gray-100 flex justify-between items-center bg-gray-50">
+                <span id="info-paginas" class="text-sm text-gray-500">Mostrando 0 de 0 resultados</span>
+                <div class="flex gap-2">
+                    <button id="prev" class="px-3 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">Anterior</button>
+                    <button id="next" class="px-3 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">Próximo</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let dadosOriginais = [];
+        let dadosFiltrados = [];
+        let paginaAtual = 1;
+        const itensPorPagina = 20;
+
+        // Carregar dados gerados pelo GitHub Actions
+        async function carregarDados() {
+            try {
+                const response = await fetch('dados/oportunidades.json');
+                if (!response.ok) throw new Error("Dados não encontrados");
+                dadosOriginais = await response.json();
+                
+                // Popular select de UF
+                const ufs = [...new Set(dadosOriginais.map(d => d.uf))].sort();
+                const selectUf = document.getElementById('filter-uf');
+                ufs.forEach(uf => {
+                    if(uf) selectUf.innerHTML += `<option value="${uf}">${uf}</option>`;
+                });
+
+                aplicarFiltros();
+                document.getElementById('status-update').innerText = `Atualizado: ${new Date().toLocaleDateString()}`;
+            } catch (err) {
+                document.getElementById('lista-licitacoes').innerHTML = `<tr><td colspan="4" class="p-8 text-center text-gray-400">Nenhuma oportunidade carregada. Execute o GitHub Action primeiro.</td></tr>`;
+            }
+        }
+
+        function renderizarTabela() {
+            const lista = document.getElementById('lista-licitacoes');
+            lista.innerHTML = '';
+            
+            const inicio = (paginaAtual - 1) * itensPorPagina;
+            const fim = inicio + itensPorPagina;
+            const itensPagina = dadosFiltrados.slice(inicio, fim);
+
+            itensPagina.forEach((item, index) => {
+                const tr = document.createElement('tr');
+                tr.className = `border-b border-gray-100 hover:bg-blue-50 transition cascata-enter`;
+                tr.style.animationDelay = `${index * 0.05}s`;
+                
+                tr.innerHTML = `
+                    <td class="p-4 font-bold text-blue-700">${item.uf || '--'}</td>
+                    <td class="p-4">
+                        <div class="text-sm font-semibold">${item.orgao}</div>
+                        <div class="text-xs text-gray-400">Edital: ${item.numero}</div>
+                    </td>
+                    <td class="p-4 text-sm text-gray-600 max-w-md truncate" title="${item.objeto}">
+                        ${item.objeto}
+                    </td>
+                    <td class="p-4 flex gap-2">
+                        <a href="${item.link}" target="_blank" class="bg-white border border-blue-600 text-blue-600 p-2 rounded hover:bg-blue-600 hover:text-white transition shadow-sm" title="Ver no PNCP">
+                            <i class="fas fa-external-link-alt"></i>
+                        </a>
+                        <button onclick="excluirItem('${item.numero}')" class="text-red-400 hover:text-red-600 p-2" title="Descartar">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </td>
+                `;
+                lista.appendChild(tr);
+            });
+
+            document.getElementById('info-paginas').innerText = `Mostrando ${itensPagina.length} de ${dadosFiltrados.length} resultados`;
+            document.getElementById('prev').disabled = paginaAtual === 1;
+            document.getElementById('next').disabled = fim >= dadosFiltrados.length;
+        }
+
+        function aplicarFiltros() {
+            const uf = document.getElementById('filter-uf').value;
+            const orgao = document.getElementById('filter-orgao').value.toLowerCase();
+            const objeto = document.getElementById('filter-objeto').value.toLowerCase();
+
+            dadosFiltrados = dadosOriginais.filter(item => {
+                return (!uf || item.uf === uf) &&
+                       (!orgao || item.orgao.toLowerCase().includes(orgao)) &&
+                       (!objeto || item.objeto.toLowerCase().includes(objeto));
+            });
+
+            paginaAtual = 1;
+            renderizarTabela();
+        }
+
+        function limparFiltros() {
+            document.querySelectorAll('input, select').forEach(i => i.value = '');
+            aplicarFiltros();
+        }
+
+        function excluirItem(numero) {
+            if(confirm('Deseja descartar esta licitação da visualização atual?')) {
+                dadosFiltrados = dadosFiltrados.filter(i => i.numero !== numero);
+                renderizarTabela();
+            }
+        }
+
+        // Navegação
+        document.getElementById('prev').onclick = () => { if(paginaAtual > 1) { paginaAtual--; renderizarTabela(); }};
+        document.getElementById('next').onclick = () => { if((paginaAtual * itensPorPagina) < dadosFiltrados.length) { paginaAtual++; renderizarTabela(); }};
+
+        // Iniciar
+        carregarDados();
+    </script>
+</body>
+</html>
