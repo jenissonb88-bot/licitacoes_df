@@ -2,40 +2,53 @@ name: Triagem Diária de Licitações PNCP
 
 on:
   schedule:
-    # Executa todos os dias às 06:00 AM (Horário de Brasília aproximadamente)
+    # Executa todos os dias às 09:00 UTC (06:00 Horário de Brasília)
     - cron: '0 9 * * *' 
-  workflow_dispatch: # Permite que você execute manualmente pelo painel do GitHub
+  workflow_dispatch: # Permite execução manual pelo botão "Run workflow"
 
 jobs:
   coleta_dados:
     runs-on: ubuntu-latest
     
+    # Permissões necessárias para o robô escrever no repositório
     permissions:
-      contents: write # Permite que o bot salve o JSON de oportunidades no repositório
+      contents: write
 
     steps:
-      - name: Checkout do Repositório
+      - name: 1. Checkout do Repositório
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Baixa todo o histórico para evitar erros de push
 
-      - name: Configurar Python 3.10
+      - name: 2. Configurar Ambiente Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Instalar Dependências
+      - name: 3. Instalar Dependências
         run: |
           python -m pip install --upgrade pip
           pip install requests pandas
 
-      - name: Executar Script de Triagem PNCP
+      - name: 4. Executar Script de Triagem (app.py)
         run: python app.py
-        env:
-          DATA_INICIO_COLETA: '20260101'
 
-      - name: Salvar Resultados da Triagem
+      - name: 5. Sincronizar e Salvar Oportunidades
         run: |
+          # Configura a identidade do robô
           git config --global user.name "COLETA-PNCP-BOT"
           git config --global user.email "bot@github.com"
+          
+          # Adiciona o arquivo gerado/atualizado
           git add dados/oportunidades.json
-          # Só faz o commit se houver alterações para evitar erro no workflow
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update: Licitações triadas em $(date +'%d/%m/%Y')" && git push)
+          
+          # Verifica se há algo novo para commitar
+          if ! git diff --cached --quiet; then
+            git commit -m "Update: Novas licitações triadas em $(date +'%d/%m/%Y')"
+            
+            # Estratégia de correção de conflito: Pull com rebase antes do Push
+            git pull --rebase origin main
+            git push origin main
+          else
+            echo "Nenhuma nova oportunidade de saúde encontrada hoje."
+          fi
