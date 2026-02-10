@@ -1,0 +1,41 @@
+name: Triagem Diária de Licitações PNCP
+
+on:
+  schedule:
+    # Executa todos os dias às 06:00 AM (Horário de Brasília aproximadamente)
+    - cron: '0 9 * * *' 
+  workflow_dispatch: # Permite que você execute manualmente pelo painel do GitHub
+
+jobs:
+  coleta_dados:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write # Permite que o bot salve o JSON de oportunidades no repositório
+
+    steps:
+      - name: Checkout do Repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Instalar Dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pandas
+
+      - name: Executar Script de Triagem PNCP
+        run: python app.py
+        env:
+          DATA_INICIO_COLETA: '20260101'
+
+      - name: Salvar Resultados da Triagem
+        run: |
+          git config --global user.name "COLETA-PNCP-BOT"
+          git config --global user.email "bot@github.com"
+          git add dados/oportunidades.json
+          # Só faz o commit se houver alterações para evitar erro no workflow
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update: Licitações triadas em $(date +'%d/%m/%Y')" && git push)
