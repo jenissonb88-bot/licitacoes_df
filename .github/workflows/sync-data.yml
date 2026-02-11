@@ -2,16 +2,15 @@ name: Triagem Diária e Recursiva PNCP
 
 on:
   schedule:
-    - cron: '0 9 * * *' # Roda todo dia às 06:00 AM (Horário de Brasília)
-  workflow_dispatch: # Permite iniciar manualmente para começar o ciclo
+    - cron: '0 9 * * *' # Roda automaticamente às 06:00 AM Brasília
+  workflow_dispatch: # Permite iniciar manualmente
 
 jobs:
   coleta_dados:
     runs-on: ubuntu-latest
-    
     permissions:
       contents: write
-      actions: write # Necessário para o robô poder iniciar a próxima ação
+      actions: write
 
     steps:
       - name: Checkout do Repositório
@@ -25,28 +24,34 @@ jobs:
       - name: Instalar Dependências
         run: pip install requests pandas
 
-      - name: Executar Robô (Um Dia)
+      - name: Executar Robô
+        id: exec_robo
         run: python app.py
 
       - name: Salvar Progresso (Commit)
         run: |
           git config --global user.name "COLETA-PNCP-BOT"
           git config --global user.email "bot@github.com"
-          git add dados/oportunidades.json checkpoint.txt
-          
-          # Verifica se há algo para commitar
+          git add dados/oportunidades.js checkpoint.txt
           if ! git diff --cached --quiet; then
-            git commit -m "Auto: Varredura concluída"
-            git pull --rebase origin main
+            git commit -m "Auto: Dados atualizados e Checkpoint avançado"
             git push origin main
           else
-            echo "Nenhuma alteração nos dados hoje."
+            echo "Sem novos dados para este dia."
           fi
 
       - name: Iniciar Próximo Dia (Recursão)
-        if: env.CONTINUAR_EXECUCAO == 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # IMPORTANTE: Ele lê o arquivo env.txt criado pelo Python
         run: |
-          echo "Detectado atraso na varredura. Iniciando próxima ação..."
-          gh workflow run sync-data.yml
+          if [ -f env.txt ]; then
+            source env.txt
+            if [ "$CONTINUAR_EXECUCAO" = "true" ]; then
+              echo "🔄 Ativando próxima varredura..."
+              curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                https://api.github.com/repos/${{ github.repository }}/actions/workflows/sync-data.yml/dispatches \
+                -d '{"ref":"main"}'
+            else
+              echo "✅ Tudo atualizado até a data de hoje."
+            fi
+          fi
