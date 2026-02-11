@@ -2,25 +2,35 @@ import requests
 import json
 from datetime import datetime, timedelta
 import os
-import pandas as pd
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 import urllib3
 
-# --- CONFIGURAÇÕES DE TESTE ---
-DATA_INICIO_VARREDURA = datetime(2026, 1, 1) # Tente voltar ao dia 01/01/2026
+# --- CONFIGURAÇÃO DE ALVO ---
+# Se 01/01/2026 está vazio, o robô vai tentar 02/01, 03/01... até achar.
+DATA_INICIO_VARREDURA = datetime(2026, 1, 1) 
 ARQ_DADOS = 'dados/oportunidades.js'
 ARQ_CHECKPOINT = 'checkpoint.txt'
-MODALIDADE_PREGAO = "6"
 
 ESTADOS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "DF", "GO", "MT", "MS"]
 
-# Expandimos a lista para garantir captura no teste
-TERMOS_SAUDE = ["medicamento", "hospitalar", "saude", "farmacia", "medico", "penso", "luva", "soro", "hospital"]
+# Expandimos os termos para capturar variações comuns em editais de saúde
+TERMOS_SAUDE = [
+    "medicamento", "hospitalar", "saude", "farmacia", "medico", "penso", 
+    "luva", "soro", "hospital", "insumos", "odontologico", "fisioterap",
+    "laboratorio", "reagente", "quimico", "limpeza", "higiene"
+]
 
-BLACKLIST = ["computador", "software", "obra", "pneu", "veiculo"]
+BLACKLIST = ["computador", "notebook", "pneu", "veiculo", "obra", "engenharia", "pavimentação"]
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+def carregar_banco():
+    if os.path.exists(ARQ_DADOS):
+        try:
+            with open(ARQ_DADOS, 'r', encoding='utf-8') as f:
+                content = f.read().replace('const dadosLicitacoes = ', '').rstrip(';')
+                return json.loads(content)
+        except: pass
+    return []
 
 def salvar_dados_js(lista_dados):
     lista_dados.sort(key=lambda x: x.get('data_pub', ''), reverse=True)
@@ -30,77 +40,88 @@ def salvar_dados_js(lista_dados):
     with open(ARQ_DADOS, 'w', encoding='utf-8') as f:
         f.write(conteudo_js)
 
+def ler_checkpoint():
+    if os.path.exists(ARQ_CHECKPOINT):
+        try:
+            with open(ARQ_CHECKPOINT, 'r') as f:
+                return datetime.strptime(f.read().strip(), '%Y%m%d')
+        except: pass
+    return DATA_INICIO_VARREDURA
+
+def atualizar_checkpoint(data):
+    with open(ARQ_CHECKPOINT, 'w') as f:
+        f.write(data.strftime('%Y%m%d'))
+
 def main():
     session = requests.Session()
     session.verify = False
     
-    # FORÇAR DATA PARA TESTE (01 de Janeiro de 2026)
-    data_teste = datetime(2026, 1, 1)
-    ds = data_teste.strftime('%Y%m%d')
-    
-    print(f"🔎 INICIANDO TESTE DE DIAGNÓSTICO PARA O DIA: {data_teste.strftime('%d/%m/%Y')}")
+    banco = carregar_banco()
+    data_atual = ler_checkpoint()
+    hoje = datetime.now()
+
+    # Se já atualizou tudo até hoje, para.
+    if data_atual.date() > hoje.date():
+        print("✅ Tudo atualizado até hoje.")
+        with open('env.txt', 'w') as f: f.write("CONTINUAR_EXECUCAO=false")
+        return
+
+    ds = data_atual.strftime('%Y%m%d')
+    print(f"🔎 Analisando: {data_atual.strftime('%d/%m/%Y')}...")
     
     url = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
     params = {
-        "dataInicial": ds, 
-        "dataFinal": ds, 
-        "codigoModalidadeContratacao": MODALIDADE_PREGAO, 
-        "pagina": 1, 
-        "tamanhoPagina": 50
+        "dataInicial": ds, "dataFinal": ds, 
+        "codigoModalidadeContratacao": "6", 
+        "pagina": 1, "tamanhoPagina": 50
     }
 
     try:
         resp = session.get(url, params=params, timeout=30)
-        print(f"📡 Status da API: {resp.status_code}")
-        
         licitacoes = resp.json().get('data', [])
-        print(f"📦 Total de licitações encontradas no PNCP neste dia: {len(licitacoes)}")
         
-        banco = []
+        novos = 0
         for item in licitacoes:
             uf = item.get('unidadeFederativaId')
             obj = (item.get('objetoCompra') or "").lower()
             
-            # LOG DE ANÁLISE
-            if uf not in ESTADOS_ALVO:
-                # print(f"❌ Descartado por UF ({uf}): {obj[:50]}")
-                continue
-            
-            match_saude = any(t in obj for t in TERMOS_SAUDE)
-            if not match_saude:
-                # print(f"❌ Descartado por não ser Saúde: {obj[:50]}")
-                continue
-                
-            match_black = any(b in obj for b in BLACKLIST)
-            if match_black:
-                print(f"🚫 Bloqueado pela Blacklist: {obj[:50]}")
-                continue
-
-            print(f"✅ LICITAÇÃO CAPTURADA: {obj[:70]}")
-            unidade = item.get('unidadeOrgao', {})
-            banco.append({
-                "id": str(item.get('id')),
-                "numero": f"{item.get('numeroCompra')}/{item.get('anoCompra')}",
-                "orgao": item.get('orgaoEntidade', {}).get('razaoSocial'),
-                "cnpj": item.get('orgaoEntidade', {}).get('cnpj'),
-                "unidade_compradora": unidade.get('nomeUnidade'),
-                "uasg": unidade.get('codigoUnidade'),
-                "uf": uf,
-                "cidade": unidade.get('municipioNome'),
-                "objeto": item.get('objetoCompra'),
-                "data_pub": item.get('dataPublicacaoPncp'),
-                "valor_total": item.get('valorTotalEstimado', 0),
-                "link_api": f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{item.get('orgaoEntidade', {}).get('cnpj')}/{item.get('anoCompra')}/{item.get('numeroCompra')}"
-            })
+            # Filtro Lógico
+            if uf in ESTADOS_ALVO and any(t in obj for t in TERMOS_SAUDE) and not any(b in obj for b in BLACKLIST):
+                id_u = str(item.get('id'))
+                if not any(x['id'] == id_u for x in banco):
+                    unidade = item.get('unidadeOrgao', {})
+                    banco.append({
+                        "id": id_u,
+                        "numero": f"{item.get('numeroCompra')}/{item.get('anoCompra')}",
+                        "orgao": item.get('orgaoEntidade', {}).get('razaoSocial'),
+                        "cnpj": item.get('orgaoEntidade', {}).get('cnpj'),
+                        "unidade_compradora": unidade.get('nomeUnidade'),
+                        "uasg": unidade.get('codigoUnidade'),
+                        "uf": uf,
+                        "cidade": unidade.get('municipioNome'),
+                        "objeto": item.get('objetoCompra'),
+                        "data_pub": item.get('dataPublicacaoPncp'),
+                        "valor_total": item.get('valorTotalEstimado', 0),
+                        "link_api": f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{item.get('orgaoEntidade', {}).get('cnpj')}/{item.get('anoCompra')}/{item.get('numeroCompra')}"
+                    })
+                    novos += 1
 
         salvar_dados_js(banco)
-        print(f"\n🚀 FIM DO TESTE. Total salvo: {len(banco)}")
         
-        # Cria env.txt para o GitHub não dar erro
-        with open('env.txt', 'w') as f: f.write("CONTINUAR_EXECUCAO=true")
+        # Avança o dia para a próxima execução
+        proximo_dia = data_atual + timedelta(days=1)
+        atualizar_checkpoint(proximo_dia)
+        
+        # O segredo da recursividade: Mesmo que ache 0, ele avança e pede pra rodar de novo
+        precisa_continuar = proximo_dia.date() <= hoje.date()
+        with open('env.txt', 'w') as f:
+            val = "true" if precisa_continuar else "false"
+            f.write(f"CONTINUAR_EXECUCAO={val}")
+            
+        print(f"✅ Dia processado. Itens novos: {novos}. Próximo: {proximo_dia.strftime('%d/%m/%Y')}")
 
     except Exception as e:
-        print(f"💥 ERRO CRÍTICO: {e}")
+        print(f"💥 Erro: {e}")
 
 if __name__ == "__main__":
     main()
