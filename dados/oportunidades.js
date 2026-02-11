@@ -16,6 +16,63 @@ const dadosLicitacoes = [
         "link_api": "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/07954480000179/2025/91745"
     },
     {
+        "id": "14694517000132202527",
+        "uf": "BA",
+        "cidade": "Wagner",
+        "orgao": "MUNICIPIO DE WAGNER",
+        "uasg": "1",
+        "objeto": "Registro de Preço para eventual aquisição de material de Higiene e Limpeza para atender as necessidades de\r\ntodas as Secretarias da Gestão Municipal de Wagner/Ba",
+        "numero": "012/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-18T18:53:08",
+        "data_abertura": "2025-11-21T09:00:00",
+        "valor_total": 339405.07,
+        "api_params": {
+            "cnpj": "14694517000132",
+            "ano": 2025,
+            "seq": 27
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/14694517000132/2025/27"
+    },
+    {
+        "id": "0161266700010820261",
+        "uf": "MA",
+        "cidade": "Fernando Falcão",
+        "orgao": "MUNICIPIO DE FERNANDO FALCAO",
+        "uasg": "1",
+        "objeto": "Contratação de empresa para aquisição de equipamentos e material permanente, para atender as demandas da Secretaria Municipal de Saúde de Fernando Falcão",
+        "numero": "001/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-18T16:07:18",
+        "data_abertura": "2026-01-20T08:00:00",
+        "valor_total": 344810.38,
+        "api_params": {
+            "cnpj": "01612667000108",
+            "ano": 2026,
+            "seq": 1
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/01612667000108/2026/1"
+    },
+    {
+        "id": "0161236900011820261",
+        "uf": "RN",
+        "cidade": "Fernando Pedroza",
+        "orgao": "MUNICIPIO DE FERNANDO PEDROZA",
+        "uasg": "2276",
+        "objeto": "[Portal de Compras Públicas] - Registro de Preço para futura e eventual aquisição de insumos médicos hospitalares, para atender a Secretaria Municipal de Saúde do município de Fernando Pedroza/RN.",
+        "numero": "001/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-18T09:50:19",
+        "data_abertura": "2026-01-19T09:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "01612369000118",
+            "ano": 2026,
+            "seq": 1
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/01612369000118/2026/1"
+    },
+    {
         "id": "2768617900013920261",
         "uf": "ES",
         "cidade": "Guaçuí",
