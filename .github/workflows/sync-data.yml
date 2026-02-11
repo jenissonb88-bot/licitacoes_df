@@ -1,19 +1,19 @@
-name: Triagem Diária e Recursiva PNCP
+name: Sincronização Recursiva PNCP
 
 on:
   schedule:
-    - cron: '0 9 * * *' # Roda automaticamente às 06:00 AM Brasília
-  workflow_dispatch: # Permite iniciar manualmente
+    - cron: '0 9 * * *' # Roda todo dia às 06:00 Brasília
+  workflow_dispatch: # Permite rodar manualmente
 
 jobs:
-  coleta_dados:
+  build:
     runs-on: ubuntu-latest
     permissions:
       contents: write
       actions: write
 
     steps:
-      - name: Checkout do Repositório
+      - name: Checkout do código
         uses: actions/checkout@v4
 
       - name: Configurar Python
@@ -22,36 +22,30 @@ jobs:
           python-version: '3.10'
 
       - name: Instalar Dependências
-        run: pip install requests pandas
+        run: pip install requests
 
-      - name: Executar Robô
-        id: exec_robo
+      - name: Executar Coleta
         run: python app.py
 
-      - name: Salvar Progresso (Commit)
+      - name: Salvar Dados e Checkpoint
         run: |
-          git config --global user.name "COLETA-PNCP-BOT"
-          git config --global user.email "bot@github.com"
+          git config --global user.name "Bot Coleta PNCP"
+          git config --global user.email "bot@pncp.com"
           git add dados/oportunidades.js checkpoint.txt
-          if ! git diff --cached --quiet; then
-            git commit -m "Auto: Dados atualizados e Checkpoint avançado"
-            git push origin main
-          else
-            echo "Sem novos dados para este dia."
-          fi
+          git commit -m "Auto: Atualização de dados e checkpoint [skip ci]" || echo "Sem mudanças"
+          git push
 
-      - name: Iniciar Próximo Dia (Recursão)
-        # IMPORTANTE: Ele lê o arquivo env.txt criado pelo Python
+      - name: Disparar Próxima Rodada
         run: |
           if [ -f env.txt ]; then
             source env.txt
             if [ "$CONTINUAR_EXECUCAO" = "true" ]; then
-              echo "🔄 Ativando próxima varredura..."
+              echo "🔄 Há dias pendentes. Disparando próxima execução..."
               curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                 -H "Accept: application/vnd.github.v3+json" \
                 https://api.github.com/repos/${{ github.repository }}/actions/workflows/sync-data.yml/dispatches \
                 -d '{"ref":"main"}'
             else
-              echo "✅ Tudo atualizado até a data de hoje."
+              echo "✅ Sincronização finalizada até a data atual."
             fi
           fi
