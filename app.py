@@ -2,37 +2,40 @@ import requests
 import json
 from datetime import datetime, timedelta
 import os
+import time
 import urllib3
-import pandas as pd
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # --- CONFIGURAÇÕES ---
 DATA_INICIO_VARREDURA = datetime(2026, 1, 1) 
 ARQ_DADOS = 'dados/oportunidades.js'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 
-# Filtro de Estados (Nordeste, Sudeste, Centro-Oeste + selecionados do Norte)
+# Filtro Geográfico: Nordeste, Sudeste, Centro-Oeste + selecionados do Norte
 ESTADOS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "DF", "GO", "MT", "MS"]
 
-# Termos Positivos (Ampliados para não perder oportunidades genéricas de saúde)
-TERMOS_SAUDE = [
-    "medicamento", "hospitalar", "farmacia", "medico", "insumo", "soro", 
-    "gaze", "seringa", "luva", "reagente", "odontolog", "laborator", 
-    "higiene", "enfermagem", "cirurgico", "saude", "penso", "diagnostico"
-]
+# Termos de Saúde (Ampliados para maior captura)
+TERMOS_SAUDE = ["medicamento", "hospitalar", "farmacia", "medico", "insumo", "soro", "gaze", "seringa", "luva", "reagente", "odontolog", "laborator", "higiene", "cirurgico"]
 
-# Blacklist (O que NÃO queremos de jeito nenhum)
-BLACKLIST = ["computador", "notebook", "pneu", "veiculo", "obra", "engenharia", "pavimentacao", "ar condicionado", "mobiliario", "ia", "inteligencia artificial"]
+# Blacklist (O que descartar)
+BLACKLIST = ["computador", "notebook", "pneu", "veiculo", "obra", "engenharia", "pavimentacao", "ar condicionado", "mobiliario"]
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-def carregar_portfolio():
-    """Lê o CSV enviado para extrair palavras-chave extras do seu estoque"""
-    try:
-        df = pd.read_csv('Exportar Dados.xls - Exportar Dados.csv')
-        # Pega a primeira palavra da descrição dos itens do CSV
-        termos = df['Descrição'].str.split().str[0].str.lower().unique().tolist()
-        return [t for t in termos if len(t) > 3]
-    except: return []
+def criar_sessao():
+    session = requests.Session()
+    session.verify = False
+    # Estratégia de re-tentativa para evitar quedas de conexão
+    retry_strategy = Retry(
+        total=5,
+        backoff_factor=2,
+        status_forcelist=[429, 500, 502, 503, 504]
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("https://", adapter)
+    session.headers.update({'User-Agent': 'MonitorSaude/5.5', 'Accept': 'application/json'})
+    return session
 
 def carregar_banco():
     if os.path.exists(ARQ_DADOS):
@@ -44,6 +47,10 @@ def carregar_banco():
     return []
 
 def salvar_dados_js(lista_dados):
+    # Limpeza: mantém apenas os últimos 180 dias
+    data_limite = datetime.now() - timedelta(days=180)
+    lista_dados = [i for i in lista_dados if datetime.fromisoformat(i['data_pub'].split('T')[0]) > data_limite]
+    
     lista_dados.sort(key=lambda x: x.get('data_pub', ''), reverse=True)
     json_str = json.dumps(lista_dados, indent=4, ensure_ascii=False)
     os.makedirs('dados', exist_ok=True)
@@ -51,12 +58,7 @@ def salvar_dados_js(lista_dados):
         f.write(f"const dadosLicitacoes = {json_str};")
 
 def main():
-    session = requests.Session()
-    session.verify = False
-    
-    portfolio = carregar_portfolio()
-    todos_termos = list(set(TERMOS_SAUDE + portfolio))
-    
+    session = criar_sessao()
     if os.path.exists(ARQ_CHECKPOINT):
         with open(ARQ_CHECKPOINT, 'r') as f:
             data_atual = datetime.strptime(f.read().strip(), '%Y%m%d')
@@ -65,12 +67,12 @@ def main():
 
     hoje = datetime.now()
     if data_atual.date() > hoje.date():
-        print("✅ Tudo atualizado.")
+        print("✅ Sistema 100% atualizado.")
         with open('env.txt', 'w') as f: f.write("CONTINUAR_EXECUCAO=false")
         return
 
     ds = data_atual.strftime('%Y%m%d')
-    print(f"\n🔎 ANALISANDO: {data_atual.strftime('%d/%m/%Y')}...")
+    print(f"🔎 ANALISANDO: {data_atual.strftime('%d/%m/%Y')}...")
     
     url = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
     params = {"dataInicial": ds, "dataFinal": ds, "codigoModalidadeContratacao": "6", "pagina": 1, "tamanhoPagina": 100}
@@ -79,22 +81,16 @@ def main():
     novos = 0
     
     try:
-        resp = session.get(url, params=params, timeout=30)
-        licitacoes = resp.json().get('data', [])
-        print(f"📦 Total de editais no PNCP hoje: {len(licitacoes)}")
+        # Timeout estendido para 60 segundos
+        resp = session.get(url, params=params, timeout=60)
+        resp.raise_for_status()
         
+        licitacoes = resp.json().get('data', [])
         for item in licitacoes:
-            # Tenta pegar UF de dois lugares diferentes na API
             uf = item.get('unidadeFederativaId') or item.get('unidadeOrgao', {}).get('ufSigla')
             obj = (item.get('objetoCompra') or "").lower()
             
-            # DIAGNÓSTICO PARA VOCÊ VER NO CONSOLE
-            if uf not in ESTADOS_ALVO: continue
-            
-            match_saude = any(t in obj for t in todos_termos)
-            match_black = any(b in obj for b in BLACKLIST)
-            
-            if match_saude and not match_black:
+            if uf in ESTADOS_ALVO and any(t in obj for t in TERMOS_SAUDE) and not any(b in obj for b in BLACKLIST):
                 id_u = str(item.get('id'))
                 if not any(x['id'] == id_u for x in banco):
                     unidade = item.get('unidadeOrgao', {})
@@ -116,17 +112,16 @@ def main():
                         "link_pncp": f"https://pncp.gov.br/app/editais/{item.get('orgaoEntidade', {}).get('cnpj')}/{item.get('anoCompra')}/{item.get('numeroCompra')}"
                     })
                     novos += 1
-                    print(f"   ✅ CAPTURADO: {item.get('numeroCompra')} - {obj[:50]}...")
 
         salvar_dados_js(banco)
         proximo = data_atual + timedelta(days=1)
         with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo.strftime('%Y%m%d'))
         with open('env.txt', 'w') as f: f.write(f"CONTINUAR_EXECUCAO={'true' if proximo.date() <= hoje.date() else 'false'}")
-        
-        print(f"📊 Resumo do dia: {novos} novos itens capturados.")
+        print(f"✅ Sucesso. Itens novos: {novos}. Próximo: {proximo.strftime('%d/%m/%Y')}")
 
     except Exception as e:
-        print(f"💥 Erro: {e}")
+        print(f"💥 Erro na conexão: {e}. O checkpoint não foi avançado para tentar novamente.")
+        with open('env.txt', 'w') as f: f.write("CONTINUAR_EXECUCAO=false")
 
 if __name__ == "__main__":
     main()
