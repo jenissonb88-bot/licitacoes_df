@@ -9,12 +9,13 @@ from urllib3.util.retry import Retry
 import urllib3
 
 # --- CONFIGURAÇÕES ---
+# Defina a data de início (pode ser ajustada conforme necessidade)
 DATA_INICIO_VARREDURA = datetime(2026, 1, 1)
 ARQ_DADOS = 'dados/oportunidades.json'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 MODALIDADE_PREGAO = "6"
 
-# Lista de Estados Permitidos (Nordeste, Sudeste + AM, PA, TO, GO, DF, MT, MS)
+# 1. FILTRO GEOGRÁFICO (WhiteList)
 ESTADOS_ALVO = [
     # Nordeste
     "AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE",
@@ -26,25 +27,25 @@ ESTADOS_ALVO = [
     "DF", "GO", "MT", "MS"
 ]
 
-# Termos de Saúde (Positivos)
+# 2. TERMOS DE INTERESSE (Saúde)
 TERMOS_SAUDE = [
     "medicamento", "hospitalar", "farmacia", "farmaceutic", 
     "material medico", "enfermagem", "soro", "gaze", "luva cirurgica", 
     "higiene pessoal", "fralda", "cateter", "seringa", "agulha",
     "fios de sutura", "atadura", "algodao", "esparadrapo", "reagente",
-    "analise clinica", "laboratorial", "odontologic"
+    "analise clinica", "laboratorial", "odontologic", "ortese", "protese"
 ]
 
-# Blacklist (Negativos - Refinada com seus exemplos)
+# 3. BLACKLIST (Filtro de Lixo)
 BLACKLIST = [
     # TI e Eletrônicos
     "computador", "desktop", "notebook", "tablet", "monitor", "impressora",
     "toner", "cartucho", "software", "saas", "inteligencia artificial",
     "identificador facial", "automatizado", "informatica", "teclado", "mouse",
     "nobreak", "estabilizador", "servidor", "rede", "cabo de rede", "licenca",
-    "sistema de informacao", "videomonitoramento", "camera", "webcam",
+    "sistema de informacao", "videomonitoramento", "camera", "webcam", "drone",
     
-    # Manutenção Predial e Obras (Cuidado para não bloquear manutenção médica)
+    # Manutenção Predial e Obras
     "predial", "manutencao preventiva e corretiva predial", "ar condicionado",
     "eletrica", "hidraulica", "pintura", "alvenaria", "engenharia", "obra",
     "reforma", "cimento", "tijolo", "argamassa", "ferramenta", "extintor", 
@@ -52,15 +53,15 @@ BLACKLIST = [
     
     # Mobiliário e Escritório
     "mobiliario", "moveis", "cadeira", "mesa", "armario", "divisoria",
-    "poltrona", "estante", "persiana", "arquivo de aco",
+    "poltrona", "estante", "persiana", "arquivo de aco", "papel a4",
     
-    # Alimentação (Gêneros Alimentícios)
+    # Alimentação
     "genero alimenticio", "alimentacao", "hortifrutigranjeiro", "ovo", "carne",
     "frango", "peixe", "leite", "cafe", "acucar", "lanche", "refeicao",
     "coffee break", "buffet", "agua mineral", "cantina", "cozinha", 
-    "pereciveis", "estocaveis", "bebida",
+    "pereciveis", "estocaveis", "bebida", "cesta basica",
     
-    # Outros (Veículos, Didático, Etc)
+    # Outros
     "aula pratica", "curso tecnico", "quimica industrial", "didatico",
     "pedagogico", "brinquedo", "esportiv", "musical", "automotiv",
     "veiculo", "pneu", "combustivel", "lubrificante", "transporte",
@@ -71,7 +72,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 HEADERS = {
     'Accept': 'application/json',
-    'User-Agent': 'MonitorLicita/3.2 (HealthFocus)'
+    'User-Agent': 'MonitorLicita/5.0 (HealthFocus)'
 }
 
 def carregar_portfolio():
@@ -81,8 +82,8 @@ def carregar_portfolio():
             df = pd.read_csv('Exportar Dados.csv', encoding='utf-8', sep=',')
         except:
             df = pd.read_csv('Exportar Dados.csv', encoding='latin-1', sep=',')
+            
         if 'Descrição' in df.columns:
-            # Pega apenas a primeira palavra para evitar frases longas que nunca dão match
             return df['Descrição'].dropna().str.split().str[0].unique().tolist()
     except: pass
     return []
@@ -127,7 +128,7 @@ def criar_sessao():
 def processar_um_dia(session, lista_atual, data_analise, portfolio):
     DATA_STR = data_analise.strftime('%Y%m%d')
     print(f"\n🕵️  RAIO-X DO DIA: {data_analise.strftime('%d/%m/%Y')}")
-    print(f"   📍 Filtrando por {len(ESTADOS_ALVO)} UFs alvo.")
+    print(f"   📍 Região: NE, SE, CO + AM/PA/TO")
     
     pagina = 1
     novos_itens = 0
@@ -161,7 +162,7 @@ def processar_um_dia(session, lista_atual, data_analise, portfolio):
             total_api += len(licitacoes)
 
             for item in licitacoes:
-                # 1. FILTRO DE ESTADO (UF) - Executado primeiro para performance
+                # 1. FILTRO DE ESTADO (UF)
                 uf_item = item.get('unidadeFederativaId')
                 if uf_item not in ESTADOS_ALVO:
                     descartes_uf += 1
@@ -178,29 +179,48 @@ def processar_um_dia(session, lista_atual, data_analise, portfolio):
                 match_saude = any(t in objeto for t in TERMOS_SAUDE)
                 match_port = False
                 
-                # Otimização: Só verifica portfolio se não achou termo de saúde
                 if not match_saude and portfolio:
                     match_port = any(p.lower() in objeto for p in portfolio)
 
                 if match_saude or match_port:
                     id_unico = str(item.get('id')) 
                     
-                    # Evita duplicidade
                     if not any(x['id'] == id_unico for x in lista_atual):
+                        
+                        # --- CAPTURA DE DADOS DETALHADA ---
+                        
+                        # Estrutura da Unidade e UASG
+                        dados_unidade = item.get('unidadeOrgao', {})
+                        uasg_codigo = dados_unidade.get('codigoUnidade', 'N/A')
+                        nome_unidade = dados_unidade.get('nomeUnidade', 'Não Informado')
+                        
+                        # Datas Importantes
+                        dt_abertura = item.get('dataAberturaProposta') 
+                        dt_atualizacao = item.get('dataAtualizacao')
+                        
                         nova_oportunidade = {
                             "id": id_unico,
                             "numero": f"{item.get('numeroCompra')}/{item.get('anoCompra')}",
+                            
+                            # Órgão Superior (Quem paga)
                             "orgao": item.get('orgaoEntidade', {}).get('razaoSocial'),
                             "cnpj": item.get('orgaoEntidade', {}).get('cnpj'),
+                            
+                            # Unidade Executora (Quem compra)
+                            "unidade_compradora": nome_unidade,
+                            "uasg": uasg_codigo,
+                            
                             "uf": uf_item,
-                            "cidade": item.get('unidadeOrgao', {}).get('municipioNome', 'Não Informado'),
+                            "cidade": dados_unidade.get('municipioNome', 'Não Informado'),
                             "objeto": item.get('objetoCompra'),
                             "modalidade": "Pregão (6)",
                             "data_pub": item.get('dataPublicacaoPncp'),
+                            "data_abertura_proposta": dt_abertura,
+                            "data_atualizacao": dt_atualizacao,
                             "valor_total": item.get('valorTotalEstimado', 0),
-                            # Link para a página de editais do PNCP
+                            
+                            # Links
                             "link_pncp": f"https://pncp.gov.br/app/editais/{item.get('orgaoEntidade', {}).get('cnpj')}/{item.get('anoCompra')}/{item.get('numeroCompra')}",
-                            # Link direto para a contratação (útil para API)
                             "link_api": f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{item.get('orgaoEntidade', {}).get('cnpj')}/{item.get('anoCompra')}/{item.get('numeroCompra')}"
                         }
                         lista_atual.append(nova_oportunidade)
@@ -217,23 +237,22 @@ def processar_um_dia(session, lista_atual, data_analise, portfolio):
             
         except Exception as e:
             print(f"   [Erro Crítico: {e}]")
-            # Em caso de erro de conexão, aguarda um pouco e tenta próxima página/dia
             time.sleep(5) 
             break
     
     print("-" * 40)
     print(f"📊 RESUMO DO DIA {data_analise.strftime('%d/%m')}:")
     print(f"   🔹 Total API: {total_api}")
-    print(f"   🗺️ Ignorados por UF: {descartes_uf}")
-    print(f"   🚫 Bloqueados (Lixo): {descartes_blacklist}")
-    print(f"   ⚠️ Fora do Tema: {descartes_tema}")
+    print(f"   🗺️ Ignorados UF: {descartes_uf}")
+    print(f"   🚫 Blacklist: {descartes_blacklist}")
+    print(f"   ⚠️ Fora Tema: {descartes_tema}")
     print(f"   ✅ Salvos: {novos_itens}")
     print("-" * 40)
     
     return lista_atual
 
 def main():
-    print(f"--- 🚀 MONITOR DE LICITAÇÕES (FILTRO NE/SE + ESPECÍFICOS) ---")
+    print(f"--- 🚀 MONITOR DE LICITAÇÕES (CONFIGURAÇÃO FINAL) ---")
     
     session = criar_sessao()
     banco_dados = carregar_banco()
@@ -242,9 +261,9 @@ def main():
     data_atual = ler_checkpoint()
     hoje = datetime.now()
     
-    # Se já passou da data atual, para a execução
     if data_atual.date() > hoje.date():
         print("✅ Sistema atualizado.")
+        # Salva variável para o GitHub Actions parar
         with open(os.environ.get('GITHUB_ENV', 'env.txt'), 'a') as f:
             f.write("CONTINUAR_EXECUCAO=false\n")
         return
@@ -256,7 +275,7 @@ def main():
     atualizar_checkpoint(proximo_dia)
     print(f"💾 Checkpoint avançado para: {proximo_dia.strftime('%d/%m/%Y')}")
 
-    # Lógica de recursividade (se ainda tiver dias atrasados, pede pro GitHub rodar de novo)
+    # Lógica Recursiva
     precisa_continuar = proximo_dia.date() <= hoje.date()
     with open(os.environ.get('GITHUB_ENV', 'env.txt'), 'a') as f:
         f.write(f"CONTINUAR_EXECUCAO={str(precisa_continuar).lower()}\n")
