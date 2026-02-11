@@ -3252,7 +3252,6 @@ const dadosLicitacoes = [
         "uf": "RJ",
         "cidade": "Rio de Janeiro",
         "orgao": "COMANDO DO EXERCITO",
-        "unidade_compradora": "HOSPITAL CENTRAL DO EXERCITO/RJ",
         "uasg": "160322",
         "objeto": "Aquisição de Material de consumo para o Depósito de Material Cirúrgico.",
         "numero": "90120/2025",
@@ -3260,7 +3259,11 @@ const dadosLicitacoes = [
         "data_pub": "2026-01-02T07:02:40",
         "data_abertura": "2026-01-05T08:00:00",
         "valor_total": 4906448.1,
-        "link_api": "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/00394452000103/2025/90120",
+        "api_params": {
+            "cnpj": "00394452000103",
+            "ano": 2025,
+            "seq": 24959
+        },
         "link_pncp": "https://pncp.gov.br/app/editais/00394452000103/2025/24959"
     },
     {
@@ -3268,7 +3271,6 @@ const dadosLicitacoes = [
         "uf": "BA",
         "cidade": "Salvador",
         "orgao": "EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES - EBSERH",
-        "unidade_compradora": "MATERNIDADE CLIMÉRIO DE OLIVEIRA",
         "uasg": "155906",
         "objeto": "Aquisição de ÁGUA, MATERIAL DE ACONDICIONAMENTO, EMBALAGENS E HIGIENE, a fim de atender às necessidades da Maternidade Climério de Oliveira para 2026.    ",
         "numero": "90002/2026",
@@ -3276,7 +3278,11 @@ const dadosLicitacoes = [
         "data_pub": "2026-01-02T07:02:28",
         "data_abertura": "2026-01-02T09:00:00",
         "valor_total": 0.0,
-        "link_api": "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/15126437000305/2026/90002",
+        "api_params": {
+            "cnpj": "15126437000305",
+            "ano": 2026,
+            "seq": 63
+        },
         "link_pncp": "https://pncp.gov.br/app/editais/15126437000305/2026/63"
     },
     {
@@ -3284,7 +3290,6 @@ const dadosLicitacoes = [
         "uf": "SP",
         "cidade": "São Paulo",
         "orgao": "COMANDO DO EXERCITO",
-        "unidade_compradora": "HOSPITAL MILITAR DE ÁREA DE SÃO PAULO",
         "uasg": "160495",
         "objeto": "Aquisição de insumos Odontológicos para a Subdivisão de Odontologia do Hospital Militar de Área de São Paulo",
         "numero": "90052/2025",
@@ -3292,7 +3297,11 @@ const dadosLicitacoes = [
         "data_pub": "2026-01-02T07:02:26",
         "data_abertura": "2026-01-02T09:00:00",
         "valor_total": 6366193.88,
-        "link_api": "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/00394452000103/2025/90052",
+        "api_params": {
+            "cnpj": "00394452000103",
+            "ano": 2025,
+            "seq": 24957
+        },
         "link_pncp": "https://pncp.gov.br/app/editais/00394452000103/2025/24957"
     },
     {
@@ -3300,7 +3309,6 @@ const dadosLicitacoes = [
         "uf": "SP",
         "cidade": "São Paulo",
         "orgao": "FUNDO MUNICIPAL DE SAUDE - FMS",
-        "unidade_compradora": "PMSP - SECRETARIA MUNICIPAL DE SAÚDE",
         "uasg": "925003",
         "objeto": "REGISTRO de PREÇOS PARA FORNECIMENTO DE MEDICAMENTOS - MINILAX, MYLANTA, RESOLOR, METOPROLOL E HIDRION - AÇÃO JUDICIAL.  ",
         "numero": "91281/2025",
@@ -3308,7 +3316,11 @@ const dadosLicitacoes = [
         "data_pub": "2026-01-02T07:02:12",
         "data_abertura": "2026-01-02T08:00:00",
         "valor_total": 0.0,
-        "link_api": "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/13864377000130/2025/91281",
+        "api_params": {
+            "cnpj": "13864377000130",
+            "ano": 2025,
+            "seq": 2231
+        },
         "link_pncp": "https://pncp.gov.br/app/editais/13864377000130/2025/2231"
     },
     {
@@ -3316,7 +3328,6 @@ const dadosLicitacoes = [
         "uf": "SP",
         "cidade": "Presidente Prudente",
         "orgao": "SECRETARIA DE ESTADO DA SAUDE",
-        "unidade_compradora": "ESP-DEPTO.REG.SAUDE - DRS XI PRES.PRUDENTE",
         "uasg": "090117",
         "objeto": "Solicitação de Aquisição de Medicamentos - Ação Judicial  ",
         "numero": "90116/2025",
@@ -3324,7 +3335,11 @@ const dadosLicitacoes = [
         "data_pub": "2026-01-02T07:01:05",
         "data_abertura": "2026-01-02T08:00:00",
         "valor_total": 0.0,
-        "link_api": "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/46374500000194/2025/90116",
+        "api_params": {
+            "cnpj": "46374500000194",
+            "ano": 2025,
+            "seq": 12814
+        },
         "link_pncp": "https://pncp.gov.br/app/editais/46374500000194/2025/12814"
     },
     {
@@ -3332,7 +3347,6 @@ const dadosLicitacoes = [
         "uf": "SP",
         "cidade": "São Paulo",
         "orgao": "FUNDO MUNICIPAL DE SAUDE - FMS",
-        "unidade_compradora": "PMSP - SECRETARIA MUNICIPAL DE SAÚDE",
         "uasg": "925003",
         "objeto": "REGISTRO De PREÇOS PARA O FORNECIMENTO DE AGULHA INTRA-ÓSSEA COM 45MM DE COMPRIMENTO",
         "numero": "91283/2025",
@@ -3340,7 +3354,11 @@ const dadosLicitacoes = [
         "data_pub": "2026-01-02T07:01:04",
         "data_abertura": "2026-01-02T08:00:00",
         "valor_total": 5121000.0,
-        "link_api": "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/13864377000130/2025/91283",
+        "api_params": {
+            "cnpj": "13864377000130",
+            "ano": 2025,
+            "seq": 2229
+        },
         "link_pncp": "https://pncp.gov.br/app/editais/13864377000130/2025/2229"
     },
     {
@@ -3348,7 +3366,6 @@ const dadosLicitacoes = [
         "uf": "SP",
         "cidade": "São Paulo",
         "orgao": "FUNDO MUNICIPAL DE SAUDE - FMS",
-        "unidade_compradora": "PMSP - SECRETARIA MUNICIPAL DE SAÚDE",
         "uasg": "925003",
         "objeto": "Registro de preços para o fornecimento de embalagem grau cirúrgico dupla face e filme",
         "numero": "91280/2025",
@@ -3356,7 +3373,11 @@ const dadosLicitacoes = [
         "data_pub": "2026-01-02T07:00:49",
         "data_abertura": "2026-01-02T08:00:00",
         "valor_total": 0.0,
-        "link_api": "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/13864377000130/2025/91280",
+        "api_params": {
+            "cnpj": "13864377000130",
+            "ano": 2025,
+            "seq": 2228
+        },
         "link_pncp": "https://pncp.gov.br/app/editais/13864377000130/2025/2228"
     },
     {
@@ -3364,7 +3385,6 @@ const dadosLicitacoes = [
         "uf": "RJ",
         "cidade": "Rio de Janeiro",
         "orgao": "EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES - EBSERH",
-        "unidade_compradora": "COMPLEXO HOSPITALAR DA UNIVERSIDADE FEDERAL",
         "uasg": "157243",
         "objeto": "Aquisição de medicamentos oftalmológicos para o CH-UFRJ/EBSERH",
         "numero": "90081/2025",
@@ -3372,7 +3392,11 @@ const dadosLicitacoes = [
         "data_pub": "2026-01-02T07:00:19",
         "data_abertura": "2026-01-02T09:00:00",
         "valor_total": 77923.8,
-        "link_api": "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/15126437000305/2025/90081",
+        "api_params": {
+            "cnpj": "15126437000305",
+            "ano": 2025,
+            "seq": 4440
+        },
         "link_pncp": "https://pncp.gov.br/app/editais/15126437000305/2025/4440"
     }
 ];
