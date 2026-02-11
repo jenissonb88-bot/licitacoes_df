@@ -1,5 +1,119 @@
 const dadosLicitacoes = [
     {
+        "id": "1830668800010620268",
+        "uf": "MG",
+        "cidade": "Iguatama",
+        "orgao": "MUNICIPIO DE IGUATAMA",
+        "uasg": "827",
+        "objeto": "[LICITANET] - REGISTRO DE PREÇOS PARA AQUISIÇÃO DE MATERIAIS DE LIMPEZA E HIGIENE PESSOAL PARA ATENDER AS DEMANDAS DE DIVERSAS SECRETARIAS MUNICIPAIS DE IGUATAMA.",
+        "numero": "125/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-31T02:00:09",
+        "data_abertura": "2026-01-24T16:51:23",
+        "valor_total": 550404.19,
+        "api_params": {
+            "cnpj": "18306688000106",
+            "ano": 2026,
+            "seq": 8
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/18306688000106/2026/8"
+    },
+    {
+        "id": "07954480000179202525630",
+        "uf": "CE",
+        "cidade": "Fortaleza",
+        "orgao": "ESTADO DO CEARA",
+        "uasg": "240001",
+        "objeto": "REGISTRO DE PREÇO - MEDICAMENTO",
+        "numero": "202514393/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-31T00:52:05",
+        "data_abertura": "2026-02-04T08:00:00",
+        "valor_total": 419645.5,
+        "api_params": {
+            "cnpj": "07954480000179",
+            "ano": 2025,
+            "seq": 25630
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/07954480000179/2025/25630"
+    },
+    {
+        "id": "07954480000179202525628",
+        "uf": "CE",
+        "cidade": "Fortaleza",
+        "orgao": "ESTADO DO CEARA",
+        "uasg": "240001",
+        "objeto": "REGISTRO DE PREÇO - MATERIAL MÉDICO HOSPITALAR",
+        "numero": "202524856/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-31T00:22:06",
+        "data_abertura": "2026-02-09T08:00:00",
+        "valor_total": 919491.38,
+        "api_params": {
+            "cnpj": "07954480000179",
+            "ano": 2025,
+            "seq": 25628
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/07954480000179/2025/25628"
+    },
+    {
+        "id": "07954480000179202525627",
+        "uf": "CE",
+        "cidade": "Fortaleza",
+        "orgao": "ESTADO DO CEARA",
+        "uasg": "240001",
+        "objeto": "REGISTRO DE PREÇO PARA FUTURAS E EVENTUAIS AQUISIÇÕES DE MATERIAL MÉDICO HOSPITALAR PARA ATENDIMENTO DA REDE DE SAÚDE - SESA ",
+        "numero": "202524812/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-31T00:16:04",
+        "data_abertura": "2026-02-06T08:00:00",
+        "valor_total": 4249066.25,
+        "api_params": {
+            "cnpj": "07954480000179",
+            "ano": 2025,
+            "seq": 25627
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/07954480000179/2025/25627"
+    },
+    {
+        "id": "07954480000179202424995",
+        "uf": "CE",
+        "cidade": "Fortaleza",
+        "orgao": "ESTADO DO CEARA",
+        "uasg": "240001",
+        "objeto": "REGISTRO DE PREÇO - MATERIAL MÉDICO HOSPITALAR COM EQUIPAMENTO EM COMODATO",
+        "numero": "202411248/2024",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-31T00:10:22",
+        "data_abertura": "2026-02-05T08:00:00",
+        "valor_total": 642608.04,
+        "api_params": {
+            "cnpj": "07954480000179",
+            "ano": 2024,
+            "seq": 24995
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/07954480000179/2024/24995"
+    },
+    {
+        "id": "07954480000179202525624",
+        "uf": "CE",
+        "cidade": "Fortaleza",
+        "orgao": "ESTADO DO CEARA",
+        "uasg": "240001",
+        "objeto": "REGISTRO DE PREÇOS - MATERIAL MÉDICO HOSPITALAR",
+        "numero": "202522961/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-31T00:04:05",
+        "data_abertura": "2026-02-04T08:00:00",
+        "valor_total": 234231.6,
+        "api_params": {
+            "cnpj": "07954480000179",
+            "ano": 2025,
+            "seq": 25624
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/07954480000179/2025/25624"
+    },
+    {
         "id": "07954480000179202525622",
         "uf": "CE",
         "cidade": "Fortaleza",
