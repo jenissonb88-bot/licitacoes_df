@@ -1440,6 +1440,22 @@ const dadosLicitacoes = [
         "link_pncp": "https://pncp.gov.br/app/editais/01409580000138/2026/65"
     },
     {
+        "id": "445682770001902025157",
+        "uf": "SP",
+        "cidade": "Herculândia",
+        "orgao": "MUNICIPIO DE HERCULANDIA",
+        "unidade_compradora": "PREFEITURA MUNICIPAL DE HERCULÂNDIA",
+        "uasg": "2",
+        "objeto": "CONTRATAÇÃO DE EMPRESA DO RAMO PARA CONFECÇÃO DE PRÓTESES DENTÁRIAS PARA DISTRIBUIÇÃO NAS UNIDADES BÁSICAS DE SAÚDE (UBS) DO MUNICÍPIO DE HERCULÂNDIA-SP.",
+        "numero": "46/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-03T15:33:40",
+        "data_abertura": "2026-01-20T00:01:00",
+        "valor_total": 319137.0,
+        "link_api": "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/44568277000190/2025/46",
+        "link_pncp": "https://pncp.gov.br/app/editais/44568277000190/2025/157"
+    },
+    {
         "id": "00394452000103202524959",
         "uf": "RJ",
         "cidade": "Rio de Janeiro",
