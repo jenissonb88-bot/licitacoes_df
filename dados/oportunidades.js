@@ -1,5 +1,2133 @@
 const dadosLicitacoes = [
     {
+        "id": "0655416600013620264",
+        "uf": "PI",
+        "cidade": "Ribeiro Gonçalves",
+        "orgao": "MUNICIPIO DE RIO GRANDE DO PIAUI",
+        "uasg": "1702",
+        "objeto": "[LICITANET] - AQUISIÇÃO DE MATERIAL DE HIGIENE E LIMPEZA, COPA E COZINHA E DESCARTÁVEIS, VISANDO O ATENDIMENTO DAS DEMANDAS DO MUNICÍPIO DE RIO GRANDE DO PIAUÍ – PI.",
+        "numero": "004/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T20:39:38",
+        "data_abertura": "2026-01-29T20:39:36",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "06554166000136",
+            "ano": 2026,
+            "seq": 4
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/06554166000136/2026/4"
+    },
+    {
+        "id": "09072430000193202614",
+        "uf": "PB",
+        "cidade": "Itabaiana",
+        "orgao": "MUNICIPIO DE ITABAIANA",
+        "uasg": "3258",
+        "objeto": "[Portal de Compras Públicas] - Registro de Preços para Contratação de Empresa para Fornecimento de forma parcelada de Medicamentos conforme demanda para atender as necessidades da Secretaria Municipal de Saúde do Município de Itabaiana PB",
+        "numero": "00008/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T20:38:11",
+        "data_abertura": "2026-01-30T09:00:00",
+        "valor_total": 4105695.4,
+        "api_params": {
+            "cnpj": "09072430000193",
+            "ano": 2026,
+            "seq": 14
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/09072430000193/2026/14"
+    },
+    {
+        "id": "0920651000019420267",
+        "uf": "RJ",
+        "cidade": "Paracambi",
+        "orgao": "FUNDO MUNICIPAL DE SAUDE DE PARACAMBI (FMS)",
+        "uasg": "22.2004",
+        "objeto": "REGISTRO DE PREÇOS PARA CONTRATAÇÃO FUTURA E EVENTUAL DE SERVIÇOS ESPECIALIZADOS DE GESTÃO DOCUMENTAL PARA A SECRETARIA MUNICIPAL DE SAÚDE DE PARACAMBI.\r\n",
+        "numero": "04/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T20:28:03",
+        "data_abertura": "2026-01-30T09:00:00",
+        "valor_total": 5670000.0,
+        "api_params": {
+            "cnpj": "09206510000194",
+            "ano": 2026,
+            "seq": 7
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/09206510000194/2026/7"
+    },
+    {
+        "id": "0294052300014320267",
+        "uf": "MS",
+        "cidade": "Campo Grande",
+        "orgao": "SECRETARIA DE ESTADO DE ADMINISTRACAO E DESBUROCRATIZACAO",
+        "uasg": "20249",
+        "objeto": "REGISTRO DE PREÇOS PARA FUTURA E EVENTUAL COMPRA DE CORRELATOS HOSPITALARES- FIOS CIRÚRGICOS 2025OUT01",
+        "numero": "004/2026/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T18:35:57",
+        "data_abertura": "2026-01-29T19:00:00",
+        "valor_total": 595914.12,
+        "api_params": {
+            "cnpj": "02940523000143",
+            "ano": 2026,
+            "seq": 7
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/02940523000143/2026/7"
+    },
+    {
+        "id": "1043700500013020263",
+        "uf": "SE",
+        "cidade": "Aracaju",
+        "orgao": "FUNDACAO ESTADUAL DE SAUDE",
+        "uasg": "000000001",
+        "objeto": "O presente Pregão Eletrônico tem por objeto o Registro de Preços visa à futura e eventual aquisição de insumos e instrumentais odontológicos para os oito Centros de Especialidades Odontológicas (CEOs), sob a gestão da Fundação Estadual de Saúde (Funesa), por meio da Secretaria de Estado da Saúde, conforme detalhado no anexo I - (Termo De Referência).",
+        "numero": "03/2026/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T18:31:35",
+        "data_abertura": "2026-01-30T08:30:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "10437005000130",
+            "ano": 2026,
+            "seq": 3
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/10437005000130/2026/3"
+    },
+    {
+        "id": "13504675000110202618",
+        "uf": "BA",
+        "cidade": "Salvador",
+        "orgao": "EMPRESA BAIANA DE AGUAS E SANEAMENTO S/A - EMBASA",
+        "uasg": "000000001",
+        "objeto": "AQUISIÇÃO LUVAS CORRER PVC TUBO PBA JE DE (60, 85 e 110)MM, NO SISTEMA DE REGISTRO DE PREÇOS. Fonte de Recurso: Próprios.",
+        "numero": "SP010/2026/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T18:30:59",
+        "data_abertura": "2026-02-04T08:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "13504675000110",
+            "ano": 2026,
+            "seq": 18
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/13504675000110/2026/18"
+    },
+    {
+        "id": "139370320001602026201",
+        "uf": "BA",
+        "cidade": "Salvador",
+        "orgao": "ESTADO DA BAHIA",
+        "uasg": "000000026",
+        "objeto": "AQUISIÇÃO DE MATERIAIS (PEÇAS E INSUMOS) PARA IGEN 3 E 4",
+        "numero": "0003/2026/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T18:30:34",
+        "data_abertura": "2026-02-06T08:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "13937032000160",
+            "ano": 2026,
+            "seq": 201
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/13937032000160/2026/201"
+    },
+    {
+        "id": "139370320001602026200",
+        "uf": "BA",
+        "cidade": "Salvador",
+        "orgao": "ESTADO DA BAHIA",
+        "uasg": "000000002",
+        "objeto": "Contratação de empresa para prestação de serviços de fornecimento de alimentação hospitalar preparada na dependência do Hospital Geral de Guanambi \u0013 HGG.",
+        "numero": "665/2025/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T18:30:30",
+        "data_abertura": "2026-02-11T09:00:00",
+        "valor_total": 13162168.5,
+        "api_params": {
+            "cnpj": "13937032000160",
+            "ano": 2026,
+            "seq": 200
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/13937032000160/2026/200"
+    },
+    {
+        "id": "139370320001602026198",
+        "uf": "BA",
+        "cidade": "Salvador",
+        "orgao": "ESTADO DA BAHIA",
+        "uasg": "000000002",
+        "objeto": "Aquisição de medicamentos ( DIAZEPAM, CLONIDINA, CLOPIDOGREL e etc&) para compor o sistema de registro de preço.",
+        "numero": "0003/2026/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T18:30:15",
+        "data_abertura": "2026-02-11T10:00:00",
+        "valor_total": 768460.0,
+        "api_params": {
+            "cnpj": "13937032000160",
+            "ano": 2026,
+            "seq": 198
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/13937032000160/2026/198"
+    },
+    {
+        "id": "0294052300014320266",
+        "uf": "MS",
+        "cidade": "Campo Grande",
+        "orgao": "SECRETARIA DE ESTADO DE ADMINISTRACAO E DESBUROCRATIZACAO",
+        "uasg": "20249",
+        "objeto": "REGISTRO DE PREÇOS PARA FUTURA E EVENTUAL COMPRA  DE  CORRELATOS HOSPITALARES 2025AGO04",
+        "numero": "003/2026/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T18:30:04",
+        "data_abertura": "2026-01-29T19:00:00",
+        "valor_total": 2511820.34,
+        "api_params": {
+            "cnpj": "02940523000143",
+            "ano": 2026,
+            "seq": 6
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/02940523000143/2026/6"
+    },
+    {
+        "id": "461775230001092025520",
+        "uf": "SP",
+        "cidade": "São Vicente",
+        "orgao": "MUNICIPIO DE SAO VICENTE",
+        "uasg": "2",
+        "objeto": "SR nº 165/2025 - Insumos para UBASA - SEBEM\r\n\r\nPE Nº 192/2025;\r\n\r\nPC Nº 355/2025;\r\n\r\nPA Nº 11617/2025.",
+        "numero": "192/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T16:38:10",
+        "data_abertura": "2025-12-30T00:00:00",
+        "valor_total": 403409.1,
+        "api_params": {
+            "cnpj": "46177523000109",
+            "ano": 2025,
+            "seq": 520
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/46177523000109/2025/520"
+    },
+    {
+        "id": "67995027000132202623",
+        "uf": "SP",
+        "cidade": "Hortolândia",
+        "orgao": "MUNICIPIO DE HORTOLANDIA",
+        "uasg": "1064",
+        "objeto": "Medicamentos oncológicos",
+        "numero": "22/2026/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T16:33:55",
+        "data_abertura": "2026-02-02T08:00:00",
+        "valor_total": 1391084.7,
+        "api_params": {
+            "cnpj": "67995027000132",
+            "ano": 2026,
+            "seq": 23
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/67995027000132/2026/23"
+    },
+    {
+        "id": "184288540001392025133",
+        "uf": "MG",
+        "cidade": "Conceição das Alagoas",
+        "orgao": "MUNICIPIO DE CONCEICAO DAS ALAGOAS",
+        "uasg": "633",
+        "objeto": "[LICITANET] - CONTRATAÇÃO DE EMPRESA ESPECIALIZADA PARA SUPORTE DE IMPLANTAÇÃO E INTEGRAÇÃO DOS SISTEMAS PÚBLICOS DE SAÚDE DO ECOSSISTEMA E-SUS APS, COM ARQUITETURA CENTRALIZADA E INTEGRAÇÃO PLENA À RNDS, AO CADSUS, PELO PERÍODO DE 12 (DOZE) MESES",
+        "numero": "83/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T16:26:36",
+        "data_abertura": "2026-01-23T17:29:38",
+        "valor_total": 132066.6,
+        "api_params": {
+            "cnpj": "18428854000139",
+            "ano": 2025,
+            "seq": 133
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/18428854000139/2025/133"
+    },
+    {
+        "id": "0843954900019920266",
+        "uf": "AL",
+        "cidade": "Craíbas",
+        "orgao": "MUNICIPIO DE CRAIBAS",
+        "uasg": "1",
+        "objeto": "Registro de preços para futura e eventual contratação de empresa para o fornecimento de recarga de oxigênio de uso hospitalar, visando atender as necessidades da Secretaria Municipal de Saúde do município de Craíbas/AL.",
+        "numero": "10.004/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T16:23:54",
+        "data_abertura": "2026-01-30T14:00:00",
+        "valor_total": 108557.0,
+        "api_params": {
+            "cnpj": "08439549000199",
+            "ano": 2026,
+            "seq": 6
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/08439549000199/2026/6"
+    },
+    {
+        "id": "4453178800013820262",
+        "uf": "SP",
+        "cidade": "Lins",
+        "orgao": "MUNICIPIO DE LINS",
+        "uasg": "2",
+        "objeto": "NOVA LICITAÇAO - MATERIAIS DE CONSUMO: HIGIENE, LIMPEZA E FRACASSADOS DO PE 049/2025",
+        "numero": "1/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T16:10:23",
+        "data_abertura": "2026-01-16T08:00:00",
+        "valor_total": 1910868.6,
+        "api_params": {
+            "cnpj": "44531788000138",
+            "ano": 2026,
+            "seq": 2
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/44531788000138/2026/2"
+    },
+    {
+        "id": "23555279000175202613",
+        "uf": "CE",
+        "cidade": "Chorozinho",
+        "orgao": "MUNICIPIO DE CHOROZINHO",
+        "uasg": "202504",
+        "objeto": "REGISTRO DE PREÇOS PARA FUTURA E EVENTUAL AQUISIÇÃO DE MEDICAMENTOS DE CONTROLE ESPECIAL, PARA ATENDER AS NECESSIDADES DO HOSPITAL MUNICIPAL E UNIDADES BÁSICAS DE SAÚDE DO MUNICÍPIO DE CHOROZINHO-CE.",
+        "numero": "2026.01.28.002-PE/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T16:02:44",
+        "data_abertura": "2026-01-29T00:00:00",
+        "valor_total": 450040.0,
+        "api_params": {
+            "cnpj": "23555279000175",
+            "ano": 2026,
+            "seq": 13
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/23555279000175/2026/13"
+    },
+    {
+        "id": "1449206200017220263",
+        "uf": "ES",
+        "cidade": "Itarana",
+        "orgao": "FUNDO MUNICIPAL DE SAUDE DE ITARANA",
+        "uasg": "14492062000172-002",
+        "objeto": "Registro de preços para futura e eventual aquisição de Material médico hospitalar para atender as Unidades Básicas de Saúde do município.",
+        "numero": "000001/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T15:50:11",
+        "data_abertura": "2026-01-30T08:00:00",
+        "valor_total": 466771.53,
+        "api_params": {
+            "cnpj": "14492062000172",
+            "ano": 2026,
+            "seq": 3
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/14492062000172/2026/3"
+    },
+    {
+        "id": "1623343900010220266",
+        "uf": "BA",
+        "cidade": "Eunápolis",
+        "orgao": "MUNICIPIO DE EUNAPOLIS",
+        "uasg": "1633",
+        "objeto": "CONTRATAÇÃO DE EMPRESA ESPECIALIZADA PARA PRESTAÇÃO DE SERVIÇO DE HOSPEDAGEM NA CIDADE DE ITABUNA/BA, EM ATENDIMENTO A DEMANDA DE PACIENTES DO PROGRAMA TFD – TRATAMENTO FORA DO DOMICÍLIO DA SECRETARIA MUNICIPAL DE SAÚDE DE EUNÁPOLIS-BA.",
+        "numero": "PE003-2026/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T15:35:55",
+        "data_abertura": "2026-01-30T11:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "16233439000102",
+            "ano": 2026,
+            "seq": 6
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/16233439000102/2026/6"
+    },
+    {
+        "id": "033471270001702025199",
+        "uf": "MT",
+        "cidade": "Guiratinga",
+        "orgao": "MUNICIPIO DE GUIRATINGA",
+        "uasg": "1",
+        "objeto": "REGISTRO DE PREÇOS PARA A FUTURA E EVENTUAL AQUISIÇÃO DE OXIGÊNIO MEDICINAL PARA MANUTENÇÃO DAS AÇÕES DA SECRETARIA MUNICIPAL DE SAÚDE E SEUS SETORES, CONFORME NECESSIDADE DA SECRETARIA MUNICIPAL DE SAÚDE",
+        "numero": "47/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T15:32:53",
+        "data_abertura": "2025-06-16T00:00:00",
+        "valor_total": 154703.2,
+        "api_params": {
+            "cnpj": "03347127000170",
+            "ano": 2025,
+            "seq": 199
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/03347127000170/2025/199"
+    },
+    {
+        "id": "1163926200011720264",
+        "uf": "SE",
+        "cidade": "Capela",
+        "orgao": "FUNDO MUNICIPAL DE SAUDE DE CAPELA",
+        "uasg": "468",
+        "objeto": "[LICITANET] - Registro de preços para eventual e futura contratação de empresa para fornecimento de oxigênio Medicinal em Cilindros e Carga de AR comprimido Medicinal e Locação de cilindros para atender as necessidades do Fundo Municipal de Saúde de Capela.",
+        "numero": "003/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T15:25:33",
+        "data_abertura": "2026-01-29T15:25:30",
+        "valor_total": 381927.0,
+        "api_params": {
+            "cnpj": "11639262000117",
+            "ano": 2026,
+            "seq": 4
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/11639262000117/2026/4"
+    },
+    {
+        "id": "1071318700012420269",
+        "uf": "GO",
+        "cidade": "Turvânia",
+        "orgao": "FUNDO MUNICIPAL DE SAUDE DE TURVANIA",
+        "uasg": "5",
+        "objeto": "SOLICITAÇÃO DE INSUMOS E MATERIAIS ODONTOLÓGICOS PARA O CENTRO MUNICIPAL DE ENDOSCOPIA, MEDICINA OFTALMOLÓGICA, MAMOGRAFIA, CARDIOLOGIA E ODONTOLOGIA ESPECIALIZADA - CEMOC.",
+        "numero": "05/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T15:24:24",
+        "data_abertura": "2026-01-30T09:00:00",
+        "valor_total": 36687.88,
+        "api_params": {
+            "cnpj": "10713187000124",
+            "ano": 2026,
+            "seq": 9
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/10713187000124/2026/9"
+    },
+    {
+        "id": "15023930000138202613",
+        "uf": "MT",
+        "cidade": "Colíder",
+        "orgao": "MUNICIPIO DE COLIDER",
+        "uasg": "01",
+        "objeto": "REGISTRO DE PREÇO PARA FUTURA E EVENTUAL CONTRATAÇÃO DE LABORATÓRIO ESPECIALIZADO NA CONFECÇÃO DE PRÓTESES DENTÁRIAS, INCLUINDO INTEGRALMENTE AS FASES CLÍNICAS E LABORATORIAIS, DESDE O ATENDIMENTO INICIAL AO PACIENTE ATÉ A ENTREGA, INSTALAÇÃO E AJUSTES FINAIS DAS PRÓTESES, PARA ATENDER AS DEMANDAS DA SECRETARIA MUNICIPAL DE SAÚDE E SANEAMENTO BÁSICO DE COLÍDER/MT.",
+        "numero": "7/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T15:22:14",
+        "data_abertura": "2026-01-29T08:30:00",
+        "valor_total": 477648.0,
+        "api_params": {
+            "cnpj": "15023930000138",
+            "ano": 2026,
+            "seq": 13
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/15023930000138/2026/13"
+    },
+    {
+        "id": "033471270001702025196",
+        "uf": "MT",
+        "cidade": "Guiratinga",
+        "orgao": "MUNICIPIO DE GUIRATINGA",
+        "uasg": "1",
+        "objeto": "CONTRATAÇÃO DE EMPRESA ESPECIALIZADA NO FORNECIMENTO DE MEDICAMENTOS DE DISTRIBUIÇÃO GRATUITA, PARA ESTOQUE DA FARMACIA BASICA MUNICIPAL, AUTORIZADO PELA SEC. MUN. DE SAÚDE.",
+        "numero": "53/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T15:09:08",
+        "data_abertura": "2025-07-18T00:00:00",
+        "valor_total": 3405158.3,
+        "api_params": {
+            "cnpj": "03347127000170",
+            "ano": 2025,
+            "seq": 196
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/03347127000170/2025/196"
+    },
+    {
+        "id": "0161264300015920263",
+        "uf": "PB",
+        "cidade": "Santa Cecília",
+        "orgao": "MUNICIPIO DE SANTA CECILIA",
+        "uasg": "1",
+        "objeto": "[Portal de Compras Públicas] - Sistema de Registro de Preços para eventual e futura aquisição, de forma parcelada, de Material Médico Hospitalar para atender as necessidades do Fundo Municipal de Saúde do Município de Santa Cecília - PB",
+        "numero": "2/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T15:08:26",
+        "data_abertura": "2026-01-29T15:30:00",
+        "valor_total": 730556.86,
+        "api_params": {
+            "cnpj": "01612643000159",
+            "ano": 2026,
+            "seq": 3
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/01612643000159/2026/3"
+    },
+    {
+        "id": "1949373200019920269",
+        "uf": "MG",
+        "cidade": "Araxá",
+        "orgao": "CONSORCIO INTERFEDERATIVO MINAS GERAIS - CIMINAS",
+        "uasg": "2390",
+        "objeto": "[LICITANET] - CONTRATAÇÃO DE EMPRESA ESPECIALIZADA EM ADMINISTRAR E GERIR A AQUISIÇÃO PARCELADA DE CAFÉ, INSUMOS E UTENSÍLIOS, ATRAVÉS DE SOFTWARE DEDICADO EM ATENDIMENTO AOS ORGAOS DEMANDANTES",
+        "numero": "004/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T14:58:00",
+        "data_abertura": "2026-01-29T14:57:57",
+        "valor_total": 4.06,
+        "api_params": {
+            "cnpj": "19493732000199",
+            "ano": 2026,
+            "seq": 9
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/19493732000199/2026/9"
+    },
+    {
+        "id": "033471270001702025188",
+        "uf": "MT",
+        "cidade": "Guiratinga",
+        "orgao": "MUNICIPIO DE GUIRATINGA",
+        "uasg": "1",
+        "objeto": "REGISTRO DE PREÇOS PARA A FUTURA E EVENTUAL AQUISIÇÃO DE OXIGÊNIO MEDICINAL PARA MANUTENÇÃO DAS AÇÕES DA SECRETARIA MUNICIPAL DE SAÚDE E SEUS SETORES, CONFORME NECESSIDADE DA SECRETARIA MUNICIPAL DE SAÚDE\r\n",
+        "numero": "40/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T14:53:09",
+        "data_abertura": "2025-05-21T08:40:00",
+        "valor_total": 83633.82,
+        "api_params": {
+            "cnpj": "03347127000170",
+            "ano": 2025,
+            "seq": 188
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/03347127000170/2025/188"
+    },
+    {
+        "id": "1029131100010020263",
+        "uf": "PE",
+        "cidade": "Escada",
+        "orgao": "FUNDO MUNICIPAL DE SAUDE - ESCADA-PE",
+        "uasg": "1",
+        "objeto": "REGISTRO DE PREÇOS POR LOTE, CONSIGNADO EM ATA, PELO PRAZO DE 12 (DOZE) MESES, PARA FUTURA E EVENTUAL AQUISIÇÃO DE MEDICAMENTOS PARA ATENDER AS UNIDADES BÁSICAS DE SAÚDE E HOSPITAL MUNICIPAL DOUTOR BENÉVOLO WANDERLEY DO AMARAL DO MUNICÍPIO DE ESCADA/PE.",
+        "numero": "005/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T14:42:22",
+        "data_abertura": "2026-01-30T14:01:00",
+        "valor_total": 4667978.06,
+        "api_params": {
+            "cnpj": "10291311000100",
+            "ano": 2026,
+            "seq": 3
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/10291311000100/2026/3"
+    },
+    {
+        "id": "5933093600012320263",
+        "uf": "SP",
+        "cidade": "São Caetano do Sul",
+        "orgao": "SISTEMA DE AGUA, ESGOTO E SANEAMENTO AMBIENTAL - SAESA",
+        "uasg": "1",
+        "objeto": "Contratação de empresa para prestação de serviço de limpeza e desinfecção química dos reservatórios e caixas d’água, nos Próprios do Sistema de Água, Esgoto e Saneamento Ambiental de São Caetano do Sul – SAESA-SCS, conforme especificações técnicas e exigências da Vigilância Sanitária e do Ministério da Saúde.",
+        "numero": "3/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T14:36:41",
+        "data_abertura": "2026-01-29T00:00:00",
+        "valor_total": 26880.0,
+        "api_params": {
+            "cnpj": "59330936000123",
+            "ano": 2026,
+            "seq": 3
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/59330936000123/2026/3"
+    },
+    {
+        "id": "0773379300010520262",
+        "uf": "CE",
+        "cidade": "Mucambo",
+        "orgao": "MUNICIPIO DE MUCAMBO",
+        "uasg": "2153",
+        "objeto": "REGISTRO DE PREÇOS VISANDO A CONTRATAÇÃO DE EMPRESA ESPECIALIZADA PARA EXECUÇÃO DOS SERVIÇOS DE CONFECÇÃO DE PRÓTESES DENTÁRIAS, JUNTO A SECRETARIA DE SAÚDE DO MUNICIPIO DE MUCAMBO/CE.",
+        "numero": "2701.01/2026-PE/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T14:30:42",
+        "data_abertura": "2026-01-29T15:00:00",
+        "valor_total": 628968.0,
+        "api_params": {
+            "cnpj": "07733793000105",
+            "ano": 2026,
+            "seq": 2
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/07733793000105/2026/2"
+    },
+    {
+        "id": "033471270001702025170",
+        "uf": "MT",
+        "cidade": "Guiratinga",
+        "orgao": "MUNICIPIO DE GUIRATINGA",
+        "uasg": "1",
+        "objeto": "CONTRATAÇÃO DE EMPRESA PARA FUTURA PRESTAÇÃO DE SERVIÇOS GRÁFICOS NA IMPRESSÃO DE BANNERS, PANFLETOS, CARIMBOS E IMPRESSOS EM GERAL PARA SUPRIR AS NECESSIDADES DA SECRETARIA MUNICIPAL DA EDUCAÇÃO ,ADMINISTRAÇÃO ,ASISTENTE SOCIAL ,CULTURA  ,SAÚDE E DEPARTAMENTO MUNICIPAL DE AGUA E ESGOTO.",
+        "numero": "83/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T14:30:17",
+        "data_abertura": "2026-01-12T08:30:00",
+        "valor_total": 815097.84,
+        "api_params": {
+            "cnpj": "03347127000170",
+            "ano": 2025,
+            "seq": 170
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/03347127000170/2025/170"
+    },
+    {
+        "id": "4529042600016520261",
+        "uf": "SP",
+        "cidade": "Pedra Bela",
+        "orgao": "MUNICIPIO DE PEDRA BELA",
+        "uasg": "0000",
+        "objeto": "REGISTRO DE PRECOS PARA EVENTUAL CONTRATACAO DE EMPRESA PARA O FORNECIMENTO PARCELADO DE LEITES ESPECIAIS E SUPLEMENTOS ALIMENTARES PARA PACIENTES COM RESTRICOES ALIMENTARES E CADASTRADOS NA DIRETORIA MUNICIPAL DE SAUDE.",
+        "numero": "1 | Processo 1/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T14:20:15",
+        "data_abertura": "2026-01-14T08:00:00",
+        "valor_total": 516173.0,
+        "api_params": {
+            "cnpj": "45290426000165",
+            "ano": 2026,
+            "seq": 1
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/45290426000165/2026/1"
+    },
+    {
+        "id": "4537070700012820267",
+        "uf": "SP",
+        "cidade": "Pitangueiras",
+        "orgao": "MUNICIPIO DE PITANGUEIRAS",
+        "uasg": "1",
+        "objeto": "FORMAÇÃO DE REGISTRO DE PREÇOS para aquisição de MEDICAMENTOS DE ORDEM JUDICIAL, em atendimento a Secretaria Municipal de Saúde, de acordo com as especificações do Anexo I do Edital.",
+        "numero": "007/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T14:07:36",
+        "data_abertura": "2026-01-30T00:00:00",
+        "valor_total": 468719.74,
+        "api_params": {
+            "cnpj": "45370707000128",
+            "ano": 2026,
+            "seq": 7
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/45370707000128/2026/7"
+    },
+    {
+        "id": "271741430001762025213",
+        "uf": "ES",
+        "cidade": "São Gabriel da Palha",
+        "orgao": "MUNICIPIO DE SAO GABRIEL DA PALHA",
+        "uasg": "01",
+        "objeto": "[Portal de Compras Públicas] - AQUISICAO DE MEDICAMENTOS NAO PACTUADOS PELO SUS EM ATENDIMENTO A DECISOES JUDICIAIS ENCAMINHADAS PARA A SECRETARIA MUNICIPAL DE SAUDE. A DESPESA SERA POR CONTA DO RECURSO FMS.",
+        "numero": "000080/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T13:59:27",
+        "data_abertura": "2026-01-30T08:00:00",
+        "valor_total": 115061.4,
+        "api_params": {
+            "cnpj": "27174143000176",
+            "ano": 2025,
+            "seq": 213
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/27174143000176/2025/213"
+    },
+    {
+        "id": "1829666500015020262",
+        "uf": "MG",
+        "cidade": "Morada Nova de Minas",
+        "orgao": "MUNICIPIO DE MORADA NOVA DE MINAS",
+        "uasg": "1065",
+        "objeto": "REGISTRO DE PREÇOS PARA FUTURA E EVENTUAL CONTRATAÇÃO DE EMPRESA PARA AQUISIÇÃO DE MATERIAIS DE USO MEDICO-HOSPITALAR EM ATENDIMENTO A SOLICITAÇÃO DA SECRETARIA MUNICIPAL DE SAUDE",
+        "numero": "02/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T13:24:54",
+        "data_abertura": "2026-01-29T09:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "18296665000150",
+            "ano": 2026,
+            "seq": 2
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/18296665000150/2026/2"
+    },
+    {
+        "id": "07728421000182202613",
+        "uf": "CE",
+        "cidade": "Senador Pompeu",
+        "orgao": "MUNICIPIO DE SENADOR POMPEU",
+        "uasg": "202503",
+        "objeto": "REGISTRO DE PREÇO PARA FUTURA AQUISIÇÃO DE PRODUTOS NUTRICIONAIS PARA ATENDER AS NECESSIDADES DAS UNIDADES BÁSICAS DE SAÚDE DO MUNICÍPIO DE SENADOR POMPEU/CE",
+        "numero": "SS-PE001/2026-SRP/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T12:54:25",
+        "data_abertura": "2026-01-29T00:00:00",
+        "valor_total": 916065.0,
+        "api_params": {
+            "cnpj": "07728421000182",
+            "ano": 2026,
+            "seq": 13
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/07728421000182/2026/13"
+    },
+    {
+        "id": "0161234800010020263",
+        "uf": "MA",
+        "cidade": "São Roberto",
+        "orgao": "MUNICIPIO DE SAO ROBERTO",
+        "uasg": "17",
+        "objeto": "Registro de preços para aquisição de utensílios, materiais de higiene e limpeza para atender as necessidades do Município de São Roberto - MA.",
+        "numero": "33/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T12:32:48",
+        "data_abertura": "2026-01-29T12:25:00",
+        "valor_total": 1018289.5,
+        "api_params": {
+            "cnpj": "01612348000100",
+            "ano": 2026,
+            "seq": 3
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/01612348000100/2026/3"
+    },
+    {
+        "id": "014095800001382026151",
+        "uf": "GO",
+        "cidade": "Goiânia",
+        "orgao": "ESTADO DE GOIAS",
+        "uasg": "926250",
+        "objeto": "A solicitação refere-se à necessidade de aquisição de produtos medicamentos e /ou produtos para saúde , que foram concedidos nas apresentações e concentrações registradas na ANVISA prescritas nos receituários médicos presentes nos autos das ações judiciais.",
+        "numero": "117253/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T12:21:14",
+        "data_abertura": "2026-02-02T08:00:00",
+        "valor_total": 156365.28,
+        "api_params": {
+            "cnpj": "01409580000138",
+            "ano": 2026,
+            "seq": 151
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/01409580000138/2026/151"
+    },
+    {
+        "id": "1136189600015020262",
+        "uf": "PE",
+        "cidade": "São Vicente Férrer",
+        "orgao": "MUNICIPIO DE SAO VICENTE FERRER",
+        "uasg": "1",
+        "objeto": "AQUISIÇÃO PARCELADA DE MATERIAIS DE EXPEDIENTE, VISANDO O SUPRIMENTO DAS NECESSIDADES DAS DIVERSAS SECRETARIAS DESTA PREFEITURA E DOS FUNDOS MUNICIPAIS DE EDUCAÇÃO, SAÚDE E ASSISTÊNCIA SOCIAL DE SÃO VICENTE FÉRRER - PE, CONFORME TERMO DE REFERÊNCIA.",
+        "numero": "02/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T12:00:39",
+        "data_abertura": "2026-01-30T00:00:00",
+        "valor_total": 1117551.08,
+        "api_params": {
+            "cnpj": "11361896000150",
+            "ano": 2026,
+            "seq": 2
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/11361896000150/2026/2"
+    },
+    {
+        "id": "014095800001382026150",
+        "uf": "GO",
+        "cidade": "Goiânia",
+        "orgao": "ESTADO DE GOIAS",
+        "uasg": "926250",
+        "objeto": "A solicitação refere-se à necessidade de aquisição de produtos medicamentos e /ou produtos para saúde , que foram concedidos nas apresentações e concentrações registradas na ANVISA prescritas nos receituários médicos presentes nos autos das ações judiciais.",
+        "numero": "116391/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T11:56:24",
+        "data_abertura": "2026-02-02T08:00:00",
+        "valor_total": 17991762.12,
+        "api_params": {
+            "cnpj": "01409580000138",
+            "ano": 2026,
+            "seq": 150
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/01409580000138/2026/150"
+    },
+    {
+        "id": "033471270001702025163",
+        "uf": "MT",
+        "cidade": "Guiratinga",
+        "orgao": "MUNICIPIO DE GUIRATINGA",
+        "uasg": "1",
+        "objeto": "OBJETO: FUTURA E EVENTUAL CONTRATAÇÃO DE EMPRESA ESPECIALIZADA PARA FORNECIMENTO DE ALIMENTOS ENTERAL  E SUPLEMENTOS ALIMENTAR PARA USUARIOS DO SISTEMA UNICO DE SAUDE AUTORIZADOS PELA SECRETARIA MUNICIPAL DE SAUDE.",
+        "numero": "71/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T11:50:30",
+        "data_abertura": "2025-09-15T00:00:00",
+        "valor_total": 303009.9,
+        "api_params": {
+            "cnpj": "03347127000170",
+            "ano": 2025,
+            "seq": 163
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/03347127000170/2025/163"
+    },
+    {
+        "id": "4537070700012820266",
+        "uf": "SP",
+        "cidade": "Pitangueiras",
+        "orgao": "MUNICIPIO DE PITANGUEIRAS",
+        "uasg": "1",
+        "objeto": "Contratação de empresa especializada para a prestação de serviços de fonoaudiologia, em atendimento à Secretaria Municipal de Saúde e de acordo com as especificações do Anexo I do Edital.",
+        "numero": "006/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T11:50:22",
+        "data_abertura": "2026-01-30T00:00:00",
+        "valor_total": 772830.0,
+        "api_params": {
+            "cnpj": "45370707000128",
+            "ano": 2026,
+            "seq": 6
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/45370707000128/2026/6"
+    },
+    {
+        "id": "1160783600017520264",
+        "uf": "PE",
+        "cidade": "Amaraji",
+        "orgao": "FUNDO MUNICIPAL DE SAUDE DE AMARAJI",
+        "uasg": "1",
+        "objeto": "REGISTRO DE PREÇOS PARA FUTURA E EVENTUAL AQUISIÇÃO PARCELADA DE MEDICAMENTOS PSICOTRÓPICOS PARA ATENDER AS NECESSIDADES DA SECRETARIA MUNICIPAL DE SAÚDE DE AMARAJI/PE",
+        "numero": "003/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T11:47:00",
+        "data_abertura": "2026-01-29T12:00:00",
+        "valor_total": 1760279.36,
+        "api_params": {
+            "cnpj": "11607836000175",
+            "ano": 2026,
+            "seq": 4
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/11607836000175/2026/4"
+    },
+    {
+        "id": "1127101800014420261",
+        "uf": "TO",
+        "cidade": "Angico",
+        "orgao": "FUNDO MUNICIPAL DE SAUDE",
+        "uasg": "1575",
+        "objeto": "[LICITANET] - REGISTRO DE PREÇO PARA  FUTURA,EVENTUAL E PARCELADA, AQUISIÇÃO DE MATERIAIS ODONTOLOGICOS  EM GERAL, PARA ATENDER AS NECESSIDADES  DO CONSULTÓRIO ODONTOLOGICO  DA UNIDADE BASICA DE SAÚDE   PADRE ANACLETO, VINCULADO AO FUNDO MUNICIPAL DE SAÚDE DE ANGICO-TO.",
+        "numero": "01/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T11:31:08",
+        "data_abertura": "2026-01-29T11:31:05",
+        "valor_total": 420071.2,
+        "api_params": {
+            "cnpj": "11271018000144",
+            "ano": 2026,
+            "seq": 1
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/11271018000144/2026/1"
+    },
+    {
+        "id": "1858496100015620266",
+        "uf": "MG",
+        "cidade": "Ibiá",
+        "orgao": "MUNICIPIO DE IBIA",
+        "uasg": "831",
+        "objeto": "[LICITANET] - REGISTRO DE PREÇOS PARA AQUISIÇÃO DE MEDICAMENTOS E CORRELATOS PARA ABASTECIMENTO DA FARMÁCIA MUNICIPAL DE IBIÁ/MG.",
+        "numero": "004/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T11:30:19",
+        "data_abertura": "2026-01-29T11:30:02",
+        "valor_total": 2900211.2,
+        "api_params": {
+            "cnpj": "18584961000156",
+            "ano": 2026,
+            "seq": 6
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/18584961000156/2026/6"
+    },
+    {
+        "id": "07623051000119202611",
+        "uf": "CE",
+        "cidade": "São Luís do Curu",
+        "orgao": "MUNICIPIO DE SAO LUIS DO CURU",
+        "uasg": "202508",
+        "objeto": "AQUISIÇÃO DE 01(UM) APARELHO DE RAIO X EM ATENDIMENTO A SECRETARIA DE SAÚDE DE SÃO LUÍS DO CURU-CE.",
+        "numero": "2601.01-25-PE/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T11:29:13",
+        "data_abertura": "2026-01-29T00:00:00",
+        "valor_total": 295666.67,
+        "api_params": {
+            "cnpj": "07623051000119",
+            "ano": 2026,
+            "seq": 11
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/07623051000119/2026/11"
+    },
+    {
+        "id": "1376373500011920262",
+        "uf": "BA",
+        "cidade": "Itaquara",
+        "orgao": "MUNICIPIO DE ITAQUARA",
+        "uasg": "000000001",
+        "objeto": "AQUISIÇÃO DE EQUIPAMENTO E MATERIAL PERMANENTE PARA UNIDADE BÁSICA DE SAÚDE DE ITAQUARA-BA, CONFORME EMENDA PROPOSTA DO MINISTÉRIO DA SAÚDE Nº 11153875000125007",
+        "numero": "002/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T11:24:45",
+        "data_abertura": "2026-01-29T12:00:00",
+        "valor_total": 160978.0,
+        "api_params": {
+            "cnpj": "13763735000119",
+            "ano": 2026,
+            "seq": 2
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/13763735000119/2026/2"
+    },
+    {
+        "id": "041441500001202025146",
+        "uf": "PA",
+        "cidade": "Xinguara",
+        "orgao": "MUNICIPIO DE XINGUARA",
+        "uasg": "2691",
+        "objeto": "[Portal de Compras Públicas] - Prestação de serviços odontológicos direcionados a CONFECÇÃO DE PRÓTESES DENTÁRIAS SOB MEDIDA, para atender as demandas do Centro de Especialidades Odontológicas (CEO) e o Programa de Saúde Bucal da Secretaria Municipal de Saúde de Xinguara/PA.",
+        "numero": "086/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T11:23:29",
+        "data_abertura": "2026-01-29T14:00:00",
+        "valor_total": 775224.0,
+        "api_params": {
+            "cnpj": "04144150000120",
+            "ano": 2025,
+            "seq": 146
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/04144150000120/2025/146"
+    },
+    {
+        "id": "1120805900019620263",
+        "uf": "PE",
+        "cidade": "Ingazeira",
+        "orgao": "FUNDO MUNICIPAL DE SAUDE",
+        "uasg": "496",
+        "objeto": "Contratação de empresa especializada para a prestação de serviços laboratoriais de análises clínicas, incluindo coleta, processamento e emissão de laudos para exames laboratoriais, conforme demanda do município de Ingazeira",
+        "numero": "00002/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T11:18:41",
+        "data_abertura": "2026-01-30T00:00:00",
+        "valor_total": 102531.05,
+        "api_params": {
+            "cnpj": "11208059000196",
+            "ano": 2026,
+            "seq": 3
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/11208059000196/2026/3"
+    },
+    {
+        "id": "1150308100016920262",
+        "uf": "PE",
+        "cidade": "São José do Egito",
+        "orgao": "FUNDO MUNICIPAL DE SAUDE DE SAO JOSE DO EGITO",
+        "uasg": "8546",
+        "objeto": "[Portal de Compras Públicas] - Aquisição parcelada de Sacos de Lixo, por período de 12 (doze) meses, visando atender ao Fundo Municipal de Saúde de São José do Egito/PE",
+        "numero": "2/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T11:14:14",
+        "data_abertura": "2026-01-29T13:00:00",
+        "valor_total": 38045.7,
+        "api_params": {
+            "cnpj": "11503081000169",
+            "ano": 2026,
+            "seq": 2
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/11503081000169/2026/2"
+    },
+    {
+        "id": "0323891200019420262",
+        "uf": "MT",
+        "cidade": "Nova Canaã do Norte",
+        "orgao": "MUNICIPIO DE NOVA CANAA DO NORTE",
+        "uasg": "1",
+        "objeto": "Registro de preços para futura e eventual para prestação de serviços de exames laboratoriais em atendimento as demandas de pacientes encaminhados pela Secretaria Municipal de Saúde de Nova Canaã do Norte/MT.",
+        "numero": "001/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T11:10:46",
+        "data_abertura": "2026-01-29T12:00:00",
+        "valor_total": 4041015.7,
+        "api_params": {
+            "cnpj": "03238912000194",
+            "ano": 2026,
+            "seq": 2
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/03238912000194/2026/2"
+    },
+    {
+        "id": "0771166600010520265",
+        "uf": "CE",
+        "cidade": "Palmácia",
+        "orgao": "MUNICIPIO DE PALMACIA",
+        "uasg": "202506",
+        "objeto": "REGISTRO DE PREÇOS PARA AQUISIÇÃO DE MATERIAL PERMANENTE VISANDO ATENDER AS NECESSIDADES DA UNIDADES DE ATENÇÃO PRIMÁRIA À SAÚDE E O SERVIÇO ESPECIALIZADO EM SAÚDE BUCAL DO MUNICÍPIO DE PALMÁCIA",
+        "numero": "003/2026 PE/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T10:56:13",
+        "data_abertura": "2026-01-28T00:00:00",
+        "valor_total": 583496.92,
+        "api_params": {
+            "cnpj": "07711666000105",
+            "ano": 2026,
+            "seq": 5
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/07711666000105/2026/5"
+    },
+    {
+        "id": "1470004800011720263",
+        "uf": "ES",
+        "cidade": "Barra de São Francisco",
+        "orgao": "FUNDO MUNICIPAL DE SAUDE",
+        "uasg": "14700048000117-002",
+        "objeto": "Registro de Preços para futura e eventual aquisição de Materiais de Consumo Médicos Hospitalar, para atender as demandas do Fundo Municipal de Saúde de Barra de São Francisco.",
+        "numero": "000001/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T10:55:57",
+        "data_abertura": "2026-02-12T09:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "14700048000117",
+            "ano": 2026,
+            "seq": 3
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/14700048000117/2026/3"
+    },
+    {
+        "id": "63761993000134202629",
+        "uf": "RO",
+        "cidade": "Seringueiras",
+        "orgao": "MUNICIPIO DE SERINGUEIRAS",
+        "uasg": "33",
+        "objeto": "[LICITANET] - AQUISIÇÃO DE ENCERADEIRA INDUSTRIAL PARA O SETOR DE LIMPEZA DO HOSPITAL MUNICIPAL FIORINDO VICENSI, ATRAVES DO FUNDO MUNICIPAL DE SAÚDE",
+        "numero": "10/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T10:52:06",
+        "data_abertura": "2026-01-29T10:52:03",
+        "valor_total": 3977.19,
+        "api_params": {
+            "cnpj": "63761993000134",
+            "ano": 2026,
+            "seq": 29
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/63761993000134/2026/29"
+    },
+    {
+        "id": "3216570600010820269",
+        "uf": "RJ",
+        "cidade": "Sumidouro",
+        "orgao": "MUNICIPIO DE SUMIDOURO",
+        "uasg": "865",
+        "objeto": "[LICITANET] - EVENTUAL AQUISIÇÃO DE MATERIAIS DE COPA, COZINHA, HIGIENE,  LIMPEZA E DESCARTÁVEIS - SRP\n",
+        "numero": "010/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T10:37:24",
+        "data_abertura": "2026-01-29T10:37:21",
+        "valor_total": 63153.62,
+        "api_params": {
+            "cnpj": "32165706000108",
+            "ano": 2026,
+            "seq": 9
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/32165706000108/2026/9"
+    },
+    {
+        "id": "46588950000180202639",
+        "uf": "SP",
+        "cidade": "São José do Rio Preto",
+        "orgao": "MUNICIPIO DE SAO JOSE DO RIO PRETO",
+        "uasg": "1",
+        "objeto": "REGISTRO DE PREÇOS PARA AQUISIÇÃO DE ALCOOL EM GEL E DESINFETANTE HOSPITALAR. SECRETARIA MUNICIPAL DE SAUDE",
+        "numero": "1262/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T10:16:02",
+        "data_abertura": "2026-01-30T08:30:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "46588950000180",
+            "ano": 2026,
+            "seq": 39
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/46588950000180/2026/39"
+    },
+    {
+        "id": "1834809400015020262",
+        "uf": "MG",
+        "cidade": "Aimorés",
+        "orgao": "MUNICIPIO DE AIMORES",
+        "uasg": "682",
+        "objeto": "Aquisição de Materiais e Equipamentos Para Fisioterapia, conforme especificações constantes no Termo de Referência, em atendimento as necessidades da Secretaria Municipal de Saúde. Com exclusividade para Micro Empreendedores Individuais (MEI), Micro Empesas (ME) ou Empresas de Pequeno Porte (EPP).",
+        "numero": "082/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T10:11:21",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 43656.46,
+        "api_params": {
+            "cnpj": "18348094000150",
+            "ano": 2026,
+            "seq": 2
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/18348094000150/2026/2"
+    },
+    {
+        "id": "1220744500012620262",
+        "uf": "AL",
+        "cidade": "Taquarana",
+        "orgao": "MUNICIPIO DE TAQUARANA",
+        "uasg": "1",
+        "objeto": "Registro de preços para futura e eventual aquisição de medicamentos",
+        "numero": "01/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T10:01:46",
+        "data_abertura": "2026-01-29T18:00:00",
+        "valor_total": 4674960.0,
+        "api_params": {
+            "cnpj": "12207445000126",
+            "ano": 2026,
+            "seq": 2
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/12207445000126/2026/2"
+    },
+    {
+        "id": "45660628000151202556",
+        "uf": "SP",
+        "cidade": "Magda",
+        "orgao": "MUNICIPIO DE MAGDA",
+        "uasg": "1",
+        "objeto": "CONTRATAÇÃO DE PROFISSIONAL ENFERMEIRO(A) COM CARGA HORÁRIA DE 40 HORAS SEMANAIS PARA ATENDIMENTO DE DEMANDAS NA UNIDADE BÁSICA DE SAÚDE DO MUNICÍPIO DE MAGDA (SP).",
+        "numero": "18/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T09:47:48",
+        "data_abertura": "2025-12-02T09:10:00",
+        "valor_total": 62650.68,
+        "api_params": {
+            "cnpj": "45660628000151",
+            "ano": 2025,
+            "seq": 56
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/45660628000151/2025/56"
+    },
+    {
+        "id": "45299104000187202613",
+        "uf": "SP",
+        "cidade": "Batatais",
+        "orgao": "MUNICIPIO DE BATATAIS",
+        "uasg": "7",
+        "objeto": "CONTRATAÇÃO DE EMPRESA ESPECIALIZADA PARA PRESTAÇÃO DE SERVIÇOS DE VIGILÂNCIA DESARMADA E CONTROLADOR DE ACESSO, 24 HORAS POR DIA E 7 DIAS POR SEMANA, EM ATENDIMENTO À SECRETARIA MUNICIPAL DE SAÚDE",
+        "numero": "PE 01/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T09:36:38",
+        "data_abertura": "2026-01-30T08:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "45299104000187",
+            "ano": 2026,
+            "seq": 13
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/45299104000187/2026/13"
+    },
+    {
+        "id": "0755671700016320265",
+        "uf": "GO",
+        "cidade": "Luziânia",
+        "orgao": "FUNDO MUNICIPAL DE SAUDE",
+        "uasg": "0301",
+        "objeto": "REGISTRO DE PREÇOS PARA EVENTUAL E FUTURA AQUISIÇÃO DE MEDICAMENTOS, PARA ABASTECIMENTO E DISTRIBUIÇÃO JUNTO AS UNIDADES DE SAÚDE VINCULADAS A SECRETARIA DE SAÚDE DE LUZIÂNIA-GO.",
+        "numero": "8/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T09:27:31",
+        "data_abertura": "2026-01-27T08:00:00",
+        "valor_total": 703806.02,
+        "api_params": {
+            "cnpj": "07556717000163",
+            "ano": 2026,
+            "seq": 5
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/07556717000163/2026/5"
+    },
+    {
+        "id": "0867824300019520267",
+        "uf": "GO",
+        "cidade": "Cezarina",
+        "orgao": "FUNDO MUNICIPAL DE SAUDE",
+        "uasg": "6",
+        "objeto": "PROCESSO DE ADESÃO A ATA DE REGISTRO DE PREÇOS Nº 002/2026 - FORNECIMENTO DE RECARGA DE GÁS OXIGÊNIO MEDICINAL, LOCAÇÃO DE CILINDROS PARA OXIGÊNIO MEDICINAL E LOCAÇÃO DE APARELHOS CONCENTRADORES DE OXIGÊNIO PARA ATENDER AS NECESSIDADES DO FUNDO MUNICIPAL DE SAÚDE DE CEZARINA/GO, ORIUNDO DA PREFEITURA MUNICIPAL DE PETROLINA DE GOIÁS - GO.",
+        "numero": "(2964) | 2-0/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T09:26:41",
+        "data_abertura": "2026-01-23T07:00:00",
+        "valor_total": 461200.0,
+        "api_params": {
+            "cnpj": "08678243000195",
+            "ano": 2026,
+            "seq": 7
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/08678243000195/2026/7"
+    },
+    {
+        "id": "1831383300017820266",
+        "uf": "MG",
+        "cidade": "Florestal",
+        "orgao": "MUNICIPIO DE FLORESTAL",
+        "uasg": "020702",
+        "objeto": "MEDICAMENTOS",
+        "numero": "Adesão - 5/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T09:25:32",
+        "data_abertura": "2026-01-28T10:00:00",
+        "valor_total": 51653.5,
+        "api_params": {
+            "cnpj": "18313833000178",
+            "ano": 2026,
+            "seq": 6
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/18313833000178/2026/6"
+    },
+    {
+        "id": "08928517000157202619",
+        "uf": "PB",
+        "cidade": "Belém",
+        "orgao": "MUNICIPIO DE BELEM",
+        "uasg": "1",
+        "objeto": "[Portal de Compras Públicas] - AQUISIÇÃO DE FORMA PARCELADA DE MEDICAMENTOS PSICOTRÓPICOS, PARA A SECRETARIA DE SAÚDE DO MUNICÍPIO DE BELÉM-PB",
+        "numero": "11/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T09:22:34",
+        "data_abertura": "2026-01-29T09:30:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "08928517000157",
+            "ano": 2026,
+            "seq": 19
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/08928517000157/2026/19"
+    },
+    {
+        "id": "08928517000157202618",
+        "uf": "PB",
+        "cidade": "Belém",
+        "orgao": "MUNICIPIO DE BELEM",
+        "uasg": "1",
+        "objeto": "[Portal de Compras Públicas] - AQUISIÇÃO DE FORMA PARCELADA DE MEDICAMENTOS DE FARMÁCIA BÁSICA PARA ATENDER AS DEMANDAS DA SECRETARIA MUNICIPAL DE SAÚDE DO MUNICIPIO DE BELÉM-PB",
+        "numero": "10/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T09:20:39",
+        "data_abertura": "2026-01-29T09:30:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "08928517000157",
+            "ano": 2026,
+            "seq": 18
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/08928517000157/2026/18"
+    },
+    {
+        "id": "08928517000157202617",
+        "uf": "PB",
+        "cidade": "Belém",
+        "orgao": "MUNICIPIO DE BELEM",
+        "uasg": "1",
+        "objeto": "[Portal de Compras Públicas] - CONTRATAÇÃO EMPRESA PARA AQUISIÇÃO DE MATERIAL MÉDICO-HOSPITALAR, PARA ATENDER AS DEMANDAS DA SECRETARIA DE SAÚDE DO MUNICÍPIO DE BELÉM-PB",
+        "numero": "9/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T09:17:42",
+        "data_abertura": "2026-01-29T09:30:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "08928517000157",
+            "ano": 2026,
+            "seq": 17
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/08928517000157/2026/17"
+    },
+    {
+        "id": "1147893800013820263",
+        "uf": "SE",
+        "cidade": "Propriá",
+        "orgao": "FUNDO MUNICIPAL DE SAUDE",
+        "uasg": "11478938000138",
+        "objeto": "FORNECIMENTO DE MATERIAIS CORRELATOS, PARA ATENDER AS NECESSIDADES DO FUNDO MUNICIPAL DE SAÚDE DE PROPRIÁ/SE (ITENS FRACASSADOS PE 07-2025–FMS),",
+        "numero": "02/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T09:13:01",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 154543.45,
+        "api_params": {
+            "cnpj": "11478938000138",
+            "ano": 2026,
+            "seq": 3
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/11478938000138/2026/3"
+    },
+    {
+        "id": "29141322000132202624",
+        "uf": "RJ",
+        "cidade": "Piraí",
+        "orgao": "MUNICIPIO DE PIRAI",
+        "uasg": "2025",
+        "objeto": "Registro de Preços para eventual Aquisição de fraldas para distribuição aos pacientes acamados em acompanhamento pela Rede Municipal de Saúde.",
+        "numero": "SMS-005/2026/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T09:12:42",
+        "data_abertura": "2026-01-30T08:00:00",
+        "valor_total": 1894725.6,
+        "api_params": {
+            "cnpj": "29141322000132",
+            "ano": 2026,
+            "seq": 24
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/29141322000132/2026/24"
+    },
+    {
+        "id": "203567470001942025102",
+        "uf": "MG",
+        "cidade": "Entre Rios de Minas",
+        "orgao": "MUNICIPIO DE ENTRE RIOS DE MINAS",
+        "uasg": "01001",
+        "objeto": "AQUISIÇÃO DE INSUMOS E INSTRUMENTOS ODONTOLÓGICOS, SOB DEMANDA, PARA A UNIDADE DE SAÚDE BUCAL DO MUNICÍPIO DE ENTRE RIOS DE MINAS.",
+        "numero": "00009925/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T09:11:15",
+        "data_abertura": "2025-12-18T15:00:00",
+        "valor_total": 81134.75,
+        "api_params": {
+            "cnpj": "20356747000194",
+            "ano": 2025,
+            "seq": 102
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/20356747000194/2025/102"
+    },
+    {
+        "id": "203567470001942025101",
+        "uf": "MG",
+        "cidade": "Entre Rios de Minas",
+        "orgao": "MUNICIPIO DE ENTRE RIOS DE MINAS",
+        "uasg": "01001",
+        "objeto": "AQUISIÇÃO DE GLICOSÍMETROS, APARELHOS MONITORES DE GLICEMIA, PARA ATENDIMENTO DA DEMANDA DA SECRETARIA MUNICIPAL DE SAÚDE DE ENTRE RIOS DE MINAS.",
+        "numero": "00004725/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T09:11:11",
+        "data_abertura": "2025-07-15T15:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "20356747000194",
+            "ano": 2025,
+            "seq": 101
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/20356747000194/2025/101"
+    },
+    {
+        "id": "1812513800018220262",
+        "uf": "MG",
+        "cidade": "Bonfinópolis de Minas",
+        "orgao": "MUNICIPIO DE BONFINOPOLIS DE MINAS",
+        "uasg": "1",
+        "objeto": "Aquisição de Materiais de Limpeza, Higiene, Copa e Cozinha para a Secretaria Municipal de Administração e Planejamento.",
+        "numero": "002/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T09:10:03",
+        "data_abertura": "2026-01-13T07:00:00",
+        "valor_total": 1167426.38,
+        "api_params": {
+            "cnpj": "18125138000182",
+            "ano": 2026,
+            "seq": 2
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/18125138000182/2026/2"
+    },
+    {
+        "id": "1009154400016020269",
+        "uf": "PE",
+        "cidade": "Jataúba",
+        "orgao": "MUNICIPIO DE JATAUBA",
+        "uasg": "4300",
+        "objeto": "[Portal de Compras Públicas] - AQUISIÇÃO DE EQUIPAMENTOS E MATERIAIS PERMANENTES PARA AS UNIDADES DE SAÚDE DO MUNICÍPIO DE JATAÚBA-PE, VISANDO O FORTALECIMENTO DOS ATENDIMENTOS EMERGENCIAIS E AMBULATORIAIS, EM CONFORMIDADE COM O PLANO DE TRABALHO E A EMENDA PARLAMENTAR Nº 532/2025",
+        "numero": "1/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T09:09:45",
+        "data_abertura": "2026-01-29T09:30:00",
+        "valor_total": 398233.65,
+        "api_params": {
+            "cnpj": "10091544000160",
+            "ano": 2026,
+            "seq": 9
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/10091544000160/2026/9"
+    },
+    {
+        "id": "46578498000175202631",
+        "uf": "SP",
+        "cidade": "Itanhaém",
+        "orgao": "MUNICIPIO DE ITANHAEM",
+        "uasg": "12442",
+        "objeto": "Registro de preços para Possível aquisição de insulinas, a fim de atender os pacientes insulinodependentes em tratamento no CEDI - Centro de Especializado em Diabetes, da Secretaria de Saúde do município de Itanhaém, no período de 12 (doze) meses.",
+        "numero": "203/2025/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T08:59:50",
+        "data_abertura": "2026-01-29T10:00:00",
+        "valor_total": 111058.08,
+        "api_params": {
+            "cnpj": "46578498000175",
+            "ano": 2026,
+            "seq": 31
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/46578498000175/2026/31"
+    },
+    {
+        "id": "13128798001094202671",
+        "uf": "SE",
+        "cidade": "Aracaju",
+        "orgao": "ESTADO DE SERGIPE",
+        "uasg": "13128798001094",
+        "objeto": "REGISTRO DE PREÇO, VISANDO FUTURAS E EVENTUAIS AQUISIÇÕES DE INSTRUMENTAIS CIRÚRGICOS (TESOURAS - PARTE 2), VISANDO ATENDER ÀS NECESSIDADES DA SECRETARIA DE ESTADO DE SERGIPE.",
+        "numero": "PE0070/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T08:50:28",
+        "data_abertura": "2026-01-29T09:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "13128798001094",
+            "ano": 2026,
+            "seq": 71
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/13128798001094/2026/71"
+    },
+    {
+        "id": "0655388700012120267",
+        "uf": "PI",
+        "cidade": "Piracuruca",
+        "orgao": "MUNICIPIO DE PIRACURUCA",
+        "uasg": "40067",
+        "objeto": "REGISTRO DE PREÇO PARA CONTRATAÇÃO DE EMPRESA ESPECIALIZADA NA PRESTAÇÃO DE SERVIÇOS DE REALIZAÇÃO DE CONSULTAS ESPECIALIZADAS, E EXAMES DE IMAGEM, EM ATENDIMENTO ÀS NECESSIDADES DA SECRETARIA MUNICIPAL DE SAÚDE DE PIRACURUCA/PI.",
+        "numero": "005/2026/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T08:38:14",
+        "data_abertura": "2026-01-29T10:00:00",
+        "valor_total": 8404701.8,
+        "api_params": {
+            "cnpj": "06553887000121",
+            "ano": 2026,
+            "seq": 7
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/06553887000121/2026/7"
+    },
+    {
+        "id": "0715857800011020268",
+        "uf": "MS",
+        "cidade": "Figueirão",
+        "orgao": "MUNICIPIO DE FIGUEIRAO",
+        "uasg": "381",
+        "objeto": "Aquisição de Material de Expediente para atender as Secretarias Municipais de Educação e Esporte, Assistência Social, Infraestrutura e Serviços Públicos, Desenvolvimento da Pequena Propriedade Rural, Gestão e Desenvolvimento, Gabinete do Prefeito, Secretaria de Saúde e suas extensões (Hospital Municipal Mariana Silvéria Furtado e UBS Arindo Rodrigues da Silva e UBS Sudalidio Amorim Malaquias, localizada no Distrito da Comunidade Quilombola de Santa Tereza) do Município de Figueirão.",
+        "numero": "04/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T08:15:35",
+        "data_abertura": "2026-01-29T09:00:00",
+        "valor_total": 425351.21,
+        "api_params": {
+            "cnpj": "07158578000110",
+            "ano": 2026,
+            "seq": 8
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/07158578000110/2026/8"
+    },
+    {
+        "id": "18338160000100202613",
+        "uf": "MG",
+        "cidade": "Guarani",
+        "orgao": "MUNICIPIO DE GUARANI",
+        "uasg": "223",
+        "objeto": "REGISTRO DE PREÇOS para aquisição de material descartável e de limpeza. \n\n",
+        "numero": "050/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T08:08:14",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 1014084.69,
+        "api_params": {
+            "cnpj": "18338160000100",
+            "ano": 2026,
+            "seq": 13
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/18338160000100/2026/13"
+    },
+    {
+        "id": "1831383300017820265",
+        "uf": "MG",
+        "cidade": "Florestal",
+        "orgao": "MUNICIPIO DE FLORESTAL",
+        "uasg": "020702",
+        "objeto": "MEDICAMENTOS",
+        "numero": "Adesão - 6/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:58:48",
+        "data_abertura": "2026-01-28T10:00:00",
+        "valor_total": 248045.16,
+        "api_params": {
+            "cnpj": "18313833000178",
+            "ano": 2026,
+            "seq": 5
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/18313833000178/2026/5"
+    },
+    {
+        "id": "466341010001152025665",
+        "uf": "SP",
+        "cidade": "Botucatu",
+        "orgao": "MUNICIPIO DE BOTUCATU",
+        "uasg": "986249",
+        "objeto": "Registro de Preço para possível aquisição de insumos de urgência e emergência ",
+        "numero": "90463/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:19:07",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 135014.94,
+        "api_params": {
+            "cnpj": "46634101000115",
+            "ano": 2025,
+            "seq": 665
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/46634101000115/2025/665"
+    },
+    {
+        "id": "13864377000130202696",
+        "uf": "SP",
+        "cidade": "São Paulo",
+        "orgao": "FUNDO MUNICIPAL DE SAUDE - FMS",
+        "uasg": "925003",
+        "objeto": "REGISTRO de PREÇOS PARA FORNECIMENTO DE SONDA RETAL ESTERIL DESCARTAVEL - NR. 08, 12, 22 E 24. ",
+        "numero": "90089/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:19:05",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "13864377000130",
+            "ano": 2026,
+            "seq": 96
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/13864377000130/2026/96"
+    },
+    {
+        "id": "0374764900016920261",
+        "uf": "MS",
+        "cidade": "Angélica",
+        "orgao": "MUNICIPIO DE ANGELICA",
+        "uasg": "989169",
+        "objeto": "Registro de preço para futura e eventual aquisição de equipamentos médicos, odontológicos e condicionadores de ar, em atendimento ao Fundo Municipal de Saúde, conforme Resolução n. 169//SES/MS.",
+        "numero": "90001/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:18:56",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 339049.84,
+        "api_params": {
+            "cnpj": "03747649000169",
+            "ano": 2026,
+            "seq": 1
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/03747649000169/2026/1"
+    },
+    {
+        "id": "460684250001332026211",
+        "uf": "SP",
+        "cidade": "Campinas",
+        "orgao": "UNIVERSIDADE ESTADUAL DE CAMPINAS",
+        "uasg": "450161",
+        "objeto": "Registro de Preços de insumos para neurointervenção (microcateteres)",
+        "numero": "90044/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:18:40",
+        "data_abertura": "2026-01-29T08:30:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "46068425000133",
+            "ano": 2026,
+            "seq": 211
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/46068425000133/2026/211"
+    },
+    {
+        "id": "381117780001402025262",
+        "uf": "PB",
+        "cidade": "João Pessoa",
+        "orgao": "FUNDACAO PARAIBANA DE GESTAO EM SAUDE -PB  SAUDE",
+        "uasg": "930404",
+        "objeto": "CONTRATAÇÃO DE EMPRESA ESPECIALIZADA PARA O FORNECIMENTO DE ALIMENTAÇÃO E NUTRIÇÃO HOSPITALAR. Prevalecerão as especificações do Termo de Referência segundo item 6.11 do Edital.  ",
+        "numero": "97321/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:17:26",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "38111778000140",
+            "ano": 2025,
+            "seq": 262
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/38111778000140/2025/262"
+    },
+    {
+        "id": "18291351000164202611",
+        "uf": "MG",
+        "cidade": "Divinópolis",
+        "orgao": "MUNICIPIO DE DIVINOPOLIS",
+        "uasg": "984445",
+        "objeto": "Contratação de empresa especializada em eventos para realização de seminário sobre saúde da mulher com ênfase em violência contra a mulher, que será realizado no Município de Divinópolis/MG, incluindo os fornecimentos de todos os recursos materiais e humanos necessários para o pleno atendimento do evento, conforme as condições e exigências estabelecidas no Termo de Referência.",
+        "numero": "90001/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:17:14",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 171196.67,
+        "api_params": {
+            "cnpj": "18291351000164",
+            "ano": 2026,
+            "seq": 11
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/18291351000164/2026/11"
+    },
+    {
+        "id": "463745000001942026412",
+        "uf": "SP",
+        "cidade": "Marília",
+        "orgao": "SECRETARIA DE ESTADO DA SAUDE",
+        "uasg": "090116",
+        "objeto": "Aquisição de Medicamento para atender Mandado Judicial.",
+        "numero": "90012/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:16:27",
+        "data_abertura": "2026-01-29T09:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "46374500000194",
+            "ano": 2026,
+            "seq": 412
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/46374500000194/2026/412"
+    },
+    {
+        "id": "0492934500018520263",
+        "uf": "PA",
+        "cidade": "Belém",
+        "orgao": "FUNDACAO SANTA CASA DE MISERICORDIA DO PARA",
+        "uasg": "925448",
+        "objeto": "Aquisição de Material Técnico Hospitalar - Insumos Para Cirurgias Craniofaciais.",
+        "numero": "90002/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:15:39",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 1385827.1,
+        "api_params": {
+            "cnpj": "04929345000185",
+            "ano": 2026,
+            "seq": 3
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/04929345000185/2026/3"
+    },
+    {
+        "id": "151264370003052026363",
+        "uf": "RJ",
+        "cidade": "Niterói",
+        "orgao": "EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES - EBSERH",
+        "uasg": "155915",
+        "objeto": "Aquisição de produtos para saúde - blindagens para abertura do Serviço de Medicina Nuclear convencional.",
+        "numero": "90004/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:15:15",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "15126437000305",
+            "ano": 2026,
+            "seq": 363
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/15126437000305/2026/363"
+    },
+    {
+        "id": "3811177800014020262",
+        "uf": "PB",
+        "cidade": "João Pessoa",
+        "orgao": "FUNDACAO PARAIBANA DE GESTAO EM SAUDE -PB  SAUDE",
+        "uasg": "930404",
+        "objeto": "CONTRATAÇÃO DE SERVIÇOS ESPECIALIZADOS EM OPERAÇÃO E MANUTENÇÃO DE ESTAÇÃO DE TRATAMENTO DE ESGOTOS HOSPITALARES. Prevalecerão as especificações do Termo de Referência segundo item 6.11 do Edital.  ",
+        "numero": "90030/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:15:09",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "38111778000140",
+            "ano": 2026,
+            "seq": 2
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/38111778000140/2026/2"
+    },
+    {
+        "id": "07587975000107202611",
+        "uf": "CE",
+        "cidade": "Crato",
+        "orgao": "MUNICIPIO DE CRATO",
+        "uasg": "981385",
+        "objeto": "Aquisição de protetor solar para atender as necessidades dos agentes comunitários de saúde (ACS), agentes comunitários de endemias (ACE) e agentes do projeto boa noite, que atuam no município de Crato, através da Secretaria de saúde",
+        "numero": "92032/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:15:05",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 394735.14,
+        "api_params": {
+            "cnpj": "07587975000107",
+            "ano": 2026,
+            "seq": 11
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/07587975000107/2026/11"
+    },
+    {
+        "id": "13864377000130202693",
+        "uf": "SP",
+        "cidade": "São Paulo",
+        "orgao": "FUNDO MUNICIPAL DE SAUDE - FMS",
+        "uasg": "925003",
+        "objeto": "REGISTRO de PREÇOS PARA O FORNECIMENTO DE MEDICAMENTOS DIVALPROATO DE SÓDIO 250 MG - ACESSA SUS",
+        "numero": "90093/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:14:31",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "13864377000130",
+            "ano": 2026,
+            "seq": 93
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/13864377000130/2026/93"
+    },
+    {
+        "id": "0817086200017420268",
+        "uf": "RN",
+        "cidade": "Parnamirim",
+        "orgao": "MUNICIPIO DE PARNAMIRIM",
+        "uasg": "981779",
+        "objeto": "Aquisição de Equipamentos de Fototerapia para atender as necessidades do Hospital e Maternidade do Divino Amor – HMDA, órgão pertencente à Secretaria Municipal de Saúde de Parnamirim/RN",
+        "numero": "90004/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:14:19",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "08170862000174",
+            "ano": 2026,
+            "seq": 8
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/08170862000174/2026/8"
+    },
+    {
+        "id": "463745000001942026406",
+        "uf": "SP",
+        "cidade": "Araçatuba",
+        "orgao": "SECRETARIA DE ESTADO DA SAUDE",
+        "uasg": "090113",
+        "objeto": "Aquisição de Medicamentos de Uso Hospitalar para atender determinação judicial.",
+        "numero": "90017/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:14:02",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "46374500000194",
+            "ano": 2026,
+            "seq": 406
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/46374500000194/2026/406"
+    },
+    {
+        "id": "463778000001272026147",
+        "uf": "SP",
+        "cidade": "Sorocaba",
+        "orgao": "SAO PAULO SECRETARIA DA SEGURANCA PUBLICA",
+        "uasg": "180106",
+        "objeto": "Aquisição de biscoitos para Deinter 7 - Sorocaba",
+        "numero": "90001/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:13:48",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 6553.5,
+        "api_params": {
+            "cnpj": "46377800000127",
+            "ano": 2026,
+            "seq": 147
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/46377800000127/2026/147"
+    },
+    {
+        "id": "12014954000132202566",
+        "uf": "RJ",
+        "cidade": "Mendes",
+        "orgao": "FUNDO MUNICIPAL DE SAUDE DE MENDES",
+        "uasg": "928569",
+        "objeto": "Eventual aquisição de medicamentos de controle especial pertencentes à Portaria nº 344, de 12 de maio de 1998 e correlatos, para atendimento às demandas judiciais dos pacientes do município de Mendes, para o período de 12 meses, através do Sistema de Registro de Preços.",
+        "numero": "90019/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:13:38",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 550689.53,
+        "api_params": {
+            "cnpj": "12014954000132",
+            "ano": 2025,
+            "seq": 66
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/12014954000132/2025/66"
+    },
+    {
+        "id": "13031547000104202597",
+        "uf": "SE",
+        "cidade": "São Cristóvão",
+        "orgao": "FUNDACAO UNIVERSIDADE FEDERAL DE SERGIPE",
+        "uasg": "154050",
+        "objeto": "Registro de preço para Aquisição de material médico-hospitalar (fio de sutura, material de esterilização, etc.) para o Hospital Veterinário  Universitário e Clínica Escola de Medicina Veterinária do Sertão da Universidade Federal de Sergipe (UFS).",
+        "numero": "90048/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:12:54",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 391849.68,
+        "api_params": {
+            "cnpj": "13031547000104",
+            "ano": 2025,
+            "seq": 97
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/13031547000104/2025/97"
+    },
+    {
+        "id": "12474705000120202623",
+        "uf": "SP",
+        "cidade": "Botucatu",
+        "orgao": "HOSPITAL DAS CLINICAS DA FACULDADE DE MEDICINA DE BOTUCATU",
+        "uasg": "092501",
+        "objeto": "Aquisição de materiais médico-hospitalares (instrumentais), para atender as necessidades da seção de suprimentos",
+        "numero": "90011/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:12:14",
+        "data_abertura": "2026-01-30T08:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "12474705000120",
+            "ano": 2026,
+            "seq": 23
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/12474705000120/2026/23"
+    },
+    {
+        "id": "226788740001352025572",
+        "uf": "MG",
+        "cidade": "Montes Claros",
+        "orgao": "MUNICIPIO DE MONTES CLAROS",
+        "uasg": "984865",
+        "objeto": "Aquisição de equipamentos médico-hospitalares, atendendo a demanda da Secretaria de Saúde do município de Montes Claros MG",
+        "numero": "90178/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:11:48",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "22678874000135",
+            "ano": 2025,
+            "seq": 572
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/22678874000135/2025/572"
+    },
+    {
+        "id": "27080605000196202660",
+        "uf": "ES",
+        "cidade": "Vitória",
+        "orgao": "SECRETARIA DE ESTADO DA SAUDE",
+        "uasg": "925120",
+        "objeto": "Registro de Preços Bem Consumo - Aquisição de Medicamentos - Mandado Judicial",
+        "numero": "90032/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:11:23",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 2051441.91,
+        "api_params": {
+            "cnpj": "27080605000196",
+            "ano": 2026,
+            "seq": 60
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/27080605000196/2026/60"
+    },
+    {
+        "id": "27080605000196202659",
+        "uf": "ES",
+        "cidade": "Vitória",
+        "orgao": "SECRETARIA DE ESTADO DA SAUDE",
+        "uasg": "925120",
+        "objeto": "Registro de Preços Bem Consumo - Aquisição de Medicamentos - Mandado Judicial",
+        "numero": "90031/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:11:18",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 220170.06,
+        "api_params": {
+            "cnpj": "27080605000196",
+            "ano": 2026,
+            "seq": 59
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/27080605000196/2026/59"
+    },
+    {
+        "id": "0039454400018520253154",
+        "uf": "RJ",
+        "cidade": "Rio de Janeiro",
+        "orgao": "MINISTERIO DA SAUDE",
+        "uasg": "250059",
+        "objeto": "Aquisição DE MEDICAMENTOS DO GRUPO USO GERAL III",
+        "numero": "90124/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:10:57",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 319321.4,
+        "api_params": {
+            "cnpj": "00394544000185",
+            "ano": 2025,
+            "seq": 3154
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/00394544000185/2025/3154"
+    },
+    {
+        "id": "463745000001942026397",
+        "uf": "SP",
+        "cidade": "Ribeirão Preto",
+        "orgao": "SECRETARIA DE ESTADO DA SAUDE",
+        "uasg": "090126",
+        "objeto": "Aquisição de Medicamentos para atender demandas judiciais.",
+        "numero": "90022/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:10:37",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "46374500000194",
+            "ano": 2026,
+            "seq": 397
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/46374500000194/2026/397"
+    },
+    {
+        "id": "463745000001942026396",
+        "uf": "SP",
+        "cidade": "São João da Boa Vista",
+        "orgao": "SECRETARIA DE ESTADO DA SAUDE",
+        "uasg": "090133",
+        "objeto": "Medicamentos Judicial Ampla",
+        "numero": "90004/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:10:08",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "46374500000194",
+            "ano": 2026,
+            "seq": 396
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/46374500000194/2026/396"
+    },
+    {
+        "id": "08241754000145202616",
+        "uf": "RN",
+        "cidade": "Natal",
+        "orgao": "RIO GRANDE DO NORTE SECRETARIA DA SAUDE PUBLICA",
+        "uasg": "925550",
+        "objeto": "Aquisição de Medicamentos Portaria 344 nos termos da tabela abaixo, conforme condições e exigências estabelecidas neste instrumento.",
+        "numero": "90015/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:10:06",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "08241754000145",
+            "ano": 2026,
+            "seq": 16
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/08241754000145/2026/16"
+    },
+    {
+        "id": "27080605000196202658",
+        "uf": "ES",
+        "cidade": "Vitória",
+        "orgao": "SECRETARIA DE ESTADO DA SAUDE",
+        "uasg": "925120",
+        "objeto": "Registro de Preços Bem Consumo - Aquisição de Medicamentos",
+        "numero": "90038/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:09:58",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 24315.72,
+        "api_params": {
+            "cnpj": "27080605000196",
+            "ano": 2026,
+            "seq": 58
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/27080605000196/2026/58"
+    },
+    {
+        "id": "1512643700030520254508",
+        "uf": "AL",
+        "cidade": "Maceió",
+        "orgao": "EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES - EBSERH",
+        "uasg": "155126",
+        "objeto": "Aquisição de Produtos para Saúde - MATERIAIS MÉDICOS HOSPITALARES DE USO GERAL I, a fim de atender às necessidades do Hospital Universitário Professor Alberto Antunes (HUPAA/UFAL), Unidade Gestora (UG) 155126, pertencente à Rede da Empresa Brasileira de Serviços Hospitalares (Rede Ebserh), por um período de 12 (doze) meses.",
+        "numero": "90068/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:09:34",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "15126437000305",
+            "ano": 2025,
+            "seq": 4508
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/15126437000305/2025/4508"
+    },
+    {
+        "id": "1512643700030520254507",
+        "uf": "AL",
+        "cidade": "Maceió",
+        "orgao": "EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES - EBSERH",
+        "uasg": "155126",
+        "objeto": "Aquisição de Produtos para Saúde - MATERIAIS MÉDICOS HOSPITALARES DE USO GERAL II E RADIOTERAPIA, a fim de atender às necessidades do Hospital Universitário Professor Alberto Antunes (HUPAA/UFAL), Unidade Gestora (UG) 155126, pertencente à Rede da Empresa Brasileira de Serviços Hospitalares (Rede Ebserh), por um período de 12 (doze) meses.",
+        "numero": "90067/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:09:28",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "15126437000305",
+            "ano": 2025,
+            "seq": 4507
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/15126437000305/2025/4507"
+    },
+    {
+        "id": "46200846000176202613",
+        "uf": "SP",
+        "cidade": "Lençóis Paulista",
+        "orgao": "MUNICIPIO DE LENCOIS PAULISTA",
+        "uasg": "986637",
+        "objeto": "Registro de preços para aquisição de materiais de limpeza (higiene e desinfecção) pelo período de 12 (doze) meses, de acordo com as necessidades do municipio, conforme especificações constantes do Anexo I e II do presente edital.",
+        "numero": "90004/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:09:26",
+        "data_abertura": "2026-01-29T08:00:00",
+        "valor_total": 309126.0,
+        "api_params": {
+            "cnpj": "46200846000176",
+            "ano": 2026,
+            "seq": 13
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/46200846000176/2026/13"
+    },
+    {
+        "id": "463745000001942026394",
+        "uf": "SP",
+        "cidade": "São Paulo",
+        "orgao": "SECRETARIA DE ESTADO DA SAUDE",
+        "uasg": "090157",
+        "objeto": "Aquisição de luvas",
+        "numero": "90003/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:08:47",
+        "data_abertura": "2026-01-30T09:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "46374500000194",
+            "ano": 2026,
+            "seq": 394
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/46374500000194/2026/394"
+    },
+    {
+        "id": "07954480000179202525591",
+        "uf": "CE",
+        "cidade": "Fortaleza",
+        "orgao": "ESTADO DO CEARA",
+        "uasg": "943001",
+        "objeto": "O objeto da licitação é o Registro de Preço para futuras e eventuais aquisições de MATERIAL MÉDICO HOSPITALAR, nas condições estabelecidas neste edital e seus anexos.",
+        "numero": "91452/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:07:52",
+        "data_abertura": "2026-01-30T08:00:00",
+        "valor_total": 589330.0,
+        "api_params": {
+            "cnpj": "07954480000179",
+            "ano": 2025,
+            "seq": 25591
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/07954480000179/2025/25591"
+    },
+    {
+        "id": "07954480000179202525590",
+        "uf": "CE",
+        "cidade": "Fortaleza",
+        "orgao": "ESTADO DO CEARA",
+        "uasg": "943001",
+        "objeto": "O objeto da licitação é o Registro de Preço para futuras e eventuais aquisições de MATERIAL MÉDICO HOSPITALAR, nas condições estabelecidas neste edital e seus anexos.",
+        "numero": "91478/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:07:48",
+        "data_abertura": "2026-01-30T08:00:00",
+        "valor_total": 462906.28,
+        "api_params": {
+            "cnpj": "07954480000179",
+            "ano": 2025,
+            "seq": 25590
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/07954480000179/2025/25590"
+    },
+    {
+        "id": "07954480000179202525589",
+        "uf": "CE",
+        "cidade": "Fortaleza",
+        "orgao": "ESTADO DO CEARA",
+        "uasg": "943001",
+        "objeto": "O objeto da licitação é o REGISTRO DE PREÇO PARA FUTURAS E EVENTUAIS AQUISIÇÕES DE MATERIAL MÉDICO-HOSPITALAR, nas condições estabelecidas neste edital e seus anexos.",
+        "numero": "91596/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:07:46",
+        "data_abertura": "2026-01-30T08:00:00",
+        "valor_total": 364648.01,
+        "api_params": {
+            "cnpj": "07954480000179",
+            "ano": 2025,
+            "seq": 25589
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/07954480000179/2025/25589"
+    },
+    {
+        "id": "07954480000179202525588",
+        "uf": "CE",
+        "cidade": "Fortaleza",
+        "orgao": "ESTADO DO CEARA",
+        "uasg": "943001",
+        "objeto": "O objeto da licitação é o Registro de Preço para futuras e eventuais aquisições de medicamentos, por meio de demanda judicial, nas condições estabelecidas neste edital e seus anexos.",
+        "numero": "91782/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T07:07:45",
+        "data_abertura": "2026-01-30T08:00:00",
+        "valor_total": 1561246.59,
+        "api_params": {
+            "cnpj": "07954480000179",
+            "ano": 2025,
+            "seq": 25588
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/07954480000179/2025/25588"
+    },
+    {
+        "id": "0894409200017020264",
+        "uf": "PB",
+        "cidade": "Tavares",
+        "orgao": "MUNICIPIO DE TAVARES",
+        "uasg": "3233",
+        "objeto": "[Portal de Compras Públicas] - CONTRATAÇÃO DE EMPRESA PARA FORNECIMENTO DE OXIGÊNIO “GÁS MEDICINAL”, PARA ATENDAR AS NECESSIDADES DA SECRETARIA MUNICIPAL DE SAÚDE DE TAVARES/PB.",
+        "numero": "004/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-29T06:51:27",
+        "data_abertura": "2026-01-29T13:30:00",
+        "valor_total": 693064.0,
+        "api_params": {
+            "cnpj": "08944092000170",
+            "ano": 2026,
+            "seq": 4
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/08944092000170/2026/4"
+    },
+    {
         "id": "0637697400015020266",
         "uf": "MA",
         "cidade": "Joselândia",
