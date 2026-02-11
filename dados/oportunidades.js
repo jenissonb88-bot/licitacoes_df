@@ -1,5 +1,100 @@
 const dadosLicitacoes = [
     {
+        "id": "07615750000117202612",
+        "uf": "CE",
+        "cidade": "Jaguaruana",
+        "orgao": "MUNICIPIO DE JAGUARUANA",
+        "uasg": "2330",
+        "objeto": "REGISTRO DE PREÇOS PARA FUTURAS E EVENTUAIS AQUISIÇÕES DE MEDICAMENTOS E MATERIAL HOSPITALAR JUNTO À SECRETARIA MUNICIPAL DE SAÚDE DO MUNICÍPIO DE JAGUARUANA/CE",
+        "numero": "90001-2026-PERP-FMS/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-02-01T18:57:32",
+        "data_abertura": "2026-02-02T08:00:00",
+        "valor_total": 0.0,
+        "api_params": {
+            "cnpj": "07615750000117",
+            "ano": 2026,
+            "seq": 12
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/07615750000117/2026/12"
+    },
+    {
+        "id": "11368966000100202621",
+        "uf": "PE",
+        "cidade": "Iguaracy",
+        "orgao": "MUNICIPIO DE IGUARACI",
+        "uasg": "1",
+        "objeto": "contratação de empresa(s) para o fornecimento de “KIT DE PRODUTOS DE HIGIÊNE PARA DISTRIBUIÇÃO GRATUITA” para atender as necessidades das Unidades do Fundo Municipal de Assistência Social de Iguaracy/PE; nos termos da tabela abaixo pelo período de 12 (doze) meses.",
+        "numero": "014/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-02-01T08:52:43",
+        "data_abertura": "2026-02-04T08:00:00",
+        "valor_total": 15597.7,
+        "api_params": {
+            "cnpj": "11368966000100",
+            "ano": 2026,
+            "seq": 21
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/11368966000100/2026/21"
+    },
+    {
+        "id": "11368966000100202620",
+        "uf": "PE",
+        "cidade": "Iguaracy",
+        "orgao": "MUNICIPIO DE IGUARACI",
+        "uasg": "1",
+        "objeto": "Aquisição de leites e fórmulas, de forma parcelada, para atender as necessidades nutricionais específicas da população usuária do Sistema Único de Saúde - SUS, e as demais que se encontram amparadas por ordem judicial, em Iguaracy-PE",
+        "numero": "013/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-02-01T08:51:54",
+        "data_abertura": "2026-02-04T08:00:00",
+        "valor_total": 92807.34,
+        "api_params": {
+            "cnpj": "11368966000100",
+            "ano": 2026,
+            "seq": 20
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/11368966000100/2026/20"
+    },
+    {
+        "id": "11368966000100202618",
+        "uf": "PE",
+        "cidade": "Iguaracy",
+        "orgao": "MUNICIPIO DE IGUARACI",
+        "uasg": "1",
+        "objeto": "Contratação de empresa especializada para fornecimento de produtos de limpezas e higiene para manutenção das Secretarias de Administração, Educação, Saúde e Assistências Social para o exercício de 2026 ",
+        "numero": "011/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-02-01T08:50:01",
+        "data_abertura": "2026-02-03T08:00:00",
+        "valor_total": 529180.18,
+        "api_params": {
+            "cnpj": "11368966000100",
+            "ano": 2026,
+            "seq": 18
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/11368966000100/2026/18"
+    },
+    {
+        "id": "11368966000100202615",
+        "uf": "PE",
+        "cidade": "Iguaracy",
+        "orgao": "MUNICIPIO DE IGUARACI",
+        "uasg": "1",
+        "objeto": "a contratação de empresa(s) para o fornecimento de MATERIAIS DE EXPEDIENTE para atender as necessidades das SECRETARIAS MUNCIPAIS, FUNDO MUNICIPAL DE SAÚDE E FUNDO MUNICIPAL DE ASSISTÊNCIA SOCIAL e demais dependências sob suas responsabilidades, nos termos da tabela abaixo pelo período de 12 (doze).",
+        "numero": "008/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-02-01T08:46:29",
+        "data_abertura": "2026-02-02T08:00:00",
+        "valor_total": 374749.1,
+        "api_params": {
+            "cnpj": "11368966000100",
+            "ano": 2026,
+            "seq": 15
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/11368966000100/2026/15"
+    },
+    {
         "id": "1830668800010620268",
         "uf": "MG",
         "cidade": "Iguatama",
