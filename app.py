@@ -4,26 +4,36 @@ from datetime import datetime, timedelta
 import os
 import urllib3
 
-# --- CONFIGURAÇÃO DE ALVO ---
-# Se 01/01/2026 está vazio, o robô vai tentar 02/01, 03/01... até achar.
+# --- CONFIGURAÇÕES DE ALVO ---
 DATA_INICIO_VARREDURA = datetime(2026, 1, 1) 
-ARQ_DADOS = 'dados/oportunidades.js'
+ARQ_DADOS = 'dados/oportunidades.js' # Formato para evitar erro de CORS
 ARQ_CHECKPOINT = 'checkpoint.txt'
 
-ESTADOS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "DF", "GO", "MT", "MS"]
-
-# Expandimos os termos para capturar variações comuns em editais de saúde
-TERMOS_SAUDE = [
-    "medicamento", "hospitalar", "saude", "farmacia", "medico", "penso", 
-    "luva", "soro", "hospital", "insumos", "odontologico", "fisioterap",
-    "laboratorio", "reagente", "quimico", "limpeza", "higiene"
+# Filtro de Estados (Nordeste, Sudeste, Centro-Oeste + selecionados do Norte)
+ESTADOS_ALVO = [
+    "AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", # Nordeste
+    "ES", "MG", "RJ", "SP",                               # Sudeste
+    "AM", "PA", "TO", "DF", "GO", "MT", "MS"              # Norte/Centro-Oeste selecionados
 ]
 
-BLACKLIST = ["computador", "notebook", "pneu", "veiculo", "obra", "engenharia", "pavimentação"]
+# Termos Positivos (Saúde)
+TERMOS_SAUDE = [
+    "medicamento", "hospitalar", "farmacia", "medico", "insumo", "soro", 
+    "gaze", "seringa", "luva", "reagente", "odontolog", "laborator", 
+    "higiene pessoal", "enfermagem", "material cirurgico"
+]
+
+# Blacklist (Lixo - Itens que você quer descartar)
+BLACKLIST = [
+    "computador", "notebook", "tablet", "software", "pneu", "veiculo", 
+    "obra", "engenharia", "pavimentacao", "ar condicionado", "mobiliario",
+    "pintura", "alvenaria", "reforma", "ferramenta"
+]
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def carregar_banco():
+    """Carrega dados existentes do arquivo JS para não perder o histórico."""
     if os.path.exists(ARQ_DADOS):
         try:
             with open(ARQ_DADOS, 'r', encoding='utf-8') as f:
@@ -33,12 +43,21 @@ def carregar_banco():
     return []
 
 def salvar_dados_js(lista_dados):
+    """Salva os dados como variável JS e remove itens com mais de 180 dias."""
+    # Limpeza para manter o index.html rápido
+    data_limite = datetime.now() - timedelta(days=180)
+    lista_dados = [
+        item for item in lista_dados 
+        if datetime.fromisoformat(item['data_pub'].split('T')[0]) > data_limite
+    ]
+    
     lista_dados.sort(key=lambda x: x.get('data_pub', ''), reverse=True)
     json_str = json.dumps(lista_dados, indent=4, ensure_ascii=False)
-    conteudo_js = f"const dadosLicitacoes = {json_str};"
+    
     os.makedirs('dados', exist_ok=True)
     with open(ARQ_DADOS, 'w', encoding='utf-8') as f:
-        f.write(conteudo_js)
+        f.write(f"const dadosLicitacoes = {json_str};")
+    print(f"💾 Banco de dados atualizado: {len(lista_dados)} licitações.")
 
 def ler_checkpoint():
     if os.path.exists(ARQ_CHECKPOINT):
@@ -55,39 +74,48 @@ def atualizar_checkpoint(data):
 def main():
     session = requests.Session()
     session.verify = False
+    session.headers.update({'Accept': 'application/json', 'User-Agent': 'AnalistaBot/5.1'})
     
     banco = carregar_banco()
     data_atual = ler_checkpoint()
     hoje = datetime.now()
 
-    # Se já atualizou tudo até hoje, para.
     if data_atual.date() > hoje.date():
-        print("✅ Tudo atualizado até hoje.")
+        print("✅ Sistema 100% atualizado.")
         with open('env.txt', 'w') as f: f.write("CONTINUAR_EXECUCAO=false")
         return
 
     ds = data_atual.strftime('%Y%m%d')
-    print(f"🔎 Analisando: {data_atual.strftime('%d/%m/%Y')}...")
+    print(f"🔎 Analisando data: {data_atual.strftime('%d/%m/%Y')}...")
     
+    # URL da API do PNCP para contratações públicas
     url = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
     params = {
-        "dataInicial": ds, "dataFinal": ds, 
-        "codigoModalidadeContratacao": "6", 
-        "pagina": 1, "tamanhoPagina": 50
+        "dataInicial": ds, 
+        "dataFinal": ds, 
+        "codigoModalidadeContratacao": "6", # Pregão
+        "pagina": 1, 
+        "tamanhoPagina": 100
     }
 
     try:
         resp = session.get(url, params=params, timeout=30)
+        if resp.status_code != 200:
+            print(f"⚠️ Erro na API: {resp.status_code}")
+            return
+
         licitacoes = resp.json().get('data', [])
-        
         novos = 0
+        
         for item in licitacoes:
             uf = item.get('unidadeFederativaId')
             obj = (item.get('objetoCompra') or "").lower()
             
-            # Filtro Lógico
+            # Aplicação dos Filtros Rígidos
             if uf in ESTADOS_ALVO and any(t in obj for t in TERMOS_SAUDE) and not any(b in obj for b in BLACKLIST):
                 id_u = str(item.get('id'))
+                
+                # Evitar duplicados no banco
                 if not any(x['id'] == id_u for x in banco):
                     unidade = item.get('unidadeOrgao', {})
                     banco.append({
@@ -100,7 +128,9 @@ def main():
                         "uf": uf,
                         "cidade": unidade.get('municipioNome'),
                         "objeto": item.get('objetoCompra'),
+                        "quantidade_itens": item.get('quantidadeItens', 0), # NOVO: Quantidade total
                         "data_pub": item.get('dataPublicacaoPncp'),
+                        "data_abertura": item.get('dataAberturaProposta'),
                         "valor_total": item.get('valorTotalEstimado', 0),
                         "link_api": f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{item.get('orgaoEntidade', {}).get('cnpj')}/{item.get('anoCompra')}/{item.get('numeroCompra')}"
                     })
@@ -108,11 +138,11 @@ def main():
 
         salvar_dados_js(banco)
         
-        # Avança o dia para a próxima execução
+        # Avança para o dia seguinte
         proximo_dia = data_atual + timedelta(days=1)
         atualizar_checkpoint(proximo_dia)
         
-        # O segredo da recursividade: Mesmo que ache 0, ele avança e pede pra rodar de novo
+        # Sinaliza para o GitHub Actions continuar se ainda não chegou em "hoje"
         precisa_continuar = proximo_dia.date() <= hoje.date()
         with open('env.txt', 'w') as f:
             val = "true" if precisa_continuar else "false"
@@ -121,7 +151,7 @@ def main():
         print(f"✅ Dia processado. Itens novos: {novos}. Próximo: {proximo_dia.strftime('%d/%m/%Y')}")
 
     except Exception as e:
-        print(f"💥 Erro: {e}")
+        print(f"💥 Erro crítico: {e}")
 
 if __name__ == "__main__":
     main()
