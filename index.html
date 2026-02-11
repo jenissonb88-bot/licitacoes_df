@@ -1,327 +1,428 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analista PNCP | Detalhamento Técnico</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>Painel PNCP - Saúde & Hospitalar</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        .fade-in { animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
-        .sub-table th { font-size: 10px; letter-spacing: 0.05em; }
-        .sub-table td { font-size: 11px; }
+        :root { --primary-color: #0d6efd; --bg-light: #f8f9fa; }
+        body { background-color: var(--bg-light); font-family: 'Segoe UI', sans-serif; font-size: 0.95rem; }
+        .card-header { background-color: #fff; border-bottom: 2px solid var(--primary-color); font-weight: bold; }
+        .btn-action { margin-right: 5px; }
+        .badge-valor { font-size: 0.9em; background-color: #198754; }
+        .table-hover tbody tr:hover { background-color: #e9ecef; }
+        .loading-spinner { display: none; text-align: center; padding: 20px; }
+        .modal-xl { max-width: 95%; }
+        .item-row { font-size: 0.9rem; }
+        .item-valor { font-weight: bold; color: #198754; }
+        .text-uasg { font-size: 0.8rem; color: #6610f2; font-weight: bold; }
+        /* Estilos de Tabela */
+        th { font-size: 0.85rem; text-transform: uppercase; color: #555; }
+        .table-success { background-color: #d1e7dd !important; }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-900 font-sans">
+<body>
 
-    <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-50 border-b-4 border-blue-500">
-        <div class="container mx-auto px-6 py-3 flex justify-between items-center">
-            <div class="flex items-center gap-3">
-                <div class="bg-blue-600 p-2 rounded-lg"><i class="fas fa-file-prescription text-white"></i></div>
-                <div>
-                    <h1 class="text-lg font-black uppercase tracking-tight">Monitor de Licitações</h1>
-                    <p class="text-[10px] text-blue-300 font-bold uppercase tracking-widest">Painel Analítico de Saúde</p>
+<div class="container-fluid py-4">
+    <div class="row mb-3">
+        <div class="col-12 d-flex justify-content-between align-items-center">
+            <div>
+                <h3 class="text-primary mb-0"><i class="fas fa-notes-medical"></i> Monitor de Licitações</h3>
+                <small class="text-muted">Setor: Medicamentos e Materiais Hospitalares</small>
+            </div>
+            <div>
+                <button class="btn btn-sm btn-success" onclick="window.location.reload()"><i class="fas fa-sync"></i> Atualizar Painel</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header"><i class="fas fa-filter"></i> Filtros Avançados</div>
+        <div class="card-body">
+            <div class="row g-2">
+                <div class="col-md-2">
+                    <label class="form-label">Região/UF</label>
+                    <select id="filtroUf" class="form-select form-select-sm">
+                        <option value="">Todas</option>
+                        <optgroup label="Nordeste">
+                            <option value="AL">AL</option><option value="BA">BA</option><option value="CE">CE</option>
+                            <option value="MA">MA</option><option value="PB">PB</option><option value="PE">PE</option>
+                            <option value="PI">PI</option><option value="RN">RN</option><option value="SE">SE</option>
+                        </optgroup>
+                        <optgroup label="Sudeste">
+                            <option value="ES">ES</option><option value="MG">MG</option><option value="RJ">RJ</option><option value="SP">SP</option>
+                        </optgroup>
+                        <optgroup label="Centro-Oeste">
+                            <option value="DF">DF</option><option value="GO">GO</option><option value="MT">MT</option><option value="MS">MS</option>
+                        </optgroup>
+                        <optgroup label="Norte">
+                            <option value="AM">AM</option><option value="PA">PA</option><option value="TO">TO</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Cidade</label>
+                    <input type="text" id="filtroCidade" class="form-control form-control-sm" placeholder="Ex: Salvador">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Órgão ou Unidade</label>
+                    <input type="text" id="filtroOrgao" class="form-control form-control-sm" placeholder="Ex: Hospital das Clínicas">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Nº Edital</label>
+                    <input type="text" id="filtroNumero" class="form-control form-control-sm" placeholder="Ex: 90025">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-primary btn-sm w-100 me-2" onclick="aplicarFiltros()"><i class="fas fa-search"></i> Buscar</button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="limparFiltros()"><i class="fas fa-eraser"></i></button>
                 </div>
             </div>
-            <div class="text-right">
-                <span class="text-[10px] font-mono text-slate-400">v3.0 | Filtro: Pregão (6)</span>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-list"></i> Oportunidades: <span id="contadorResultados" class="badge bg-secondary">0</span></span>
+            <div id="paginacaoControle"></div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped mb-0 align-middle" id="tabelaResultados">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Publicação</th>
+                            <th style="min-width: 140px;">Prazos / Atualização</th>
+                            <th>UF</th>
+                            <th>Cidade</th>
+                            <th style="min-width: 200px;">Órgão / Unidade (UASG)</th>
+                            <th>Edital</th>
+                            <th style="width: 25%;">Objeto</th>
+                            <th>Valor Total</th>
+                            <th class="text-end">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="corpoTabela"></tbody>
+                </table>
             </div>
         </div>
-    </header>
+        <div class="card-footer text-center" id="paginacaoRodape"></div>
+    </div>
+</div>
 
-    <main class="container mx-auto p-4 lg:p-8">
-        
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 mb-6 grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-            <div class="md:col-span-2">
-                <label class="block text-[10px] font-black text-slate-400 uppercase mb-1">Estado (UF)</label>
-                <select id="selUF" onchange="aplicarFiltros()" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="">Brasil</option>
-                </select>
+<div class="modal fade" id="modalDetalhes" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title"><i class="fas fa-info-circle"></i> Detalhes da Licitação</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="md:col-span-6">
-                <label class="block text-[10px] font-black text-slate-400 uppercase mb-1">Pesquisar no Objeto ou Órgão</label>
-                <div class="relative">
-                    <i class="fas fa-search absolute left-3 top-3 text-slate-400 text-xs"></i>
-                    <input type="text" id="txtBusca" onkeyup="aplicarFiltros()" placeholder="Ex: Soro, Hospital, AAS, Prefeitura..." class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 pl-8 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                </div>
-            </div>
-            <div class="md:col-span-4 flex gap-2">
-                <button onclick="incluirManual()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-lg transition shadow-md flex items-center justify-center gap-2 text-xs uppercase tracking-wide">
-                    <i class="fas fa-plus"></i> Inclusão Manual
-                </button>
-                <button onclick="location.reload()" class="bg-slate-100 hover:bg-slate-200 text-slate-600 p-2.5 rounded-lg border border-slate-200 transition" title="Atualizar">
-                    <i class="fas fa-sync-alt"></i>
-                </button>
-            </div>
-        </div>
-
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[400px]">
-            <table class="w-full text-left border-collapse">
-                <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-bold text-[10px]">
-                    <tr>
-                        <th class="p-4 w-16 text-center">UF</th>
-                        <th class="p-4">Órgão / Edital</th>
-                        <th class="p-4">Objeto da Licitação</th>
-                        <th class="p-4 text-right">Valor Global Est.</th>
-                        <th class="p-4 text-center w-32">Ações</th>
-                    </tr>
-                </thead>
-                <tbody id="tabelaCorpo" class="text-sm divide-y divide-slate-100 text-slate-700">
-                    <tr><td colspan="5" class="p-10 text-center italic text-slate-400">Carregando dados...</td></tr>
-                </tbody>
-            </table>
-            <div class="p-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
-                <span id="infoTotal" class="text-[10px] font-bold text-slate-400 uppercase">0 Registros</span>
-                <div class="flex gap-1" id="paginacaoControle">
-                    </div>
-            </div>
-        </div>
-    </main>
-
-    <script>
-        let dadosCompletos = [];
-        let dadosFiltrados = [];
-        let paginaAtual = 1;
-        const ITENS_POR_PAGINA = 20;
-
-        // --- INICIALIZAÇÃO ---
-        async function init() {
-            try {
-                const res = await fetch('dados/oportunidades.json');
-                if(!res.ok) throw new Error("Arquivo JSON não encontrado");
-                dadosCompletos = await res.json();
+            <div class="modal-body">
+                <div id="infoCabecalho" class="mb-3 p-3 border rounded bg-white shadow-sm"></div>
                 
-                // Preencher Select UF
-                const ufs = [...new Set(dadosCompletos.map(i => i.uf))].filter(Boolean).sort();
-                const sel = document.getElementById('selUF');
-                ufs.forEach(u => sel.innerHTML += `<option value="${u}">${u}</option>`);
+                <h6><i class="fas fa-box-open"></i> Itens e Resultados</h6>
+                <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                    <table class="table table-sm table-bordered">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th style="width: 5%">#</th>
+                                <th>Descrição / Vencedor (Se houver)</th>
+                                <th style="width: 8%" class="text-center">Qtd</th>
+                                <th style="width: 15%">Val. Unit.</th>
+                                <th style="width: 15%">Val. Total</th>
+                                <th style="width: 10%" class="text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="listaItens"></tbody>
+                    </table>
+                </div>
+                
+                <div id="loadingItens" class="loading-spinner">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2">Consultando Itens e Resultados no PNCP...</p>
+                </div>
+                <div id="erroItens" class="alert alert-danger d-none mt-3"></div>
+            </div>
+            <div class="modal-footer bg-light">
+                <a id="linkPncpDireto" href="#" target="_blank" class="btn btn-primary"><i class="fas fa-external-link-alt"></i> Ver no Site PNCP</a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
 
-                aplicarFiltros();
-            } catch (e) {
-                document.getElementById('tabelaCorpo').innerHTML = 
-                    `<tr><td colspan="5" class="p-10 text-center text-red-400">
-                        <i class="fas fa-exclamation-triangle mb-2 text-2xl"></i><br>
-                        Dados não encontrados. Verifique se o Robô Python rodou corretamente.
-                    </td></tr>`;
-            }
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    let todosDados = [];
+    let dadosFiltrados = [];
+    let paginaAtual = 1;
+    const ITENS_POR_PAGINA = 20;
+
+    // Formatadores
+    const fmtMoeda4Casas = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 4, maximumFractionDigits: 4 });
+    const fmtMoeda2Casas = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    document.addEventListener("DOMContentLoaded", () => {
+        carregarDadosJSON();
+    });
+
+    async function carregarDadosJSON() {
+        try {
+            const response = await fetch('dados/oportunidades.json');
+            if (!response.ok) throw new Error("Arquivo json não encontrado.");
+            todosDados = await response.json();
+            todosDados.sort((a, b) => new Date(b.data_pub) - new Date(a.data_pub));
+            dadosFiltrados = [...todosDados];
+            renderizarTabela();
+        } catch (error) {
+            console.error(error);
+            document.getElementById('corpoTabela').innerHTML = `
+                <tr><td colspan="9" class="text-center text-danger py-4">
+                    <i class="fas fa-exclamation-triangle"></i> Erro ao carregar dados. Verifique se o app.py foi executado e gerou o arquivo.
+                </td></tr>`;
+        }
+    }
+
+    function aplicarFiltros() {
+        const uf = document.getElementById('filtroUf').value;
+        const cidade = document.getElementById('filtroCidade').value.toLowerCase();
+        const orgao = document.getElementById('filtroOrgao').value.toLowerCase();
+        const numero = document.getElementById('filtroNumero').value.toLowerCase();
+
+        dadosFiltrados = todosDados.filter(item => {
+            const matchUf = uf === "" || item.uf === uf;
+            const matchCidade = cidade === "" || (item.cidade && item.cidade.toLowerCase().includes(cidade));
+            const matchOrgao = orgao === "" || (item.orgao && item.orgao.toLowerCase().includes(orgao)) || (item.unidade_compradora && item.unidade_compradora.toLowerCase().includes(orgao));
+            const matchNumero = numero === "" || (item.numero && item.numero.toLowerCase().includes(numero));
+            return matchUf && matchCidade && matchOrgao && matchNumero;
+        });
+
+        paginaAtual = 1;
+        renderizarTabela();
+    }
+
+    function limparFiltros() {
+        document.getElementById('filtroUf').value = "";
+        document.getElementById('filtroCidade').value = "";
+        document.getElementById('filtroOrgao').value = "";
+        document.getElementById('filtroNumero').value = "";
+        aplicarFiltros();
+    }
+
+    function renderizarTabela() {
+        const tbody = document.getElementById('corpoTabela');
+        const contador = document.getElementById('contadorResultados');
+        tbody.innerHTML = "";
+        contador.textContent = dadosFiltrados.length;
+
+        if (dadosFiltrados.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-muted">Nenhuma oportunidade encontrada.</td></tr>';
+            return;
         }
 
-        // --- FILTROS ---
-        function aplicarFiltros() {
-            const uf = document.getElementById('selUF').value;
-            const termo = document.getElementById('txtBusca').value.toLowerCase();
+        const inicio = (paginaAtual - 1) * ITENS_POR_PAGINA;
+        const fim = inicio + ITENS_POR_PAGINA;
+        const itensPagina = dadosFiltrados.slice(inicio, fim);
 
-            dadosFiltrados = dadosCompletos.filter(item => {
-                const matchUF = !uf || item.uf === uf;
-                const matchBusca = !termo || item.orgao.toLowerCase().includes(termo) || item.objeto.toLowerCase().includes(termo);
-                return matchUF && matchBusca;
+        itensPagina.forEach(item => {
+            const dataPub = new Date(item.data_pub).toLocaleDateString('pt-BR');
+            const valorF = item.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            
+            // Tratamento de Prazos
+            let prazoHTML = '<span class="text-muted">-</span>';
+            if (item.data_abertura_proposta) {
+                const dtDisp = new Date(item.data_abertura_proposta);
+                const dia = dtDisp.toLocaleDateString('pt-BR');
+                const hora = dtDisp.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+                prazoHTML = `<span class="badge bg-warning text-dark" title="Início da Disputa"><i class="far fa-clock"></i> ${dia} ${hora}</span>`;
+            }
+
+            // Tratamento de Atualização
+            if (item.data_atualizacao && item.data_atualizacao !== item.data_pub) {
+                 const dtAtu = new Date(item.data_atualizacao).toLocaleDateString('pt-BR');
+                 prazoHTML += `<div class="mt-1"><small class="text-info" style="font-size: 0.7rem"><i class="fas fa-sync"></i> Atu: ${dtAtu}</small></div>`;
+            }
+
+            // Lógica Hierárquica: Órgão Superior -> Unidade Compradora (UASG)
+            let orgaoHTML = `<strong>${item.orgao}</strong><br>`;
+            orgaoHTML += `<small class="text-muted" style="font-size: 0.75rem;">CNPJ: ${item.cnpj}</small>`;
+
+            if (item.unidade_compradora && item.unidade_compradora !== "Não Informado" && item.unidade_compradora !== item.orgao) {
+                orgaoHTML += `<div class="mt-1 border-top pt-1" style="line-height: 1.1;">
+                                <small class="text-dark"><i class="fas fa-level-up-alt fa-rotate-90"></i> ${item.unidade_compradora}</small><br>
+                                <span class="text-uasg">UASG: ${item.uasg || 'N/A'}</span>
+                              </div>`;
+            } else {
+                 orgaoHTML += `<br><span class="text-uasg">UASG: ${item.uasg || 'N/A'}</span>`;
+            }
+            
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><small>${dataPub}</small></td>
+                <td>${prazoHTML}</td>
+                <td><span class="badge bg-info text-dark">${item.uf || 'BR'}</span></td>
+                <td><small>${item.cidade || '-'}</small></td>
+                <td>${orgaoHTML}</td>
+                <td><span class="badge bg-light text-dark border">${item.numero}</span></td>
+                <td title="${item.objeto}"><small>${item.objeto.substring(0, 85)}...</small></td>
+                <td><span class="badge-valor badge">${valorF}</span></td>
+                <td class="text-end">
+                    <div class="btn-group-vertical">
+                        <button class="btn btn-sm btn-outline-primary mb-1" onclick="abrirDetalhes('${item.link_api}', '${item.link_pncp}', this)">
+                            <i class="fas fa-eye"></i> Detalhes
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="excluirItem('${item.id}')">
+                            <i class="fas fa-trash"></i> Excluir
+                        </button>
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        atualizarPaginacao();
+    }
+
+    function atualizarPaginacao() {
+        const totalPaginas = Math.ceil(dadosFiltrados.length / ITENS_POR_PAGINA);
+        const div = document.getElementById('paginacaoRodape');
+        
+        let html = `<nav><ul class="pagination justify-content-center">`;
+        html += `<li class="page-item ${paginaAtual === 1 ? 'disabled' : ''}"><button class="page-link" onclick="mudarPagina(-1)">Anterior</button></li>`;
+        html += `<li class="page-item disabled"><span class="page-link">Página ${paginaAtual} de ${totalPaginas}</span></li>`;
+        html += `<li class="page-item ${paginaAtual >= totalPaginas ? 'disabled' : ''}"><button class="page-link" onclick="mudarPagina(1)">Próxima</button></li>`;
+        html += `</ul></nav>`;
+        
+        div.innerHTML = html;
+    }
+
+    function mudarPagina(delta) {
+        paginaAtual += delta;
+        renderizarTabela();
+        window.scrollTo(0, 0);
+    }
+
+    function excluirItem(id) {
+        if(confirm('Tem certeza? Isso ocultará a licitação apenas nesta sessão.')) {
+            todosDados = todosDados.filter(i => i.id !== id);
+            aplicarFiltros();
+        }
+    }
+
+    async function abrirDetalhes(apiUrl, linkPncp, btnElement) {
+        const modal = new bootstrap.Modal(document.getElementById('modalDetalhes'));
+        modal.show();
+
+        document.getElementById('listaItens').innerHTML = "";
+        document.getElementById('loadingItens').style.display = 'block';
+        document.getElementById('erroItens').classList.add('d-none');
+        document.getElementById('linkPncpDireto').href = linkPncp;
+
+        // Preenche Cabeçalho
+        const row = todosDados.find(d => d.link_api === apiUrl);
+        if(row) {
+            document.getElementById('infoCabecalho').innerHTML = `
+                <div class="row">
+                    <div class="col-md-8">
+                        <h5 class="text-primary">${row.orgao}</h5>
+                        <p class="mb-1"><strong>Unidade:</strong> ${row.unidade_compradora} (UASG: ${row.uasg})</p>
+                        <p class="mb-1 text-muted"><strong>Objeto:</strong> ${row.objeto}</p>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <span class="badge bg-light text-dark border p-2 mb-2">Edital: ${row.numero}</span>
+                        <h4 class="text-success">${fmtMoeda2Casas.format(row.valor_total)}</h4>
+                        <small class="text-muted">Valor Total Estimado</small>
+                    </div>
+                </div>
+            `;
+        }
+
+        try {
+            // BUSCA DUPLA: Itens e Resultados (Homologação) em paralelo
+            const [resItens, resResultados] = await Promise.all([
+                fetch(`${apiUrl}/itens`),
+                fetch(`${apiUrl}/resultados`)
+            ]);
+
+            if(!resItens.ok) throw new Error("Falha ao buscar itens.");
+            const dadosItens = await resItens.json();
+
+            let dadosResultados = [];
+            if(resResultados.ok) dadosResultados = await resResultados.json();
+
+            document.getElementById('loadingItens').style.display = 'none';
+            const tbody = document.getElementById('listaItens');
+            
+            if (!dadosItens || dadosItens.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">Sem itens listados na API.</td></tr>';
+                return;
+            }
+
+            // Mapa para cruzamento rápido de Resultados
+            const mapaResultados = {};
+            dadosResultados.forEach(res => { mapaResultados[res.numeroItem] = res; });
+
+            // Limite de segurança para renderização (Evita travar o navegador)
+            const itensLimitados = dadosItens.slice(0, 150); 
+            
+            itensLimitados.forEach(item => {
+                const resultado = mapaResultados[item.numeroItem];
+                let linhaHTML = "";
+
+                if (resultado) {
+                    // CENA 1: ITEM HOMOLOGADO (VENCEDOR)
+                    const valUnitGanho = resultado.valorUnitarioHomologado || 0;
+                    const valTotalGanho = resultado.valorTotalHomologado || 0;
+                    const fornecedor = resultado.nomeRazaoSocialFornecedor || "Fornecedor Não Informado";
+                    const cnpjFornecedor = resultado.niFornecedor || "";
+
+                    linhaHTML = `
+                        <tr class="table-success" style="border-left: 5px solid #198754;">
+                            <td><strong>${item.numeroItem}</strong></td>
+                            <td>
+                                ${item.descricao}
+                                <div class="mt-1 small text-success">
+                                    <i class="fas fa-trophy"></i> <strong>Vencedor:</strong> ${fornecedor} <br>
+                                    <span class="text-muted">CNPJ: ${cnpjFornecedor}</span>
+                                </div>
+                            </td>
+                            <td class="text-center">${item.quantidade}</td>
+                            <td>
+                                <div class="fw-bold text-success" title="Valor Vencedor">${fmtMoeda4Casas.format(valUnitGanho)}</div>
+                                <div class="text-muted small text-decoration-line-through" title="Estimado">${fmtMoeda4Casas.format(item.valorUnitarioEstimado || 0)}</div>
+                            </td>
+                            <td><div class="fw-bold text-success">${fmtMoeda2Casas.format(valTotalGanho)}</div></td>
+                            <td class="text-center"><span class="badge bg-success">Homologado</span></td>
+                        </tr>`;
+                } else {
+                    // CENA 2: ABERTO/ESTIMADO
+                    linhaHTML = `
+                        <tr>
+                            <td>${item.numeroItem}</td>
+                            <td>${item.descricao}</td>
+                            <td class="text-center">${item.quantidade}</td>
+                            <td>${fmtMoeda4Casas.format(item.valorUnitarioEstimado || 0)}</td>
+                            <td>${fmtMoeda2Casas.format(item.valorTotalEstimado || 0)}</td>
+                            <td class="text-center"><span class="badge bg-secondary">Aberto/Estimado</span></td>
+                        </tr>`;
+                }
+                tbody.innerHTML += linhaHTML;
             });
 
-            paginaAtual = 1;
-            renderizarTabela();
-        }
-
-        // --- RENDERIZAÇÃO DA TABELA MESTRE ---
-        function renderizarTabela() {
-            const corpo = document.getElementById('tabelaCorpo');
-            const total = document.getElementById('infoTotal');
-            
-            total.innerText = `${dadosFiltrados.length} Registros Encontrados`;
-
-            if(dadosFiltrados.length === 0) {
-                corpo.innerHTML = '<tr><td colspan="5" class="p-10 text-center text-slate-400 italic">Nenhum resultado para o filtro.</td></tr>';
-                return;
+            if(dadosItens.length > 150) {
+                 tbody.innerHTML += `<tr><td colspan="6" class="text-center bg-warning text-dark fw-bold">⚠️ Exibindo 150 de ${dadosItens.length} itens. Para ver a lista completa, acesse o site oficial.</td></tr>`;
             }
 
-            const inicio = (paginaAtual - 1) * ITENS_POR_PAGINA;
-            const fim = inicio + ITENS_POR_PAGINA;
-            const lote = dadosFiltrados.slice(inicio, fim);
-
-            corpo.innerHTML = lote.map(item => `
-                <tr class="hover:bg-blue-50/50 transition duration-150 group border-b border-slate-50" id="row-${item.id}">
-                    <td class="p-4 text-center align-top">
-                        <span class="bg-slate-100 text-slate-600 font-black px-2 py-1 rounded text-[10px] border border-slate-200">${item.uf || 'BR'}</span>
-                    </td>
-                    <td class="p-4 align-top">
-                        <div class="font-bold text-slate-800 text-[11px] uppercase mb-1 leading-tight" title="${item.orgao}">${item.orgao}</div>
-                        <div class="flex items-center gap-2 mt-2">
-                             <span class="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold border border-emerald-200 uppercase">Pregão</span>
-                             <span class="text-[9px] text-slate-400 font-mono">SEQ: ${item.numero}</span>
-                        </div>
-                    </td>
-                    <td class="p-4 align-top">
-                        <div class="text-[11px] text-slate-600 line-clamp-3 leading-relaxed" title="${item.objeto}">${item.objeto}</div>
-                    </td>
-                    <td class="p-4 text-right align-top font-mono text-xs font-bold text-slate-700">
-                        ${formatarMoeda(item.valor_total)}
-                    </td>
-                    <td class="p-4 text-center align-top">
-                        <div class="flex justify-center gap-2">
-                            <button onclick="toggleDetalhes(this, '${item.id}')" class="btn-detalhes w-8 h-8 flex items-center justify-center bg-white border border-slate-200 text-slate-400 rounded-lg hover:text-blue-600 hover:border-blue-300 shadow-sm transition" title="Ver Itens (Cascata)">
-                                <i class="fas fa-list"></i>
-                            </button>
-                            <a href="${item.link}" target="_blank" class="w-8 h-8 flex items-center justify-center bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm transition" title="Abrir no PNCP">
-                                <i class="fas fa-external-link-alt text-xs"></i>
-                            </a>
-                            <button onclick="excluirItem('${item.numero}')" class="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-red-500 transition"><i class="fas fa-trash"></i></button>
-                        </div>
-                    </td>
-                </tr>
-            `).join('');
-
-            atualizarPaginacao();
+        } catch (error) {
+            console.error(error);
+            document.getElementById('loadingItens').style.display = 'none';
+            document.getElementById('erroItens').textContent = "Erro na comunicação com o PNCP. Tente o botão 'Ver no Site'.";
+            document.getElementById('erroItens').classList.remove('d-none');
         }
+    }
+</script>
 
-        // --- LÓGICA DE DETALHAMENTO (CASCATA) ---
-        async function toggleDetalhes(btn, idGlobal) {
-            const trPai = btn.closest('tr');
-            const trDetalheId = `detalhe-${idGlobal}`;
-            let trDetalhe = document.getElementById(trDetalheId);
-
-            // Se já existe, fecha e remove
-            if (trDetalhe) {
-                trDetalhe.remove();
-                btn.classList.remove('text-blue-600', 'border-blue-300', 'bg-blue-50');
-                btn.innerHTML = '<i class="fas fa-list"></i>';
-                return;
-            }
-
-            // Abre estado de carregamento
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin text-blue-600"></i>';
-            btn.classList.add('bg-blue-50');
-
-            try {
-                // Endpoint de Itens da API de Consulta
-                const url = `https://pncp.gov.br/api/consulta/v1/contratacoes/${idGlobal}/itens`;
-                const resp = await fetch(url);
-                const json = await res.json();
-                const itens = Array.isArray(json) ? json : (json.data || []);
-
-                // Constrói a tabela de itens
-                let htmlItens = `
-                    <tr id="${trDetalheId}" class="bg-slate-50 border-b border-blue-100 fade-in">
-                        <td colspan="5" class="p-4 pl-12 pr-12">
-                            <div class="bg-white rounded-lg border border-slate-200 shadow-inner overflow-hidden">
-                                <div class="bg-slate-100 px-4 py-2 border-b border-slate-200 flex justify-between items-center">
-                                    <span class="text-[10px] font-bold text-slate-500 uppercase">Detalhamento dos Itens (${itens.length})</span>
-                                    <span class="text-[9px] text-slate-400 italic">Fonte: PNCP API v1</span>
-                                </div>
-                                <table class="w-full text-left sub-table">
-                                    <thead class="bg-slate-50 text-slate-500 font-bold uppercase">
-                                        <tr>
-                                            <th class="p-3 w-10 text-center">#</th>
-                                            <th class="p-3">Descrição do Material / Medicamento</th>
-                                            <th class="p-3 text-right">Qtd</th>
-                                            <th class="p-3 text-right">Val. Unit. Est.</th>
-                                            <th class="p-3 text-right">Val. Total Est.</th>
-                                            <th class="p-3 text-center">Situação</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-slate-100 text-slate-600">`;
-
-                if(itens.length === 0) {
-                    htmlItens += `<tr><td colspan="6" class="p-4 text-center italic text-xs">Nenhum item listado na API.</td></tr>`;
-                } else {
-                    itens.forEach(it => {
-                        const totalEst = (it.quantidade || 0) * (it.valorUnitarioEstimado || 0);
-                        htmlItens += `
-                            <tr class="hover:bg-blue-50/30">
-                                <td class="p-3 text-center font-mono text-[10px] bg-slate-50 text-slate-400">${it.numeroItem}</td>
-                                <td class="p-3 font-medium text-slate-800">${it.descricao}</td>
-                                <td class="p-3 text-right font-mono">${it.quantidade}</td>
-                                <td class="p-3 text-right font-mono text-blue-600">${formatarMoeda(it.valorUnitarioEstimado)}</td>
-                                <td class="p-3 text-right font-mono font-bold text-slate-700">${formatarMoeda(totalEst)}</td>
-                                <td class="p-3 text-center">
-                                    <span class="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${getClasseSituacao(it.situacaoItemNome)}">
-                                        ${it.situacaoItemNome || 'Aberto'}
-                                    </span>
-                                </td>
-                            </tr>`;
-                    });
-                }
-
-                htmlItens += `</tbody></table></div></td></tr>`;
-                
-                // Insere logo após a linha do pai
-                trPai.insertAdjacentHTML('afterend', htmlItens);
-                
-                // Atualiza botão
-                btn.innerHTML = '<i class="fas fa-chevron-up"></i>';
-                btn.classList.add('text-blue-600', 'border-blue-300');
-
-            } catch (err) {
-                alert("Erro ao carregar detalhes: " + err.message);
-                btn.innerHTML = '<i class="fas fa-exclamation-triangle text-red-500"></i>';
-            }
-        }
-
-        // --- UTILITÁRIOS ---
-        function formatarMoeda(valor) {
-            if (valor === undefined || valor === null) return '-';
-            return parseFloat(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        }
-
-        function getClasseSituacao(status) {
-            if (!status) return 'bg-slate-100 text-slate-500';
-            const s = status.toLowerCase();
-            if (s.includes('cancelado') || s.includes('fracassado')) return 'bg-red-100 text-red-600';
-            if (s.includes('homologado') || s.includes('adjudicado')) return 'bg-green-100 text-green-700';
-            return 'bg-blue-50 text-blue-600';
-        }
-
-        function atualizarPaginacao() {
-            const div = document.getElementById('paginacaoControle');
-            div.innerHTML = '';
-            
-            const totalPaginas = Math.ceil(dadosFiltrados.length / ITENS_POR_PAGINA);
-            if(totalPaginas <= 1) return;
-
-            // Botão Anterior
-            const btnPrev = document.createElement('button');
-            btnPrev.className = `p-2 rounded bg-white border border-slate-200 text-xs ${paginaAtual === 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-100'}`;
-            btnPrev.innerHTML = '<i class="fas fa-chevron-left"></i>';
-            btnPrev.onclick = () => { if(paginaAtual > 1) { paginaAtual--; renderizarTabela(); } };
-            div.appendChild(btnPrev);
-
-            // Indicador
-            const span = document.createElement('span');
-            span.className = 'px-3 py-2 text-xs font-bold text-slate-500';
-            span.innerText = `Pág ${paginaAtual} de ${totalPaginas}`;
-            div.appendChild(span);
-
-            // Botão Próximo
-            const btnNext = document.createElement('button');
-            btnNext.className = `p-2 rounded bg-white border border-slate-200 text-xs ${paginaAtual >= totalPaginas ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-100'}`;
-            btnNext.innerHTML = '<i class="fas fa-chevron-right"></i>';
-            btnNext.onclick = () => { if(paginaAtual < totalPaginas) { paginaAtual++; renderizarTabela(); } };
-            div.appendChild(btnNext);
-        }
-
-        function incluirManual() {
-            const url = prompt("Cole o Link do PNCP:");
-            if (url && url.includes("pncp.gov.br")) {
-                dadosCompletos.unshift({
-                    id: "manual-" + Date.now(),
-                    numero: "MANUAL",
-                    orgao: "INCLUSÃO MANUAL",
-                    objeto: "Oportunidade inserida manualmente.",
-                    uf: "M",
-                    link: url,
-                    valor_total: 0
-                });
-                aplicarFiltros();
-            }
-        }
-
-        function excluirItem(numero) {
-            if(confirm('Remover esta licitação da lista?')) {
-                dadosCompletos = dadosCompletos.filter(i => i.numero !== numero);
-                aplicarFiltros();
-            }
-        }
-
-        init();
-    </script>
 </body>
 </html>
