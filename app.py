@@ -2,6 +2,7 @@ import requests
 import json
 from datetime import datetime, timedelta
 import os
+import time
 import urllib3
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -12,25 +13,17 @@ ARQ_DADOS = 'dados/oportunidades.js'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 
 ESTADOS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "DF", "GO", "MT", "MS"]
-TERMOS_SAUDE = ["medicamento", "hospitalar", "farmacia", "medico", "insumo", "soro", "gaze", "seringa", "luva", "reagente", "saude"]
-BLACKLIST = ["computador", "notebook", "pneu", "veiculo", "obra", "engenharia", "pavimentacao"]
+TERMOS_SAUDE = ["medicamento", "hospitalar", "farmacia", "medico", "insumo", "soro", "gaze", "seringa", "luva", "reagente", "saude", "odontolog", "cirurgico"]
+BLACKLIST = ["computador", "notebook", "pneu", "veiculo", "obra", "engenharia", "pavimentacao", "mobiliario"]
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def criar_sessao():
     session = requests.Session()
     session.verify = False
-    retry_strategy = Retry(
-        total=5,
-        backoff_factor=3,
-        status_forcelist=[429, 500, 502, 503, 504]
-    )
-    adapter = HTTPAdapter(max_retries=retry_strategy)
-    session.mount("https://", adapter)
-    session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) MonitorSaude/5.6',
-        'Accept': 'application/json'
-    })
+    retry_strategy = Retry(total=5, backoff_factor=3, status_forcelist=[429, 500, 502, 503, 504])
+    session.mount("https://", HTTPAdapter(max_retries=retry_strategy))
+    session.headers.update({'User-Agent': 'Mozilla/5.0 MonitorSaude/5.7', 'Accept': 'application/json'})
     return session
 
 def carregar_banco():
@@ -43,11 +36,9 @@ def carregar_banco():
     return []
 
 def salvar_dados_js(lista_dados):
-    # Mantém apenas os últimos 180 dias
     data_limite = datetime.now() - timedelta(days=180)
     lista_dados = [i for i in lista_dados if datetime.fromisoformat(i['data_pub'].split('T')[0]) > data_limite]
     lista_dados.sort(key=lambda x: x.get('data_pub', ''), reverse=True)
-    
     os.makedirs('dados', exist_ok=True)
     with open(ARQ_DADOS, 'w', encoding='utf-8') as f:
         f.write(f"const dadosLicitacoes = {json.dumps(lista_dados, indent=4, ensure_ascii=False)};")
@@ -62,7 +53,7 @@ def main():
 
     hoje = datetime.now()
     if data_atual.date() > hoje.date():
-        print("✅ Sistema 100% atualizado.")
+        print("✅ Sistema atualizado.")
         with open('env.txt', 'w') as f: f.write("CONTINUAR_EXECUCAO=false")
         return
 
@@ -70,27 +61,16 @@ def main():
     print(f"🔎 ANALISANDO: {data_atual.strftime('%d/%m/%Y')}...")
     
     url = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
-    
-    # AJUSTE 400: Tamanho de página reduzido para 50 (mais estável) e tipos estritos
-    params = {
-        "dataInicial": ds,
-        "dataFinal": ds,
-        "codigoModalidadeContratacao": 6, # Inteiro
-        "pagina": 1,                      # Inteiro
-        "tamanhoPagina": 50               # Reduzido de 100 para 50
-    }
+    params = {"dataInicial": ds, "dataFinal": ds, "codigoModalidadeContratacao": 6, "pagina": 1, "tamanhoPagina": 50}
 
     try:
         resp = session.get(url, params=params, timeout=60)
-        
-        # Fallback para o erro 400 (tenta formato de data com hífen)
-        if resp.status_code == 400:
+        if resp.status_code == 400: # Fallback de formato de data
             params["dataInicial"] = data_atual.strftime('%Y-%m-%d')
             params["dataFinal"] = data_atual.strftime('%Y-%m-%d')
             resp = session.get(url, params=params, timeout=60)
-
-        resp.raise_for_status()
         
+        resp.raise_for_status()
         licitacoes = resp.json().get('data', [])
         banco = carregar_banco()
         novos = 0
@@ -117,21 +97,19 @@ def main():
                         "data_pub": item.get('dataPublicacaoPncp'),
                         "data_abertura": item.get('dataAberturaProposta'),
                         "valor_total": item.get('valorTotalEstimado', 0),
-                        "link_api": f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{item.get('orgaoEntidade', {}).get('cnpj')}/{item.get('anoCompra')}/{item.get('numeroCompra')}"
+                        "link_api": f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{item.get('orgaoEntidade', {}).get('cnpj')}/{item.get('anoCompra')}/{item.get('numeroCompra')}",
+                        "link_pncp": f"https://pncp.gov.br/app/editais/{item.get('orgaoEntidade', {}).get('cnpj')}/{item.get('anoCompra')}/{item.get('numeroCompra')}"
                     })
                     novos += 1
 
         salvar_dados_js(banco)
-        
-        # Avança o dia mesmo se encontrar 0, para não travar
         proximo = data_atual + timedelta(days=1)
         with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo.strftime('%Y%m%d'))
         with open('env.txt', 'w') as f: f.write("CONTINUAR_EXECUCAO=true")
         print(f"✅ Dia processado. Itens novos: {novos}. Próximo: {proximo.strftime('%d/%m/%Y')}")
 
     except Exception as e:
-        print(f"💥 Erro em {ds}: {e}. Pulando dia para evitar travamento.")
-        # Em caso de erro 400 persistente, avançamos para não bloquear o GitHub Actions
+        print(f"💥 Erro em {ds}: {e}. Avançando checkpoint para não travar.")
         proximo = data_atual + timedelta(days=1)
         with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo.strftime('%Y%m%d'))
         with open('env.txt', 'w') as f: f.write("CONTINUAR_EXECUCAO=true")
