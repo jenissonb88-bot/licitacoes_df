@@ -1,134 +1,152 @@
 import requests
 import json
-from datetime import datetime, timedelta
 import os
+import time
 import urllib3
+import unicodedata
+from datetime import datetime, timedelta
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-# --- CONFIGURAÇÕES DE ALVO ---
+# --- CONFIGURAÇÕES ---
 DATA_INICIO_VARREDURA = datetime(2026, 1, 1) 
 ARQ_DADOS = 'dados/oportunidades.js'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 
-# Filtro Geográfico
-ESTADOS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "DF", "GO", "MT", "MS"]
-
-# Termos de Saúde (Lógica original que capturou dados)
-TERMOS_SAUDE = ["medicamento", "hospitalar", "farmacia", "medico", "insumo", "soro", "gaze", "seringa", "luva", "reagente", "saude"]
-
-# Blacklist
-BLACKLIST = ["computador", "notebook", "pneu", "veiculo", "obra", "engenharia"]
+# Filtros Expandidos conforme Robô v5
+KEYWORDS_SAUDE = ["MEDICAMENTO", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGICO", "HIGIENE", "DESCARTAVEL", "SERINGA", "AGULHA", "LUVAS", "GAZE", "ALGODAO", "SAUDE", "INSUMO"]
+BLACKLIST = ["ESCOLAR", "CONSTRUCAO", "AUTOMOTIVO", "OBRA", "VEICULO", "REFEICAO", "LANCHE", "ALIMENTICIO", "MOBILIARIO", "TI", "INFORMATICA", "PNEU", "ESTANTE", "CADEIRA", "RODOVIARIO", "PAVIMENTACAO"]
+UFS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "RO", "GO", "MT", "MS", "DF"]
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# --- FUNÇÕES DE APOIO DO ROBÔ V5 ---
+def normalize(t): 
+    if not t: return ""
+    return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
+
+def eh_relevante(t):
+    txt = normalize(t)
+    # Deve conter termo de saúde e NÃO conter nada da blacklist
+    return any(k in txt for k in KEYWORDS_SAUDE) and not any(b in txt for b in BLACKLIST)
+
+def criar_sessao():
+    session = requests.Session()
+    session.verify = False
+    retry = Retry(total=5, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+    session.mount("https://", HTTPAdapter(max_retries=retry))
+    session.headers.update({'User-Agent': 'MonitorSaude/6.0', 'Accept': 'application/json'})
+    return session
+
 def carregar_banco():
-    """ Carrega o JS existente e extrai o JSON dele """
     if os.path.exists(ARQ_DADOS):
         try:
             with open(ARQ_DADOS, 'r', encoding='utf-8') as f:
-                content = f.read()
-                # Remove a variável JS para ler como JSON
-                json_part = content.replace('const dadosLicitacoes = ', '').rstrip(';')
-                return json.loads(json_part)
+                content = f.read().replace('const dadosLicitacoes = ', '').rstrip(';')
+                return json.loads(content)
         except: pass
     return []
 
-def salvar_dados_js(lista_dados):
-    """ Salva no formato JS para o index.html ler sem erro de CORS """
-    # Ordenar: Mais recentes primeiro
-    lista_dados.sort(key=lambda x: x.get('data_pub', ''), reverse=True)
-    
-    os.makedirs('dados', exist_ok=True)
-    with open(ARQ_DADOS, 'w', encoding='utf-8') as f:
-        f.write(f"const dadosLicitacoes = {json.dumps(lista_dados, indent=4, ensure_ascii=False)};")
-
+# --- EXECUÇÃO PRINCIPAL ---
 def main():
-    session = requests.Session()
-    session.verify = False
+    session = criar_sessao()
+    banco = {str(item['id']): item for item in carregar_banco()}
     
-    # Carrega dados e checkpoint
-    banco = carregar_banco()
-    
-    if os.path.exists(ARQ_CHECKPOINT):
-        with open(ARQ_CHECKPOINT, 'r') as f:
-            data_atual = datetime.strptime(f.read().strip(), '%Y%m%d')
-    else:
-        data_atual = DATA_INICIO_VARREDURA
-
+    # 1. Checkpoint
+    cp = open(ARQ_CHECKPOINT).read().strip() if os.path.exists(ARQ_CHECKPOINT) else "20260101"
+    data_atual = datetime.strptime(cp, '%Y%m%d')
     hoje = datetime.now()
+
     if data_atual.date() > hoje.date():
-        print("✅ Sistema atualizado.")
-        with open('env.txt', 'w') as f: f.write("CONTINUAR_EXECUCAO=false")
+        print("✅ Dados atualizados.")
+        if "GITHUB_OUTPUT" in os.environ:
+            with open(os.environ["GITHUB_OUTPUT"], "a") as f: f.write("CONTINUAR_EXECUCAO=false\n")
         return
 
     ds = data_atual.strftime('%Y%m%d')
-    print(f"🔎 Analisando: {data_atual.strftime('%d/%m/%Y')}...")
+    print(f"🚀 Sniper PNCP | Analisando: {data_atual.strftime('%d/%m/%Y')}")
+
+    # 2. Varredura de TODAS as páginas (Melhoria do Robô v5)
+    pagina = 1
+    novos_no_dia = 0
     
-    # URL e Parâmetros (Voltando ao básico que funcionou)
-    url = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
-    params = {
-        "dataInicial": ds,
-        "dataFinal": ds,
-        "codigoModalidadeContratacao": "6",
-        "pagina": 1,
-        "tamanhoPagina": 50
-    }
-
-    try:
-        resp = session.get(url, params=params, timeout=60)
-        resp.raise_for_status()
+    while True:
+        url_pub = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
+        params = {
+            "dataInicial": ds,
+            "dataFinal": ds,
+            "codigoModalidadeContratacao": "6",
+            "pagina": pagina,
+            "tamanhoPagina": 50
+        }
         
-        licitacoes = resp.json().get('data', [])
-        novos = 0
-        
-        for item in licitacoes:
-            # Chaves originais da API PNCP (Sem erros de nomenclatura)
-            uf = item.get('unidadeFederativaId')
-            obj = (item.get('objetoCompra') or "").lower()
+        try:
+            resp = session.get(url_pub, params=params, timeout=25)
+            if resp.status_code != 200: break
             
-            # Filtro Lógico
-            if uf in ESTADOS_ALVO and any(t in obj for t in TERMOS_SAUDE) and not any(b in obj for b in BLACKLIST):
-                # ID único para evitar duplicados
-                id_pncp = str(item.get('id'))
-                
-                if not any(x['id'] == id_pncp for x in banco):
-                    unidade = item.get('unidadeOrgao', {})
-                    banco.append({
-                        "id": id_pncp,
-                        "numero": f"{item.get('numeroCompra')}/{item.get('anoCompra')}",
-                        "orgao": item.get('orgaoEntidade', {}).get('razaoSocial'),
-                        "unidade_compradora": unidade.get('nomeUnidade'),
-                        "uasg": unidade.get('codigoUnidade'),
-                        "uf": uf,
-                        "cidade": unidade.get('municipioNome'),
-                        "objeto": item.get('objetoCompra'),
-                        "quantidade_itens": item.get('quantidadeItens', 0),
-                        "data_pub": item.get('dataPublicacaoPncp'), # Chave CORRETA
-                        "data_abertura": item.get('dataAberturaProposta'),
-                        "valor_total": item.get('valorTotalEstimado', 0),
-                        "link_api": f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{item.get('orgaoEntidade', {}).get('cnpj')}/{item.get('anoCompra')}/{item.get('numeroCompra')}",
-                        "link_pncp": f"https://pncp.gov.br/app/editais/{item.get('orgaoEntidade', {}).get('cnpj')}/{item.get('anoCompra')}/{item.get('numeroCompra')}"
-                    })
-                    novos += 1
-                    print(f"   💊 Capturado: {item.get('numeroCompra')}")
+            dados = resp.json()
+            licitacoes = dados.get('data', [])
+            if not licitacoes: break
 
-        salvar_dados_js(banco)
-        
-        # Avança o dia
-        proximo = data_atual + timedelta(days=1)
-        with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo.strftime('%Y%m%d'))
-        
-        # GitHub Actions Recursividade
-        with open('env.txt', 'w') as f:
-            f.write("CONTINUAR_EXECUCAO=true")
+            for lic in licitacoes:
+                unidade = lic.get('unidadeOrgao', {})
+                uf = unidade.get('ufSigla') or lic.get('unidadeFederativaId')
+                objeto = lic.get('objetoCompra') or ""
+
+                # Filtro Geográfico e de Relevância Normalizado
+                if uf in UFS_ALVO and eh_relevante(objeto):
+                    # Chave Única Padrão PNCP
+                    cnpj = lic.get('orgaoEntidade', {}).get('cnpj')
+                    ano = lic.get('anoCompra')
+                    seq = lic.get('sequencialCompra')
+                    id_lic = f"{cnpj}{ano}{seq}"
+                    
+                    if id_lic not in banco:
+                        banco[id_lic] = {
+                            "id": id_lic,
+                            "uf": uf,
+                            "cidade": unidade.get('municipioNome') or "",
+                            "orgao": lic.get('orgaoEntidade', {}).get('razaoSocial'),
+                            "unidade_compradora": unidade.get('nomeUnidade') or "",
+                            "uasg": unidade.get('codigoUnidade') or "---",
+                            "objeto": objeto,
+                            "numero": f"{lic.get('numeroCompra')}/{ano}",
+                            "quantidade_itens": lic.get('quantidadeItens', 0),
+                            "data_pub": lic.get('dataPublicacaoPncp'),
+                            "data_abertura": lic.get('dataAberturaProposta'),
+                            "valor_total": lic.get('valorTotalEstimado', 0),
+                            "link_api": f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{cnpj}/{ano}/{lic.get('numeroCompra')}",
+                            "link_pncp": f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}"
+                        }
+                        novos_no_dia += 1
+                        print(f"   💊 Capturado: {id_lic} | {objeto[:50]}...")
+
+            # Verifica se existem mais páginas
+            if pagina >= dados.get('totalPaginas', 1): break
+            pagina += 1
+            time.sleep(0.5)
             
-        print(f"✅ Itens novos: {novos}. Próximo: {proximo.strftime('%d/%m/%Y')}")
+        except Exception as e:
+            print(f"⚠️ Erro na página {pagina}: {e}")
+            break
 
-    except Exception as e:
-        print(f"💥 Erro: {e}")
-        # Mesmo com erro, permite que o Actions tente novamente ou avance
-        with open('env.txt', 'w') as f: f.write("CONTINUAR_EXECUCAO=true")
+    # 3. Salvar e Avançar
+    lista_final = list(banco.values())
+    lista_final.sort(key=lambda x: x.get('data_pub', ''), reverse=True)
+    
+    os.makedirs('dados', exist_ok=True)
+    with open(ARQ_DADOS, 'w', encoding='utf-8') as f:
+        f.write(f"const dadosLicitacoes = {json.dumps(lista_final, indent=4, ensure_ascii=False)};")
+
+    proximo_dia = (data_atual + timedelta(days=1)).strftime('%Y%m%d')
+    with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo_dia)
+
+    print(f"📊 Novos itens hoje: {novos_no_dia} | Total no banco: {len(lista_final)}")
+
+    # 4. Sinalizar GitHub Actions
+    if "GITHUB_OUTPUT" in os.environ:
+        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+            f.write(f"CONTINUAR_EXECUCAO={'true' if datetime.strptime(proximo_dia, '%Y%m%d').date() <= hoje.date() else 'false'}\n")
 
 if __name__ == "__main__":
     main()
