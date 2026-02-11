@@ -1,5 +1,62 @@
 const dadosLicitacoes = [
     {
+        "id": "0516988400012620265",
+        "uf": "GO",
+        "cidade": "Ouvidor",
+        "orgao": "FUNDO MUNICIPAL DE SAUDE",
+        "uasg": "1",
+        "objeto": "Registro de preços para futura e eventual aquisição de produtos de limpeza, higiene, descartáveis e correlatos para atender a demanda da Secretaria Municipal de Saude e suas unidades e do Hospital Municipal Santo Antônio para os próximos 12 (doze) meses.",
+        "numero": "004/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-02-08T15:20:42",
+        "data_abertura": "2026-02-10T00:00:00",
+        "valor_total": 499660.54,
+        "api_params": {
+            "cnpj": "05169884000126",
+            "ano": 2026,
+            "seq": 5
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/05169884000126/2026/5"
+    },
+    {
+        "id": "4470746900013020265",
+        "uf": "GO",
+        "cidade": "Ouvidor",
+        "orgao": "FUNDO MUNICIPAL DE EDUCACAO",
+        "uasg": "1",
+        "objeto": "Registro de preços para futura e eventual aquisição de produtos de limpeza e higiene para atender a demanda da Secretaria Municipal de Educação e suas unidades para os próximos 12 (doze) meses.",
+        "numero": "007/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-02-08T15:18:03",
+        "data_abertura": "2026-02-10T00:00:00",
+        "valor_total": 150965.03,
+        "api_params": {
+            "cnpj": "44707469000130",
+            "ano": 2026,
+            "seq": 5
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/44707469000130/2026/5"
+    },
+    {
+        "id": "0113101000012920267",
+        "uf": "GO",
+        "cidade": "Ouvidor",
+        "orgao": "MUNICIPIO DE OUVIDOR",
+        "uasg": "1",
+        "objeto": "Registro de preços para futura e eventual aquisição de produtos de limpeza e higiene para atender a demanda da Secretaria Municipal de Administração e Planejamento e seus Departamentos para os próximos 12 (doze) meses.",
+        "numero": "008/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-02-08T15:16:49",
+        "data_abertura": "2026-02-10T00:00:00",
+        "valor_total": 201138.48,
+        "api_params": {
+            "cnpj": "01131010000129",
+            "ano": 2026,
+            "seq": 7
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/01131010000129/2026/7"
+    },
+    {
         "id": "1363499300010320262",
         "uf": "BA",
         "cidade": "Itapebi",
