@@ -16,6 +16,25 @@ const dadosLicitacoes = [
         "link_api": "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/07954480000179/2025/91745"
     },
     {
+        "id": "1867762500015820264",
+        "uf": "MG",
+        "cidade": "Itapeva",
+        "orgao": "MUNICIPIO DE ITAPEVA",
+        "uasg": "3778",
+        "objeto": "[Portal de Compras Públicas] - REGISTRO DE PREÇOS PARA EVENTUAL E FUTURA AQUISIÇÃO DE MATERIAIS E INSUMOS PARA USO EM LABORATÓRIO DE ANÁLISES CLÍNICAS, PARA ATENDER ÀS DEMANDAS DA SECRETARIA MUNICIPAL DE SAÚDE DE ITAPEVA.",
+        "numero": "1/2026",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-10T17:30:54",
+        "data_abertura": "2026-01-12T08:00:00",
+        "valor_total": 252176.65,
+        "api_params": {
+            "cnpj": "18677625000158",
+            "ano": 2026,
+            "seq": 4
+        },
+        "link_pncp": "https://pncp.gov.br/app/editais/18677625000158/2026/4"
+    },
+    {
         "id": "12250056000183202512",
         "uf": "AL",
         "cidade": "Batalha",
