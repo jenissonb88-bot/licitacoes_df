@@ -1,32 +1,32 @@
 <!DOCTYPE html>
-<html lang="pt-PT">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Painel de Licitações Saúde</title>
+    <title>Painel PNCP - Saúde</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        body { background: #f4f7f6; font-size: 0.9rem; }
+        body { background: #f8f9fa; font-size: 0.85rem; }
         .table-homologada { border-left: 5px solid #198754 !important; background-color: #f0fff4; }
-        .uasg-label { font-size: 0.75rem; font-weight: bold; color: #6610f2; }
+        .uasg-tag { font-weight: bold; color: #6610f2; font-size: 0.75rem; }
     </style>
 </head>
 <body>
 
-<div class="container-fluid py-4">
-    <h3 class="text-primary mb-4"><i class="fas fa-microscope"></i> Analista de Licitações PNCP</h3>
+<div class="container-fluid py-3">
+    <h4 class="text-primary mb-3"><i class="fas fa-hospital-user"></i> Licitações Saúde: NE, SE, CO + AM/PA/TO</h4>
 
-    <div class="card shadow">
+    <div class="card shadow-sm">
         <div class="card-body p-0">
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-dark">
                     <tr>
                         <th>Publicação / Abertura</th>
-                        <th>UF/Cidade</th>
-                        <th>Órgão / Unidade</th>
+                        <th>UF / Cidade</th>
+                        <th>Órgão / Unidade (UASG)</th>
                         <th>Objeto</th>
                         <th>Valor Est.</th>
-                        <th>Ações</th>
+                        <th class="text-center">Ações</th>
                     </tr>
                 </thead>
                 <tbody id="corpoTabela"></tbody>
@@ -38,22 +38,22 @@
 <div class="modal fade" id="modalDetalhes" tabindex="-1">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Itens e Resultados (Detalhados)</h5>
+            <div class="modal-header bg-light">
+                <h6 class="modal-title">Itens e Resultados da Licitação</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <div id="loading" class="text-center d-none py-4">
+                <div id="loader" class="text-center d-none my-4">
                     <div class="spinner-border text-primary"></div>
-                    <p>Cruzando dados de itens e vencedores...</p>
+                    <p>Buscando itens e vencedores no PNCP...</p>
                 </div>
                 <table class="table table-sm table-bordered">
-                    <thead>
+                    <thead class="table-light">
                         <tr>
                             <th>#</th>
                             <th>Descrição / Fornecedor</th>
                             <th>Qtd</th>
-                            <th>Unitário (4 Casas)</th>
+                            <th>Unitário (4 casas)</th>
                             <th>Total</th>
                             <th>Status</th>
                         </tr>
@@ -74,21 +74,25 @@
     function renderizar() {
         const tbody = document.getElementById('corpoTabela');
         if (typeof dadosLicitacoes === 'undefined') {
-            tbody.innerHTML = "<tr><td colspan='6' class='text-center p-4 text-danger'>Ficheiro 'dados/oportunidades.js' não encontrado.</td></tr>";
+            tbody.innerHTML = "<tr><td colspan='6' class='text-center p-5 text-danger'>Erro: Arquivo 'dados/oportunidades.js' não encontrado.</td></tr>";
             return;
         }
 
+        tbody.innerHTML = "";
         dadosLicitacoes.forEach(item => {
-            const dataAbertura = item.data_abertura ? new Date(item.data_abertura).toLocaleString() : 'Não definida';
+            const dtPub = new Date(item.data_pub).toLocaleDateString();
+            const dtAbr = item.data_abertura ? new Date(item.data_abertura).toLocaleString() : 'A definir';
+            
             tbody.innerHTML += `
                 <tr>
-                    <td><small>Pub: ${new Date(item.data_pub).toLocaleDateString()}</small><br>
-                        <span class="badge bg-warning text-dark">Abr: ${dataAbertura}</span></td>
+                    <td><small>Pub: ${dtPub}</small><br><span class="badge bg-warning text-dark">Abr: ${dtAbr}</span></td>
                     <td><b>${item.uf}</b><br><small>${item.cidade}</small></td>
-                    <td>${item.orgao}<br><span class="uasg-label">UASG: ${item.uasg}</span></td>
-                    <td><small>${item.objeto.substring(0, 100)}...</small></td>
-                    <td>${fmt2.format(item.valor_total)}</td>
-                    <td><button class="btn btn-sm btn-primary" onclick="verDetalhes('${item.link_api}')">Detalhes</button></td>
+                    <td>${item.orgao}<br><span class="uasg-tag">UASG: ${item.uasg}</span></td>
+                    <td><small>${item.objeto.substring(0, 120)}...</small></td>
+                    <td class="fw-bold">${fmt2.format(item.valor_total)}</td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-primary" onclick="verDetalhes('${item.link_api}')"><i class="fas fa-search-plus"></i> Detalhes</button>
+                    </td>
                 </tr>`;
         });
     }
@@ -96,34 +100,45 @@
     async function verDetalhes(url) {
         const modal = new bootstrap.Modal(document.getElementById('modalDetalhes'));
         const lista = document.getElementById('listaItens');
-        const loader = document.getElementById('loading');
+        const loader = document.getElementById('loader');
         
         lista.innerHTML = "";
         loader.classList.remove('d-none');
         modal.show();
 
         try {
-            const [rItens, rRes] = await Promise.all([fetch(`${url}/itens`), fetch(`${url}/resultados`)]);
-            const itens = await rItens.json();
-            const resultados = rRes.ok ? await rRes.json() : [];
-            const mapa = {};
-            resultados.forEach(r => mapa[r.numeroItem] = r);
+            // Requisição de Itens e Resultados em paralelo
+            const [rI, rR] = await Promise.all([fetch(`${url}/itens`), fetch(`${url}/resultados`)]);
+            
+            const itens = await rI.json();
+            const resultados = rR.ok ? await rR.json() : [];
+            
+            // Mapa de vencedores
+            const mapaVencedores = {};
+            resultados.forEach(r => mapaVencedores[r.numeroItem] = r);
 
             loader.classList.add('d-none');
-            itens.slice(0, 100).forEach(i => {
-                const res = mapa[i.numeroItem];
-                const isH = !!res;
+            
+            itens.slice(0, 150).forEach(i => {
+                const v = mapaVencedores[i.numeroItem];
+                const temVencedor = !!v;
+                
                 lista.innerHTML += `
-                    <tr class="${isH ? 'table-homologada' : ''}">
+                    <tr class="${temVencedor ? 'table-homologada' : ''}">
                         <td>${i.numeroItem}</td>
-                        <td>${i.descricao} ${isH ? `<br><small class="text-success"><b>Vencedor:</b> ${res.nomeRazaoSocialFornecedor} (${res.niFornecedor})</small>` : ''}</td>
+                        <td>
+                            ${i.descricao}
+                            ${temVencedor ? `<br><small class="text-success">🏆 <b>${v.nomeRazaoSocialFornecedor}</b> (${v.niFornecedor})</small>` : ''}
+                        </td>
                         <td>${i.quantidade}</td>
-                        <td>${isH ? fmt4.format(res.valorUnitarioHomologado) : fmt4.format(i.valorUnitarioEstimado)}</td>
-                        <td>${isH ? fmt2.format(res.valorTotalHomologado) : fmt2.format(i.valorTotalEstimado)}</td>
-                        <td><span class="badge ${isH ? 'bg-success' : 'bg-secondary'}">${isH ? 'Homologado' : 'Estimado'}</span></td>
+                        <td>${temVencedor ? fmt4.format(v.valorUnitarioHomologado) : fmt4.format(i.valorUnitarioEstimado)}</td>
+                        <td>${temVencedor ? fmt2.format(v.valorTotalHomologado) : fmt2.format(i.valorTotalEstimado)}</td>
+                        <td><span class="badge ${temVencedor ? 'bg-success' : 'bg-secondary'}">${temVencedor ? 'Homologado' : 'Aberto'}</span></td>
                     </tr>`;
             });
-        } catch (e) { loader.innerHTML = "Erro ao carregar dados da API."; }
+        } catch (e) { 
+            loader.innerHTML = "<div class='alert alert-danger'>Erro ao consultar API do PNCP. O edital pode ser muito recente.</div>"; 
+        }
     }
 
     window.onload = renderizar;
