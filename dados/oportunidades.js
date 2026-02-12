@@ -16,6 +16,22 @@ const dadosLicitacoes = [
         "itens": []
     },
     {
+        "id": "445682770001902025157",
+        "orgao": "MUNICIPIO DE HERCULANDIA",
+        "unidade_compradora": "PREFEITURA MUNICIPAL DE HERCULÂNDIA",
+        "cidade": "Herculândia",
+        "uf": "SP",
+        "objeto": "CONTRATAÇÃO DE EMPRESA DO RAMO PARA CONFECÇÃO DE PRÓTESES DENTÁRIAS PARA DISTRIBUIÇÃO NAS UNIDADES BÁSICAS DE SAÚDE (UBS) DO MUNICÍPIO DE HERCULÂNDIA-SP.",
+        "data_abertura_proposta": "2026-01-20T00:01:00",
+        "data_encerramento_proposta": "2026-01-20T23:59:00",
+        "valor_total_estimado": 319137.0,
+        "is_sigiloso": false,
+        "qtd_total_itens": 0,
+        "link_pncp": "https://pncp.gov.br/app/editais/44568277000190/2025/157",
+        "api_url": "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/44568277000190/2025/157",
+        "itens": []
+    },
+    {
         "id": "15126437000305202663",
         "orgao": "EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES - EBSERH",
         "unidade_compradora": "MATERNIDADE CLIMÉRIO DE OLIVEIRA",
