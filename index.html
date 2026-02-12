@@ -2,156 +2,215 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Monitor PNCP - Saúde</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sniper PNCP - Monitor de Licitações</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
-        body { background: #f4f6f9; font-size: 0.85rem; font-family: 'Segoe UI', sans-serif; }
-        .header { background: #2c3e50; color: white; padding: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .card { border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-        .table-main th { background: #34495e; color: white; font-weight: 500; vertical-align: middle; }
-        .money { font-family: 'Consolas', monospace; font-weight: bold; text-align: right; white-space: nowrap; }
+        :root { --primary-dark: #2c3e50; --accent-blue: #3498db; --danger-red: #e74c3c; }
+        body { background-color: #f4f7f6; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 0.85rem; }
         
-        /* Cores de Status Modal */
-        .status-winner { background: #d1e7dd; border-left: 5px solid #198754; color: #0f5132; }
-        .status-open { background: #fff3cd; border-left: 5px solid #ffc107; color: #664d03; }
+        /* Cabeçalho */
+        .header-bar { background: var(--primary-dark); color: white; padding: 12px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .app-logo { font-size: 1.2rem; font-weight: 700; letter-spacing: 1px; }
+
+        /* Tabela Principal */
+        .card-table { border: none; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden; }
+        .table-pncp thead { background-color: #34495e; color: white; text-transform: uppercase; font-size: 0.75rem; }
+        .table-pncp th { padding: 15px 10px; border: none; }
+        .table-pncp td { vertical-align: middle; padding: 12px 10px; border-bottom: 1px solid #eee; }
+        
+        /* Estilização Órgão/Unidade */
+        .org-uasg { font-weight: 700; color: #333; display: block; }
+        .unit-name { color: #7f8c8d; font-size: 0.8rem; display: block; }
+
+        /* Status e Valores */
+        .val-global { font-family: 'Consolas', monospace; font-weight: 700; color: var(--accent-blue); }
+        .date-badge { font-weight: 600; color: var(--danger-red); }
+
+        /* Modal e Grupos */
+        .modal-header { background: var(--primary-dark); color: white; }
+        .group-card { border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 15px; }
+        .group-header { padding: 10px 15px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+        .status-winner { background: #d1e7dd; color: #0f5132; border-left: 5px solid #198754; }
+        .status-open { background: #fff3cd; color: #664d03; border-left: 5px solid #ffc107; }
+
+        /* Paginação */
+        .pagination-container { background: white; padding: 15px; border-top: 1px solid #eee; display: flex; justify-content: center; align-items: center; gap: 15px; }
     </style>
 </head>
 <body>
 
-<div class="header d-flex justify-content-between align-items-center sticky-top">
-    <h5 class="m-0"><i class="fas fa-robot"></i> Monitor PNCP</h5>
-    <div>
-        <span class="badge bg-info me-2" id="totalLics">0</span>
-        <button class="btn btn-sm btn-light" onclick="location.reload()">Atualizar</button>
+<div class="header-bar d-flex justify-content-between align-items-center sticky-top">
+    <div class="app-logo"><i class="fas fa-crosshairs me-2"></i>SNIPER PNCP</div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-success" onclick="abrirModalManual()">
+            <i class="fas fa-plus-circle me-1"></i> Adicionar URL
+        </button>
+        <button class="btn btn-sm btn-outline-light" onclick="location.reload()">
+            <i class="fas fa-sync-alt"></i>
+        </button>
     </div>
 </div>
 
-<div class="container-fluid mt-3">
-    <div class="card mb-3 p-3">
+<div class="container-fluid py-3">
+    <div class="card card-table p-3 mb-3">
         <div class="row g-2">
-            <div class="col-md-2"><input id="fUf" class="form-control form-control-sm" placeholder="UF" onkeyup="render()"></div>
-            <div class="col-md-4"><input id="fOrgao" class="form-control form-control-sm" placeholder="Órgão / UASG / Edital" onkeyup="render()"></div>
-            <div class="col-md-6"><input id="fObj" class="form-control form-control-sm" placeholder="Objeto" onkeyup="render()"></div>
+            <div class="col-md-1"><input id="fUf" class="form-control form-control-sm" placeholder="UF" onkeyup="render()"></div>
+            <div class="col-md-3"><input id="fOrgao" class="form-control form-control-sm" placeholder="Órgão, UASG ou Unidade" onkeyup="render()"></div>
+            <div class="col-md-4"><input id="fObjeto" class="form-control form-control-sm" placeholder="Palavra no Objeto" onkeyup="render()"></div>
+            <div class="col-md-2"><input id="fEdital" class="form-control form-control-sm" placeholder="Nº Edital" onkeyup="render()"></div>
+            <div class="col-md-2"><button class="btn btn-sm btn-secondary w-100" onclick="limparFiltros()">Limpar</button></div>
         </div>
     </div>
 
-    <div class="card">
+    <div class="card card-table">
         <div class="table-responsive">
-            <table class="table table-hover table-striped mb-0 table-main">
+            <table class="table table-hover table-pncp mb-0">
                 <thead>
                     <tr>
-                        <th style="width: 100px;">Data Fim</th>
-                        <th style="width: 50px;">UF</th>
-                        <th>Órgão e Unidade Compradora</th> <th style="width: 120px;">Edital</th>
-                        <th>Objeto</th>
+                        <th style="width: 100px;">Encerramento</th>
+                        <th style="width: 40px;">UF</th>
+                        <th>Código - Órgão / Unidade Compradora</th>
+                        <th style="width: 100px;">Edital</th>
+                        <th>Objeto da Licitação</th>
                         <th class="text-center" style="width: 60px;">Itens</th>
-                        <th class="text-end" style="width: 120px;">Valor Global</th>
-                        <th class="text-center" style="width: 120px;">Ação</th>
+                        <th class="text-end" style="width: 130px;">Valor Global</th>
+                        <th class="text-center" style="width: 120px;">Ações</th>
                     </tr>
                 </thead>
-                <tbody id="tbody"></tbody>
+                <tbody id="tbody">
+                    </tbody>
             </table>
         </div>
-        
-        <div class="d-flex justify-content-center p-3 gap-2 align-items-center border-top">
-            <button class="btn btn-sm btn-outline-secondary" onclick="mudarPag(-1)">Anterior</button>
-            <span id="pagInfo" class="fw-bold text-muted"></span>
-            <button class="btn btn-sm btn-outline-secondary" onclick="mudarPag(1)">Próximo</button>
+
+        <div class="pagination-container">
+            <button class="btn btn-sm btn-outline-secondary" onclick="mudarPagina(-1)" id="btnAnt">Anterior</button>
+            <span class="text-muted">Página <span id="pagAtual" class="fw-bold">1</span> de <span id="pagTotal">1</span></span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="mudarPagina(1)" id="btnProx">Próximo</button>
         </div>
     </div>
 </div>
 
-<div class="modal fade" id="modalDet" tabindex="-1">
-    <div class="modal-dialog modal-xl">
+<div class="modal fade" id="modalDetalhes" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
-            <div class="modal-header py-2 bg-dark text-white">
-                <h6 class="modal-title"><i class="fas fa-list"></i> Detalhes da Licitação</h6>
+            <div class="modal-header py-2">
+                <h6 class="modal-title"><i class="fas fa-info-circle me-2"></i> Detalhamento por Fornecedor / Item</h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body bg-light" id="modalBody"></div>
+            <div id="modalBody" class="modal-body bg-light">
+                </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalManual" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white py-2">
+                <h6 class="modal-title">Solicitar Captura via URL</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted">Cole o link do PNCP. O robô irá processar esta URL em sua próxima execução.</p>
+                <input type="text" id="urlManual" class="form-control form-control-sm mb-3" placeholder="https://pncp.gov.br/app/editais/...">
+                <div class="alert alert-info py-2 small">
+                    <i class="fas fa-info-circle me-1"></i> Nota: Para executar, o robô precisa ler o arquivo <b>urls.txt</b> no seu GitHub.
+                </div>
+            </div>
+            <div class="modal-footer py-1">
+                <button class="btn btn-primary btn-sm" onclick="salvarUrlManual()">Enviar para Fila</button>
+            </div>
         </div>
     </div>
 </div>
 
 <script src="dados/oportunidades.js"></script>
 <script>
-    const POR_PAG = 20;
-    let pag = 1;
-    let dados = [];
-    
-    // Formatadores
-    const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-    const dataFmt = d => d ? new Date(d).toLocaleDateString('pt-BR') : '-';
+    const ITENS_POR_PAG = 20;
+    let pagina = 1;
+    let dadosOriginais = [];
+    let dadosFiltrados = [];
+
+    const fmtBrl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    const fmtData = d => d ? new Date(d).toLocaleDateString('pt-BR') : '--/--/----';
 
     window.onload = () => {
-        const excluidos = JSON.parse(localStorage.getItem('excluidos') || '[]');
+        // Carrega dados e remove excluídos salvos no navegador
+        const excluidos = JSON.parse(localStorage.getItem('sniper_excluidos') || '[]');
         const raw = (typeof dadosLicitacoes !== 'undefined') ? dadosLicitacoes : [];
-        dados = raw.filter(d => !excluidos.includes(d.id));
+        
+        dadosOriginais = raw.filter(d => !excluidos.includes(d.id));
+        dadosFiltrados = [...dadosOriginais];
         render();
     };
 
     function render() {
-        const u = document.getElementById('fUf').value.toUpperCase();
-        const o = document.getElementById('fOrgao').value.toUpperCase();
-        const ob = document.getElementById('fObj').value.toUpperCase();
+        // Filtros
+        const uf = document.getElementById('fUf').value.toUpperCase();
+        const org = document.getElementById('fOrgao').value.toUpperCase();
+        const obj = document.getElementById('fObjeto').value.toUpperCase();
+        const edt = document.getElementById('fEdital').value.toUpperCase();
 
-        const filtrados = dados.filter(d => 
-            (d.uf || '').includes(u) &&
-            ((d.orgao || '').toUpperCase().includes(o) || (d.uasg || '').includes(o) || (d.edital || '').includes(o)) &&
-            (d.objeto || '').toUpperCase().includes(ob)
+        const filtrados = dadosOriginais.filter(d => 
+            (d.uf || '').includes(uf) &&
+            ((d.orgao || '').toUpperCase().includes(org) || (d.uasg || '').includes(org) || (d.unidade_compradora || '').toUpperCase().includes(org)) &&
+            (d.objeto || '').toUpperCase().includes(obj) &&
+            (d.edital || '').includes(edt)
         );
 
-        const totalPag = Math.ceil(filtrados.length / POR_PAG) || 1;
-        if (pag > totalPag) pag = totalPag;
-        if (pag < 1) pag = 1;
+        // Paginação
+        const totalPaginas = Math.ceil(filtrados.length / ITENS_POR_PAG) || 1;
+        if (pagina > totalPaginas) pagina = totalPaginas;
         
-        const slice = filtrados.slice((pag-1)*POR_PAG, pag*POR_PAG);
+        const inicio = (pagina - 1) * ITENS_POR_PAG;
+        const fim = inicio + ITENS_POR_PAG;
+        const lote = filtrados.slice(inicio, fim);
+
         const tbody = document.getElementById('tbody');
         tbody.innerHTML = '';
 
-        slice.forEach(d => {
-            const val = (d.is_sigiloso || !d.valor_global) ? '<span class="text-muted small">Sigiloso / R$ 0</span>' : brl.format(d.valor_global);
-            const qtd = d.qtd_itens !== undefined ? d.qtd_itens : 0;
+        lote.forEach(d => {
+            const valor = (d.is_sigiloso || !d.valor_global) ? '<span class="text-muted">Sigiloso</span>' : fmtBrl.format(d.valor_global);
             
-            // === AQUI ESTÁ A ALTERAÇÃO VISUAL ===
-            // Formata: "UASG - Órgão" na linha de cima (Negrito)
-            // Formata: "Unidade Compradora" na linha de baixo (Cinza)
-            const linhaOrgao = `<div class="fw-bold text-dark text-truncate" style="max-width:350px" title="${d.uasg} - ${d.orgao}">${d.uasg} - ${d.orgao}</div>`;
-            const linhaUnidade = `<div class="text-muted small text-truncate" style="max-width:350px" title="${d.unidade_compradora}">${d.unidade_compradora}</div>`;
-
             tbody.innerHTML += `
                 <tr>
-                    <td class="fw-bold text-danger">${dataFmt(d.data_encerramento)}</td>
-                    <td><b>${d.uf}</b></td>
+                    <td class="date-badge">${fmtData(d.data_encerramento)}</td>
+                    <td class="text-center fw-bold">${d.uf}</td>
                     <td>
-                        ${linhaOrgao}
-                        ${linhaUnidade}
+                        <span class="org-uasg">${d.uasg} - ${d.orgao}</span>
+                        <span class="unit-name">${d.unidade_compradora}</span>
                     </td>
-                    <td><span class="badge bg-secondary">${d.edital}</span></td>
-                    <td><div class="text-truncate" style="max-width:300px" title="${d.objeto}">${d.objeto}</div></td>
-                    <td class="text-center"><span class="badge bg-light text-dark border">${qtd}</span></td>
-                    <td class="text-end fw-bold text-primary">${val}</td>
+                    <td><span class="badge bg-light text-dark border">${d.edital}</span></td>
+                    <td><div class="text-truncate" style="max-width: 350px;" title="${d.objeto}">${d.objeto}</div></td>
+                    <td class="text-center fw-bold">${d.qtd_itens || 0}</td>
+                    <td class="text-end val-global">${valor}</td>
                     <td class="text-center">
-                        <button class="btn btn-sm btn-outline-primary border-0" onclick="ver('${d.id}')" title="Ver Detalhes"><i class="fas fa-eye"></i></button>
-                        <a href="${d.link}" target="_blank" class="btn btn-sm btn-outline-dark border-0" title="Abrir PNCP"><i class="fas fa-link"></i></a>
-                        <button class="btn btn-sm btn-outline-danger border-0" onclick="excluir('${d.id}')" title="Ocultar"><i class="fas fa-trash"></i></button>
+                        <button class="btn btn-sm btn-outline-primary border-0" onclick="verDetalhes('${d.id}')" title="Ver Itens"><i class="fas fa-eye"></i></button>
+                        <a href="${d.link}" target="_blank" class="btn btn-sm btn-outline-dark border-0" title="Link PNCP"><i class="fas fa-external-link-alt"></i></a>
+                        <button class="btn btn-sm btn-outline-danger border-0" onclick="excluirLicitacao('${d.id}')" title="Ocultar"><i class="fas fa-trash"></i></button>
                     </td>
                 </tr>
             `;
         });
 
-        document.getElementById('totalLics').innerText = filtrados.length;
-        document.getElementById('pagInfo').innerText = `${pag} / ${totalPag}`;
+        document.getElementById('pagAtual').innerText = pagina;
+        document.getElementById('pagTotal').innerText = totalPaginas;
+        document.getElementById('btnAnt').disabled = (pagina === 1);
+        document.getElementById('btnProx').disabled = (pagina === totalPaginas);
     }
 
-    function ver(id) {
-        const item = dados.find(d => d.id === id);
-        const corpo = document.getElementById('modalBody');
-        corpo.innerHTML = '';
+    function verDetalhes(id) {
+        const lic = dadosOriginais.find(d => d.id === id);
+        if (!lic) return;
 
+        const body = document.getElementById('modalBody');
+        body.innerHTML = '';
+
+        // Agrupamento por Fornecedor
         const grupos = {};
-        item.itens.forEach(i => {
+        lic.itens.forEach(i => {
             const k = i.fornecedor || 'EM ANDAMENTO';
             if (!grupos[k]) grupos[k] = [];
             grupos[k].push(i);
@@ -162,59 +221,73 @@
         chaves.forEach(k => {
             const lista = grupos[k];
             const isPendente = k === 'EM ANDAMENTO';
-            const cls = isPendente ? 'status-open' : 'status-winner';
-            const icone = isPendente ? 'fa-clock' : 'fa-trophy';
+            const classe = isPendente ? 'status-open' : 'status-winner';
             
-            let html = `
-            <div class="card mb-3 shadow-sm">
-                <div class="card-header fw-bold ${cls} d-flex justify-content-between">
-                    <span><i class="fas ${icone} me-2"></i> ${k}</span>
-                    <span class="badge bg-white text-dark opacity-75">${lista.length} Itens</span>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-sm mb-0 table-bordered align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th style="width:50px">Item</th>
-                                <th>Descrição</th>
-                                <th class="text-center" style="width:60px">Qtd</th>
-                                <th class="money">Unit. Est.</th>
-                                <th class="money">Total Est.</th>
-                                ${!isPendente ? '<th class="money text-success bg-light">Unit. Hom.</th><th class="money text-success bg-light">Total Hom.</th>' : ''}
-                            </tr>
-                        </thead>
-                        <tbody>`;
+            let tabela = `
+                <div class="group-card shadow-sm mb-3">
+                    <div class="group-header ${classe}">
+                        <span><i class="fas ${isPendente ? 'fa-clock' : 'fa-trophy'} me-2"></i> ${k}</span>
+                        <span class="badge bg-white text-dark border">${lista.length} Itens</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 40px">Item</th>
+                                    <th>Descrição</th>
+                                    <th class="text-center" style="width: 60px">Qtd</th>
+                                    <th class="text-end" style="width: 100px">Unit. Est.</th>
+                                    <th class="text-end" style="width: 100px">Total Est.</th>
+                                    ${!isPendente ? '<th class="text-end text-success" style="width: 100px">Unit. Hom.</th>' : ''}
+                                    ${!isPendente ? '<th class="text-end text-success" style="width: 100px">Total Hom.</th>' : ''}
+                                </tr>
+                            </thead>
+                            <tbody>`;
             
-            lista.forEach(i => {
-                html += `<tr>
-                    <td class="text-center fw-bold">${i.item}</td>
-                    <td style="font-size:0.8rem">${i.desc}</td>
-                    <td class="text-center">${i.qtd}</td>
-                    <td class="money text-muted">${brl.format(i.unitario_est)}</td>
-                    <td class="money text-muted">${brl.format(i.total_est)}</td>
-                    ${!isPendente ? `
-                        <td class="money fw-bold text-success bg-light">${brl.format(i.unitario_hom)}</td>
-                        <td class="money fw-bold text-success bg-light">${brl.format(i.total_hom)}</td>
-                    ` : ''}
-                </tr>`;
+            lista.forEach(it => {
+                tabela += `
+                    <tr>
+                        <td class="text-center fw-bold">${it.item}</td>
+                        <td style="font-size: 0.8rem;">${it.desc}</td>
+                        <td class="text-center">${it.qtd}</td>
+                        <td class="text-end text-muted">${fmtBrl.format(it.unitario_est)}</td>
+                        <td class="text-end text-muted">${fmtBrl.format(it.total_est)}</td>
+                        ${!isPendente ? `<td class="text-end fw-bold text-success">${fmtBrl.format(it.unitario_hom)}</td>` : ''}
+                        ${!isPendente ? `<td class="text-end fw-bold text-success">${fmtBrl.format(it.total_hom)}</td>` : ''}
+                    </tr>`;
             });
-            html += '</tbody></table></div></div>';
-            corpo.innerHTML += html;
+
+            tabela += `</tbody></table></div></div>`;
+            body.innerHTML += tabela;
         });
 
-        new bootstrap.Modal(document.getElementById('modalDet')).show();
+        new bootstrap.Modal(document.getElementById('modalDetalhes')).show();
     }
 
-    function excluir(id) {
-        if(confirm('Ocultar esta licitação?')) {
-            const list = JSON.parse(localStorage.getItem('excluidos') || '[]');
-            list.push(id);
-            localStorage.setItem('excluidos', JSON.stringify(list));
-            window.onload();
+    function excluirLicitacao(id) {
+        if (confirm('Deseja ocultar esta licitação permanentemente desta lista?')) {
+            const excluidos = JSON.parse(localStorage.getItem('sniper_excluidos') || '[]');
+            excluidos.push(id);
+            localStorage.setItem('sniper_excluidos', JSON.stringify(excluidos));
+            window.location.reload();
         }
     }
-    
-    function mudarPag(d) { pag += d; render(); }
+
+    function abrirModalManual() {
+        new bootstrap.Modal(document.getElementById('modalManual')).show();
+    }
+
+    function salvarUrlManual() {
+        const url = document.getElementById('urlManual').value;
+        if (!url.includes('pncp.gov.br')) {
+            alert('Por favor, insira um link válido do portal PNCP.');
+            return;
+        }
+        alert('Instrução: Copie este link e cole no arquivo "urls.txt" do seu repositório no GitHub para que o robô faça a captura na próxima execução.');
+    }
+
+    function mudarPagina(dir) { pagina += dir; render(); window.scrollTo(0,0); }
+    function limparFiltros() { document.querySelectorAll('input').forEach(i => i.value = ''); render(); }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
