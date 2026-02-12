@@ -2,393 +2,381 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Sniper PNCP - Monitoramento de Licitações</title>
+    <title>Sniper PNCP - Painel de Controle</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
-        :root { --primary-color: #0d6efd; --secondary-bg: #f8f9fa; }
-        body { background-color: #f0f2f5; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 0.85rem; }
+        :root { --primary-color: #2c3e50; --accent-color: #3498db; }
+        body { background-color: #f4f6f9; font-family: 'Segoe UI', Roboto, sans-serif; font-size: 0.9rem; }
+        
+        /* Cards e Containers */
+        .main-container { max-width: 98%; margin: 20px auto; }
+        .card-custom { border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-radius: 8px; background: white; }
+        
+        /* Cabeçalho */
+        .header-bar { background: white; padding: 15px 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .app-title { font-weight: 700; color: var(--primary-color); font-size: 1.2rem; }
         
         /* Tabela Principal */
-        .card-main { border: none; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        .table-main thead { background: linear-gradient(180deg, #0d6efd, #0b5ed7); color: white; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; }
-        .table-main th { padding: 10px; font-weight: 600; border: none; }
-        .table-hover tbody tr:hover { background-color: #e9ecef; transition: 0.2s; }
+        .table-main thead { background-color: var(--primary-color); color: white; }
+        .table-main th { font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; border: none; padding: 12px; }
+        .table-main td { vertical-align: middle; border-bottom: 1px solid #f0f0f0; padding: 10px; }
+        .table-hover tbody tr:hover { background-color: #f8f9fa; transition: 0.2s; }
         
-        /* Status Badges */
-        .badge-aberto { background-color: #198754; } /* Verde */
-        .badge-fechado { background-color: #6c757d; } /* Cinza */
-        
-        /* Modal e Cascata */
+        /* Detalhes (Modal) */
         .modal-header { background-color: var(--primary-color); color: white; }
-        .group-header { background-color: #e7f1ff; color: #004085; font-weight: bold; border-left: 4px solid #0d6efd; padding: 8px 15px; margin-top: 15px; display: flex; justify-content: space-between; align-items: center; }
-        .group-header.no-result { background-color: #fff3cd; color: #856404; border-left-color: #ffc107; }
-        .table-itens th { font-size: 0.75rem; background-color: #fff; color: #666; }
-        .col-money { text-align: right; font-family: 'Consolas', monospace; font-weight: 600; }
+        .group-container { border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 15px; overflow: hidden; }
+        .group-header { padding: 10px 15px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
         
-        /* Controles */
-        .pagination-container { display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 20px; }
-        .btn-action { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; }
+        /* Cores de Status dos Grupos */
+        .status-winner { background-color: #d1e7dd; color: #0f5132; border-left: 4px solid #198754; } /* Verde */
+        .status-pending { background-color: #fff3cd; color: #664d03; border-left: 4px solid #ffc107; } /* Amarelo */
+        .status-loser { background-color: #f8d7da; color: #842029; border-left: 4px solid #dc3545; }   /* Vermelho (se houver) */
+
+        /* Utilitários */
+        .money { font-family: 'Consolas', monospace; text-align: right; white-space: nowrap; }
+        .badge-date { font-size: 0.75rem; }
+        .text-xs { font-size: 0.75rem; }
     </style>
 </head>
 <body>
 
-<div class="container-fluid py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h4 class="fw-bold text-primary mb-0"><i class="fas fa-crosshairs"></i> Sniper PNCP</h4>
-            <small class="text-muted">Monitoramento de Oportunidades em Saúde</small>
-        </div>
-        <div class="d-flex gap-2">
-            <button class="btn btn-outline-success btn-sm" onclick="abrirModalAdicionar()"><i class="fas fa-plus"></i> Incluir por URL</button>
-            <button class="btn btn-outline-primary btn-sm" onclick="location.reload()"><i class="fas fa-sync"></i> Atualizar</button>
-            <span class="badge bg-dark align-self-center px-3 py-2">Total: <span id="total_count">0</span></span>
-        </div>
+<div class="header-bar sticky-top">
+    <div class="d-flex align-items-center gap-3">
+        <div class="app-title"><i class="fas fa-crosshairs text-danger"></i> Sniper PNCP</div>
+        <span class="badge bg-secondary rounded-pill" id="badgeTotal">0 Licitações</span>
     </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-success" onclick="abrirModalManual()"><i class="fas fa-plus"></i> Add Manual</button>
+        <button class="btn btn-sm btn-primary" onclick="location.reload()"><i class="fas fa-sync-alt"></i> Atualizar</button>
+    </div>
+</div>
 
-    <div class="card card-main mb-3">
-        <div class="card-body p-3">
-            <div class="row g-2">
-                <div class="col-md-2"><input type="text" id="fUf" class="form-control form-control-sm" placeholder="UF" onkeyup="aplicarFiltros()"></div>
-                <div class="col-md-3"><input type="text" id="fOrgao" class="form-control form-control-sm" placeholder="Órgão / Unidade" onkeyup="aplicarFiltros()"></div>
-                <div class="col-md-5"><input type="text" id="fObjeto" class="form-control form-control-sm" placeholder="Objeto (ex: Seringa)" onkeyup="aplicarFiltros()"></div>
-                <div class="col-md-2"><button class="btn btn-secondary btn-sm w-100" onclick="limparFiltros()">Limpar</button></div>
+<div class="main-container">
+    
+    <div class="card-custom p-3 mb-3">
+        <div class="row g-2">
+            <div class="col-md-2">
+                <input type="text" id="fUf" class="form-control form-control-sm" placeholder="UF (ex: SP)" onkeyup="filtrar()">
+            </div>
+            <div class="col-md-3">
+                <input type="text" id="fOrgao" class="form-control form-control-sm" placeholder="Órgão / Cidade" onkeyup="filtrar()">
+            </div>
+            <div class="col-md-5">
+                <input type="text" id="fObjeto" class="form-control form-control-sm" placeholder="Objeto (ex: Seringa)" onkeyup="filtrar()">
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-secondary btn-sm w-100" onclick="limparFiltros()">Limpar</button>
             </div>
         </div>
     </div>
 
-    <div class="card card-main overflow-hidden">
+    <div class="card-custom overflow-hidden">
         <div class="table-responsive">
-            <table class="table table-hover table-main align-middle mb-0">
+            <table class="table table-hover table-main mb-0">
                 <thead>
                     <tr>
-                        <th>Datas (Abertura / Encerramento)</th>
-                        <th>Local (UF)</th>
+                        <th>Datas (Pub / Fim)</th>
+                        <th>UF</th>
                         <th>Órgão / Unidade</th>
                         <th>Objeto</th>
-                        <th>Qtd Itens</th>
-                        <th>Valor Total Est.</th>
+                        <th class="text-center">Itens</th>
+                        <th class="text-end">Valor Global</th>
                         <th class="text-center">Ações</th>
                     </tr>
                 </thead>
-                <tbody id="tableBody"></tbody>
+                <tbody id="tbDados"></tbody>
             </table>
         </div>
-    </div>
-
-    <div class="pagination-container" id="paginationControls">
-        <button class="btn btn-sm btn-outline-primary" onclick="mudarPagina(-1)" id="btnPrev"><i class="fas fa-chevron-left"></i> Anterior</button>
-        <div class="input-group input-group-sm" style="width: 130px;">
-            <span class="input-group-text">Pág</span>
-            <input type="number" class="form-control text-center" id="inputPagina" min="1" onchange="irParaPagina()">
-            <span class="input-group-text" id="totalPaginas"></span>
+        
+        <div class="d-flex justify-content-center align-items-center p-3 gap-2 bg-light border-top">
+            <button class="btn btn-sm btn-outline-secondary" onclick="mudarPag(-1)" id="btnAnt">Anterior</button>
+            <span class="small text-muted">Página <span id="spanPag" class="fw-bold">1</span> de <span id="spanTotalPag">1</span></span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="mudarPag(1)" id="btnProx">Próximo</button>
         </div>
-        <button class="btn btn-sm btn-outline-primary" onclick="mudarPagina(1)" id="btnNext">Próximo <i class="fas fa-chevron-right"></i></button>
     </div>
 </div>
 
-<div class="modal fade" id="modalDetalhes" tabindex="-1">
+<div class="modal fade" id="mdlDetalhes" tabindex="-1">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header py-2">
-                <h5 class="modal-title fs-6"><i class="fas fa-list"></i> Detalhamento da Licitação</h5>
+                <h5 class="modal-title fs-6"><i class="fas fa-list"></i> Detalhes dos Itens</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body bg-light p-2" id="modalBodyContent">
-                </div>
+            <div class="modal-body bg-light" id="mdlBody"></div>
         </div>
     </div>
 </div>
 
-<div class="modal fade" id="modalAdd" tabindex="-1">
+<div class="modal fade" id="mdlManual" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header">
-                <h6 class="modal-title">Adicionar Licitação Manualmente</h6>
+            <div class="modal-header py-2">
+                <h6 class="modal-title">Adicionar por Link</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <p class="small text-muted">Cole a URL completa do edital no PNCP.</p>
-                <input type="text" id="urlManual" class="form-control mb-3" placeholder="https://pncp.gov.br/app/editais/...">
-                <div id="addStatus" class="small"></div>
+                <p class="text-muted small">Cole o link completo do edital no PNCP.</p>
+                <input type="text" id="inpUrl" class="form-control mb-2" placeholder="https://pncp.gov.br/app/editais/...">
+                <div id="statusManual" class="small"></div>
             </div>
-            <div class="modal-footer">
-                <button class="btn btn-primary btn-sm" onclick="processarUrlManual()">Buscar e Incluir</button>
+            <div class="modal-footer py-1">
+                <button class="btn btn-primary btn-sm" onclick="processarManual()">Adicionar</button>
             </div>
         </div>
     </div>
 </div>
 
 <script src="dados/oportunidades.js"></script>
-<script>
-    // --- Configurações ---
-    const ITENS_POR_PAGINA = 20;
-    let paginaAtual = 1;
-    let dadosCompletos = [];
-    let dadosFiltrados = [];
-    
-    // Formatadores
-    const fmtMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-    const fmtData = (str) => str ? new Date(str).toLocaleString('pt-BR').slice(0, 16) : '-';
 
-    // --- Inicialização ---
+<script>
+    // --- Config ---
+    const ITENS_PAG = 20;
+    let pagAtual = 1;
+    let dadosTodos = [];
+    let dadosView = [];
+    
+    const fmtBRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    const fmtData = d => d ? new Date(d).toLocaleDateString('pt-BR') : '--/--';
+
+    // --- Init ---
     window.onload = () => {
-        carregarDados();
+        // Carrega do arquivo JS + LocalStorage (para exclusões/manuais)
+        const base = (typeof dadosLicitacoes !== 'undefined') ? dadosLicitacoes : [];
+        const excluidos = JSON.parse(localStorage.getItem('sniper_excluidos') || '[]');
+        const manuais = JSON.parse(localStorage.getItem('sniper_manuais') || '[]');
+        
+        // Merge dados manuais com base, removendo duplicados por ID
+        const mapa = new Map();
+        base.forEach(d => mapa.set(d.id, d));
+        manuais.forEach(d => mapa.set(d.id, d));
+        
+        // Filtra excluídos e ordena por data fim (mais urgente primeiro)
+        dadosTodos = Array.from(mapa.values())
+            .filter(d => !excluidos.includes(d.id))
+            .sort((a,b) => (b.data_encerramento_proposta || '').localeCompare(a.data_encerramento_proposta || ''));
+            
+        dadosView = [...dadosTodos];
+        render();
     };
 
-    function carregarDados() {
-        // 1. Carrega do Arquivo JS
-        let dadosArquivo = (typeof dadosLicitacoes !== 'undefined') ? dadosLicitacoes : [];
+    // --- Render Tabela ---
+    function render() {
+        const tb = document.getElementById('tbDados');
+        tb.innerHTML = '';
         
-        // 2. Carrega do LocalStorage (Exclusões e Adições Manuais)
-        const excluidos = JSON.parse(localStorage.getItem('pncp_excluidos') || '[]');
-        const adicionados = JSON.parse(localStorage.getItem('pncp_adicionados') || '[]');
-        
-        // 3. Mescla Adições
-        // Verifica duplicidade pelo ID antes de adicionar
-        adicionados.forEach(add => {
-            if (!dadosArquivo.find(d => d.id === add.id)) {
-                dadosArquivo.unshift(add); // Adiciona no topo
-            }
-        });
+        const totalPags = Math.ceil(dadosView.length / ITENS_PAG) || 1;
+        if (pagAtual > totalPags) pagAtual = totalPags;
+        if (pagAtual < 1) pagAtual = 1;
 
-        // 4. Aplica Exclusões
-        dadosCompletos = dadosArquivo.filter(d => !excluidos.includes(d.id));
-        
-        dadosFiltrados = [...dadosCompletos];
-        renderizarTabela();
-    }
-
-    // --- Renderização Principal ---
-    function renderizarTabela() {
-        const tbody = document.getElementById('tableBody');
-        tbody.innerHTML = '';
-        
-        const totalPags = Math.ceil(dadosFiltrados.length / ITENS_POR_PAGINA) || 1;
-        if (paginaAtual > totalPags) paginaAtual = totalPags;
-        if (paginaAtual < 1) paginaAtual = 1;
-
-        const inicio = (paginaAtual - 1) * ITENS_POR_PAGINA;
-        const fim = inicio + ITENS_POR_PAGINA;
-        const lote = dadosFiltrados.slice(inicio, fim);
+        const inicio = (pagAtual - 1) * ITENS_PAG;
+        const fim = inicio + ITENS_PAG;
+        const lote = dadosView.slice(inicio, fim);
 
         lote.forEach(d => {
-            // Lógica de Datas e Status
-            const agora = new Date();
-            const encerramento = d.data_encerramento_proposta ? new Date(d.data_encerramento_proposta) : null;
-            const isAberto = encerramento && encerramento > agora;
-            const badgeClass = isAberto ? 'badge-aberto' : 'badge-fechado';
+            // Lógica de Data e Status
+            const hoje = new Date().toISOString().split('T')[0];
+            const fimRaw = d.data_encerramento_proposta ? d.data_encerramento_proposta.split('T')[0] : '9999-12-31';
+            const corData = fimRaw >= hoje ? 'text-success' : 'text-danger';
             
-            // Tratamento de Valor
-            let valorTexto = d.is_sigiloso ? '<span class="text-muted fst-italic"><i class="fas fa-lock"></i> Sigiloso</span>' : fmtMoeda.format(d.valor_total_estimado);
+            // Valor: Se sigiloso ou 0, mostra aviso
+            const val = (d.is_sigiloso || d.valor_total_estimado == 0) 
+                ? '<span class="text-muted small"><i class="fas fa-lock"></i> Sigiloso/R$0</span>' 
+                : fmtBRL.format(d.valor_total_estimado);
 
-            tbody.innerHTML += `
+            tb.innerHTML += `
                 <tr>
                     <td>
-                        <div class="small text-muted"><i class="far fa-calendar-check"></i> Abre: ${fmtData(d.data_abertura_proposta)}</div>
-                        <div class="fw-bold text-dark mt-1"><i class="far fa-clock"></i> Fim: ${fmtData(d.data_encerramento_proposta)}</div>
+                        <div class="text-muted text-xs">Pub: ${fmtData(d.data_pub)}</div>
+                        <div class="${corData} fw-bold text-xs">Fim: ${fmtData(d.data_encerramento_proposta)}</div>
                     </td>
-                    <td><b>${d.uf}</b><br><small>${d.cidade}</small></td>
+                    <td><b>${d.uf}</b></td>
                     <td>
-                        <div class="fw-bold text-primary text-truncate" style="max-width: 200px" title="${d.orgao}">${d.orgao}</div>
-                        <div class="small text-muted text-truncate" style="max-width: 200px" title="${d.unidade_compradora}">${d.unidade_compradora}</div>
+                        <div class="fw-bold text-truncate" style="max-width:200px" title="${d.orgao}">${d.orgao}</div>
+                        <div class="text-muted text-xs text-truncate" style="max-width:200px">${d.unidade} - ${d.cidade}</div>
                     </td>
-                    <td><div class="text-truncate" style="max-width: 250px" title="${d.objeto}">${d.objeto}</div></td>
+                    <td><div class="text-truncate" style="max-width:250px" title="${d.objeto}">${d.objeto}</div></td>
                     <td class="text-center"><span class="badge bg-light text-dark border">${d.qtd_total_itens}</span></td>
-                    <td class="fw-bold">${valorTexto}</td>
+                    <td class="text-end fw-bold text-primary">${val}</td>
                     <td class="text-center">
-                        <button class="btn btn-sm btn-primary btn-action" title="Ver Detalhes" onclick="abrirDetalhes('${d.id}')"><i class="fas fa-eye"></i></button>
-                        <a href="${d.link_pncp}" target="_blank" class="btn btn-sm btn-outline-secondary btn-action" title="Abrir no PNCP"><i class="fas fa-external-link-alt"></i></a>
-                        <button class="btn btn-sm btn-outline-danger btn-action" title="Excluir" onclick="excluirLicitação('${d.id}')"><i class="fas fa-trash"></i></button>
+                        <button class="btn btn-sm btn-outline-primary border-0" onclick="detalhes('${d.id}')" title="Ver Itens"><i class="fas fa-eye"></i></button>
+                        <a href="${d.link_pncp}" target="_blank" class="btn btn-sm btn-outline-secondary border-0"><i class="fas fa-external-link-alt"></i></a>
+                        <button class="btn btn-sm btn-outline-danger border-0" onclick="excluir('${d.id}')"><i class="fas fa-trash"></i></button>
                     </td>
                 </tr>
             `;
         });
 
-        // Atualiza Controles
-        document.getElementById('total_count').innerText = dadosFiltrados.length;
-        document.getElementById('totalPaginas').innerText = `/ ${totalPags}`;
-        document.getElementById('inputPagina').value = paginaAtual;
-        document.getElementById('inputPagina').max = totalPags;
-        document.getElementById('btnPrev').disabled = paginaAtual === 1;
-        document.getElementById('btnNext').disabled = paginaAtual >= totalPags;
+        // Atualiza Labels
+        document.getElementById('badgeTotal').innerText = `${dadosView.length} Licitações`;
+        document.getElementById('spanPag').innerText = pagAtual;
+        document.getElementById('spanTotalPag').innerText = totalPags;
+        document.getElementById('btnAnt').disabled = pagAtual === 1;
+        document.getElementById('btnProx').disabled = pagAtual >= totalPags;
     }
 
-    // --- Detalhes em Cascata (Agrupamento) ---
-    function abrirDetalhes(id) {
-        const item = dadosCompletos.find(d => d.id === id);
-        if (!item) return;
+    // --- Modal Detalhes (Cascata) ---
+    function detalhes(id) {
+        const item = dadosTodos.find(d => d.id === id);
+        if(!item) return;
 
-        const modalBody = document.getElementById('modalBodyContent');
-        modalBody.innerHTML = '';
+        const corpo = document.getElementById('mdlBody');
+        corpo.innerHTML = '';
         
-        // Agrupa os itens
+        // Agrupamento
         const grupos = {};
         item.itens.forEach(i => {
-            // Chave de agrupamento: Fornecedor (se tiver) ou Situação
-            let chave = i.tem_resultado ? (i.fornecedor || 'Fornecedor S/ Nome') : (i.situacao || 'Sem Resultado');
-            // Separar o que é Sucesso do que é Fracasso
-            if (!i.tem_resultado) chave = `⚠️ ${chave}`; // Prefixo para ordenar no final
-            
+            // Chave de agrupamento: Fornecedor
+            let chave = i.fornecedor || 'SEM INFORMAÇÃO';
             if (!grupos[chave]) grupos[chave] = [];
             grupos[chave].push(i);
         });
 
-        // Ordena chaves (Vencedores primeiro)
-        const chavesOrdenadas = Object.keys(grupos).sort();
+        // Ordenação: Itens "EM ANDAMENTO" primeiro, depois vencedores
+        const chavesOrdenadas = Object.keys(grupos).sort((a, b) => {
+            if (a.includes('EM ANDAMENTO')) return -1;
+            if (b.includes('EM ANDAMENTO')) return 1;
+            return a.localeCompare(b);
+        });
 
         chavesOrdenadas.forEach(chave => {
             const lista = grupos[chave];
-            const isSemResultado = chave.startsWith('⚠️');
-            
-            let htmlGrupo = `
-                <div class="card mb-3 border-0 shadow-sm">
-                    <div class="group-header ${isSemResultado ? 'no-result' : ''}">
-                        <span><i class="fas ${isSemResultado ? 'fa-exclamation-circle' : 'fa-trophy'}"></i> ${chave}</span>
-                        <span class="badge bg-white text-dark">${lista.length} itens</span>
+            // Estilização baseada no status
+            const isPendente = chave.includes('EM ANDAMENTO') || chave.includes('SEM RESULTADO');
+            const classeHeader = isPendente ? 'status-pending' : 'status-winner';
+            const icone = isPendente ? 'fa-clock' : 'fa-trophy';
+            const rotuloValor = isPendente ? 'Estimado' : 'Homologado';
+
+            let html = `
+                <div class="group-container">
+                    <div class="group-header ${classeHeader}">
+                        <span><i class="fas ${icone} me-2"></i> ${chave}</span>
+                        <span class="badge bg-white text-dark border">${lista.length} Itens</span>
                     </div>
                     <div class="table-responsive">
-                        <table class="table table-sm table-bordered mb-0 table-itens align-middle">
-                            <thead>
+                        <table class="table table-sm table-striped mb-0">
+                            <thead class="table-light">
                                 <tr>
-                                    <th style="width:5%">#</th>
-                                    <th>Descrição do Item</th>
-                                    <th style="width:5%">Qtd</th>
-                                    <th class="col-money">Est. Unit.</th>
-                                    <th class="col-money">Est. Total</th>
-                                    ${!isSemResultado ? '<th class="col-money text-success bg-light">Contr. Unit.</th><th class="col-money text-success bg-light">Contr. Total</th>' : ''}
+                                    <th style="width:50px">Item</th>
+                                    <th>Descrição</th>
+                                    <th class="text-center" style="width:60px">Qtd</th>
+                                    <th class="money">Unit. (${rotuloValor})</th>
+                                    <th class="money">Total (${rotuloValor})</th>
                                 </tr>
                             </thead>
                             <tbody>
             `;
 
             lista.forEach(i => {
-                htmlGrupo += `
+                html += `
                     <tr>
-                        <td class="text-center">${i.item}</td>
-                        <td>${i.descricao}</td>
+                        <td class="text-center fw-bold">${i.item}</td>
+                        <td>${i.desc}</td>
                         <td class="text-center">${i.qtd}</td>
-                        <td class="col-money text-muted">${fmtMoeda.format(i.val_est_unit)}</td>
-                        <td class="col-money text-muted">${fmtMoeda.format(i.val_est_total)}</td>
-                        ${!isSemResultado ? `
-                            <td class="col-money fw-bold text-success bg-light">${fmtMoeda.format(i.val_contr_unit)}</td>
-                            <td class="col-money fw-bold text-success bg-light">${fmtMoeda.format(i.val_contr_total)}</td>
-                        ` : ''}
+                        <td class="money">${fmtBRL.format(i.unitario)}</td>
+                        <td class="money fw-bold">${fmtBRL.format(i.total)}</td>
                     </tr>
                 `;
             });
 
-            htmlGrupo += `</tbody></table></div></div>`;
-            modalBody.innerHTML += htmlGrupo;
+            html += `</tbody></table></div></div>`;
+            corpo.innerHTML += html;
         });
 
-        new bootstrap.Modal(document.getElementById('modalDetalhes')).show();
+        new bootstrap.Modal(document.getElementById('mdlDetalhes')).show();
     }
 
-    // --- Funcionalidades Extras ---
-    
-    function excluirLicitação(id) {
-        if (!confirm('Deseja remover esta licitação da visualização?')) return;
-        
-        // Salva no localStorage
-        const excluidos = JSON.parse(localStorage.getItem('pncp_excluidos') || '[]');
+    // --- Filtros ---
+    function filtrar() {
+        const u = document.getElementById('fUf').value.toUpperCase();
+        const o = document.getElementById('fOrgao').value.toUpperCase();
+        const b = document.getElementById('fObjeto').value.toUpperCase();
+
+        dadosView = dadosTodos.filter(d => 
+            (d.uf||'').includes(u) &&
+            ((d.orgao||'').toUpperCase().includes(o) || (d.cidade||'').toUpperCase().includes(o)) &&
+            (d.objeto||'').toUpperCase().includes(b)
+        );
+        pagAtual = 1; render();
+    }
+
+    function limparFiltros() {
+        document.querySelectorAll('input').forEach(i => i.value = '');
+        dadosView = [...dadosTodos];
+        pagAtual = 1; render();
+    }
+
+    function mudarPag(d) { pagAtual += d; render(); }
+
+    // --- Ações ---
+    function excluir(id) {
+        if(!confirm('Ocultar esta licitação da lista?')) return;
+        const excluidos = JSON.parse(localStorage.getItem('sniper_excluidos') || '[]');
         excluidos.push(id);
-        localStorage.setItem('pncp_excluidos', JSON.stringify(excluidos));
-        
-        // Remove da memória e re-renderiza
-        carregarDados();
+        localStorage.setItem('sniper_excluidos', JSON.stringify(excluidos));
+        window.onload(); // Recarrega
     }
 
-    function abrirModalAdicionar() {
-        new bootstrap.Modal(document.getElementById('modalAdd')).show();
-    }
+    // --- Adição Manual (Simulação Client-Side) ---
+    function abrirModalManual() { new bootstrap.Modal(document.getElementById('mdlManual')).show(); }
 
-    async function processarUrlManual() {
-        const url = document.getElementById('urlManual').value;
-        const statusDiv = document.getElementById('addStatus');
-        statusDiv.innerHTML = '<span class="text-primary"><i class="fas fa-spinner fa-spin"></i> Consultando API...</span>';
+    async function processarManual() {
+        const url = document.getElementById('inpUrl').value;
+        const divSts = document.getElementById('statusManual');
+        divSts.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando dados...';
 
-        // Extrair IDs da URL (Regex)
-        // Padrão: .../app/editais/CNPJ/ANO/SEQ
         const match = url.match(/editais\/(\d+)\/(\d+)\/(\d+)/);
-        if (!match) {
-            statusDiv.innerHTML = '<span class="text-danger">URL inválida. Use o formato do PNCP.</span>';
-            return;
-        }
+        if(!match) { divSts.innerHTML = '<span class="text-danger">Link inválido.</span>'; return; }
 
         const [_, cnpj, ano, seq] = match;
         const apiUrl = `https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/${cnpj}/${ano}/${seq}`;
 
         try {
-            // 1. Busca Cabeçalho
-            const resCabecalho = await fetch(apiUrl);
-            if (!resCabecalho.ok) throw new Error('Licitação não encontrada na API.');
-            const lic = await resCabecalho.json();
-
-            // 2. Busca Itens (Simplificado para o frontend - igual lógica do Python)
-            const resItens = await fetch(`${apiUrl}/itens?pagina=1&tamanhoPagina=100`);
-            const itensRaw = resItens.ok ? await resItens.json() : [];
+            // Busca Cabeçalho
+            const r1 = await fetch(apiUrl);
+            if(!r1.ok) throw new Error('Licitação não encontrada.');
+            const d = await r1.json();
             
-            // Monta objeto compatível
-            const novoObj = {
+            // Busca Itens (Simplificado para JS)
+            const r2 = await fetch(`${apiUrl}/itens?pagina=1&tamanhoPagina=50`);
+            const itensRaw = r2.ok ? await r2.json() : [];
+
+            // Monta Objeto compatível com o Python
+            const novo = {
                 id: `${cnpj}${ano}${seq}`,
-                orgao: lic.orgaoEntidade?.razaoSocial,
-                unidade_compradora: lic.unidadeOrgao?.nomeUnidade || "Manual",
-                cidade: lic.unidadeOrgao?.municipioNome || "Manual",
-                uf: lic.unidadeOrgao?.ufSigla || "--",
-                objeto: lic.objetoCompra,
-                data_abertura_proposta: lic.dataAberturaProposta,
-                data_encerramento_proposta: lic.dataEncerramentoProposta,
-                valor_total_estimado: lic.valorTotalEstimado || 0,
-                qtd_total_itens: lic.quantidadeItens || itensRaw.length,
-                is_sigiloso: lic.niValorTotalEstimado,
+                uf: d.unidadeOrgao?.ufSigla || 'BR',
+                cidade: d.unidadeOrgao?.municipioNome || 'Manual',
+                unidade: d.unidadeOrgao?.nomeUnidade || 'Manual',
+                orgao: d.orgaoEntidade?.razaoSocial,
+                objeto: d.objetoCompra,
+                data_pub: d.dataPublicacaoPncp,
+                data_encerramento_proposta: d.dataEncerramentoProposta,
+                valor_total_estimado: d.valorTotalEstimado,
+                is_sigiloso: d.niValorTotalEstimado,
+                qtd_total_itens: itensRaw.length,
                 link_pncp: url,
                 itens: itensRaw.map(i => ({
-                    item: i.numeroItem, descricao: i.descricao, qtd: i.quantidade,
-                    val_est_unit: i.valorUnitarioEstimado, val_est_total: i.valorTotalEstimado,
-                    tem_resultado: false, situacao: 'Importado Manualmente'
+                    item: i.numeroItem,
+                    desc: i.descricao,
+                    qtd: i.quantidade,
+                    unitario: i.valorUnitarioEstimado,
+                    total: i.valorTotalEstimado,
+                    fornecedor: "EM ANDAMENTO (MANUAL)",
+                    vitoria: false
                 }))
             };
 
-            // Salva no LocalStorage
-            const adicionados = JSON.parse(localStorage.getItem('pncp_adicionados') || '[]');
-            adicionados.push(novoObj);
-            localStorage.setItem('pncp_adicionados', JSON.stringify(adicionados));
-
-            statusDiv.innerHTML = '<span class="text-success">Adicionado com sucesso! Recarregando...</span>';
+            const manuais = JSON.parse(localStorage.getItem('sniper_manuais') || '[]');
+            manuais.push(novo);
+            localStorage.setItem('sniper_manuais', JSON.stringify(manuais));
+            
+            divSts.innerHTML = '<span class="text-success">Sucesso! Recarregando...</span>';
             setTimeout(() => location.reload(), 1000);
 
         } catch (e) {
-            statusDiv.innerHTML = `<span class="text-danger">Erro: ${e.message}</span>`;
+            divSts.innerHTML = `<span class="text-danger">Erro: ${e.message}</span>`;
         }
-    }
-
-    // --- Filtros e Navegação ---
-    function aplicarFiltros() {
-        const u = document.getElementById('fUf').value.toUpperCase();
-        const o = document.getElementById('fOrgao').value.toUpperCase();
-        const b = document.getElementById('fObjeto').value.toUpperCase();
-
-        dadosFiltrados = dadosCompletos.filter(d => 
-            (d.uf || '').includes(u) &&
-            ((d.orgao || '').toUpperCase().includes(o) || (d.unidade_compradora || '').toUpperCase().includes(o)) &&
-            (d.objeto || '').toUpperCase().includes(b)
-        );
-        paginaAtual = 1;
-        renderizarTabela();
-    }
-
-    function limparFiltros() {
-        document.querySelectorAll('input[type=text]').forEach(i => i.value = '');
-        dadosFiltrados = [...dadosCompletos];
-        paginaAtual = 1;
-        renderizarTabela();
-    }
-
-    function mudarPagina(d) { paginaAtual += d; renderizarTabela(); window.scrollTo(0,0); }
-    function irParaPagina() {
-        paginaAtual = parseInt(document.getElementById('inputPagina').value);
-        renderizarTabela();
     }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
