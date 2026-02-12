@@ -1,4 +1,4 @@
-import requests, json, os, time, urllib3, concurrent.futures, unicodedata
+import requests, json, os, time, urllib3, unicodedata
 from datetime import datetime, timedelta
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -7,7 +7,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # === CONFIGURAÇÕES ===
 ARQ_DADOS = 'dados/oportunidades.js'
-ARQ_MANUAIS = 'urls.txt'  # Arquivo para entrada manual
+ARQ_MANUAIS = 'urls.txt'
 
 # Filtros
 KEYWORDS_SAUDE = ["MEDICAMENTO", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGICO", "HIGIENE", "DESCARTAVEL", "SERINGA", "AGULHA", "LUVAS", "GAZE", "ALGODAO"]
@@ -30,97 +30,91 @@ def capturar_detalhes(session, cnpj, ano, seq):
     url_base = f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{cnpj}/{ano}/{seq}"
     itens_map = {}
 
-    # 1. Busca Itens (Edital)
+    # 1. Busca ITENS (Dados do Edital - Estimados)
     try:
         r = session.get(f"{url_base}/itens", params={"pagina":1, "tamanhoPagina":500}, timeout=20)
         if r.status_code == 200:
             for i in r.json():
-                num = i['numeroItem']
-                # CÁLCULO MANUAL DO TOTAL (Qtd * Unitário) se a API falhar
-                qtd = i.get('quantidade', 0)
-                unit = i.get('valorUnitarioEstimado', 0)
-                total = i.get('valorTotalEstimado', 0)
-                if total == 0 and qtd > 0 and unit > 0:
-                    total = round(qtd * unit, 2)
+                num = int(i['numeroItem']) # Força Inteiro para ordenar corretamente
+                
+                # Garante valores numéricos float
+                qtd = float(i.get('quantidade') or 0)
+                unit_est = float(i.get('valorUnitarioEstimado') or 0)
+                total_est = float(i.get('valorTotalEstimado') or 0)
+
+                # Se o total vier zerado da API, calcula manualmente
+                if total_est == 0 and qtd > 0 and unit_est > 0:
+                    total_est = round(qtd * unit_est, 2)
 
                 itens_map[num] = {
                     "item": num,
                     "desc": i.get('descricao', 'Sem descrição'),
                     "qtd": qtd,
-                    "unitario": unit,
-                    "total": total, # Agora calculado corretamente
+                    "unitario_est": unit_est, # Valor Estimado
+                    "total_est": total_est,   # Valor Estimado
                     "situacao": "ABERTO",
                     "tem_resultado": False,
                     "fornecedor": "EM ANDAMENTO",
-                    "homologado_unit": 0,
-                    "homologado_total": 0
+                    "unitario_hom": 0.0,      # Valor Homologado (Vazio por enquanto)
+                    "total_hom": 0.0
                 }
     except: pass
 
-    # 2. Busca Resultados (Homologação)
+    # 2. Busca RESULTADOS (Dados da Homologação)
     try:
         r = session.get(f"{url_base}/resultados", params={"pagina":1, "tamanhoPagina":500}, timeout=20)
         if r.status_code == 200:
             for res in r.json():
-                num = res['numeroItem']
+                num = int(res['numeroItem'])
+                
+                # Se o item não existia (item fantasma), cria agora
                 if num not in itens_map:
-                    # Item fantasma (só no resultado)
                     itens_map[num] = {
                         "item": num,
                         "desc": res.get('descricaoItem', 'Item Resultado'),
-                        "qtd": res.get('quantidadeHomologada', 0),
-                        "unitario": res.get('valorUnitarioHomologado', 0),
-                        "total": res.get('valorTotalHomologado', 0),
+                        "qtd": float(res.get('quantidadeHomologada') or 0),
+                        "unitario_est": float(res.get('valorUnitarioHomologado') or 0), # Assume igual se não tinha
+                        "total_est": float(res.get('valorTotalHomologado') or 0),
                         "situacao": "HOMOLOGADO",
                         "tem_resultado": True,
-                        "fornecedor": "", "homologado_unit": 0, "homologado_total": 0
+                        "fornecedor": "", "unitario_hom": 0.0, "total_hom": 0.0
                     }
                 
                 # Atualiza com dados do vencedor
                 itens_map[num]['tem_resultado'] = True
                 itens_map[num]['situacao'] = "HOMOLOGADO"
                 itens_map[num]['fornecedor'] = res.get('nomeRazaoSocialFornecedor', 'VENCEDOR ANÔNIMO')
-                itens_map[num]['homologado_unit'] = res.get('valorUnitarioHomologado', 0)
-                itens_map[num]['homologado_total'] = res.get('valorTotalHomologado', 0)
+                itens_map[num]['unitario_hom'] = float(res.get('valorUnitarioHomologado') or 0)
+                itens_map[num]['total_hom'] = float(res.get('valorTotalHomologado') or 0)
     except: pass
 
+    # Ordena pelo número do item (1, 2, 3...)
     return sorted(list(itens_map.values()), key=lambda x: x['item'])
 
 def processar_urls_manuais(session, banco):
-    """ Lê urls.txt e força a busca dessas licitações """
     if not os.path.exists(ARQ_MANUAIS): return 0
     print("🔎 Processando URLs manuais...")
-    
     with open(ARQ_MANUAIS, 'r') as f:
         urls = [line.strip() for line in f.readlines() if 'pncp.gov.br' in line]
     
     count = 0
     for url in urls:
         try:
-            # Extrai IDs da URL
             parts = url.split('/editais/')[1].split('/')
             if len(parts) < 3: continue
             cnpj, ano, seq = parts[0], parts[1], parts[2]
             id_lic = f"{cnpj}{ano}{seq}"
             
-            # Se já tem e tem itens, pula (exceto se quiser forçar atualização)
-            if id_lic in banco and len(banco[id_lic]['itens']) > 0: continue
-
-            # Busca Cabeçalho
+            # Força atualização se for manual
             api_url = f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{cnpj}/{ano}/{seq}"
             resp = session.get(api_url, timeout=15)
             if resp.status_code != 200: continue
             lic = resp.json()
-
-            # Processa igual ao fluxo normal
             itens = capturar_detalhes(session, cnpj, ano, seq)
-            
             banco[id_lic] = montar_objeto_licitacao(lic, itens, url)
             count += 1
             print(f"   + Manual Adicionado: {id_lic}")
-        except Exception as e:
-            print(f"   Erro URL manual {url}: {e}")
-    
+        except: pass
     return count
 
 def montar_objeto_licitacao(lic, itens, link_manual=None):
@@ -141,18 +135,17 @@ def montar_objeto_licitacao(lic, itens, link_manual=None):
         "objeto": lic.get('objetoCompra'),
         "edital": f"{lic.get('numeroCompra')}/{ano}",
         "uasg": unidade.get('codigoUnidade') or "---",
-        "valor_global": lic.get('valorTotalEstimado', 0),
+        "valor_global": float(lic.get('valorTotalEstimado') or 0), # Garante float
         "is_sigiloso": lic.get('niValorTotalEstimado', False),
-        "qtd_itens": len(itens),
+        "qtd_itens": len(itens), # Nome da variável corrigido para o HTML
         "link": link_manual or f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
         "itens": itens
     }
 
 def run():
     session = criar_sessao()
-    
-    # 1. Carrega Banco Existente
     banco = {}
+    
     if os.path.exists(ARQ_DADOS):
         try:
             with open(ARQ_DADOS, 'r', encoding='utf-8') as f:
@@ -160,45 +153,32 @@ def run():
                 if raw: banco = {i['id']: i for i in json.loads(raw)}
         except: pass
 
-    # 2. Define o Período de Busca (Lógica do Agendamento)
-    modo = os.getenv('MODE', 'DAILY') # Default para DAILY se não especificado
-    
+    modo = os.getenv('MODE', 'DAILY')
     hoje = datetime.now()
     
     if modo == 'FULL':
-        # Busca Quinzenal: de 01/01/2026 até Hoje
         dt_inicio = datetime(2026, 1, 1)
         dt_fim = hoje
-        print("📆 MODO COMPLETO (FULL): Varrendo de 01/01/2026 até hoje para atualizar resultados.")
+        print("📆 MODO FULL (Quinzenal): Atualizando histórico completo.")
     else:
-        # Busca Diária: Apenas o dia anterior (Ontem)
-        # Isso garante que pegamos o dia fechado às 08:00 da manhã
         ontem = hoje - timedelta(days=1)
         dt_inicio = ontem
         dt_fim = ontem
-        print(f"📆 MODO DIÁRIO: Varrendo apenas {ontem.strftime('%d/%m/%Y')}.")
+        print(f"📆 MODO DAILY: Varrendo {ontem.strftime('%d/%m/%Y')}.")
 
-    # 3. Executa a Varredura
     delta = dt_fim - dt_inicio
     dias_para_processar = [dt_inicio + timedelta(days=i) for i in range(delta.days + 1)]
     
     novos = 0
-    
-    # Processa URLs Manuais Primeiro
     novos += processar_urls_manuais(session, banco)
 
     for data_atual in dias_para_processar:
         str_data = data_atual.strftime('%Y%m%d')
-        print(f"   > Analisando dia: {str_data}")
-        
+        print(f"   > Varrendo: {str_data}")
         pagina = 1
         while True:
             url = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
-            params = {
-                "dataInicial": str_data, "dataFinal": str_data,
-                "codigoModalidadeContratacao": "6", "pagina": pagina, "tamanhoPagina": 50
-            }
-            
+            params = {"dataInicial": str_data, "dataFinal": str_data, "codigoModalidadeContratacao": "6", "pagina": pagina, "tamanhoPagina": 50}
             try:
                 r = session.get(url, params=params, timeout=20)
                 if r.status_code != 200: break
@@ -212,24 +192,18 @@ def run():
                         seq = lic.get('sequencialCompra')
                         id_lic = f"{cnpj}{ano}{seq}"
 
-                        # Lógica de Atualização:
-                        # Se MODO=FULL: Atualiza TUDO (para pegar resultados novos em licitações antigas)
-                        # Se MODO=DAILY: Só adiciona se não existir
                         if modo == 'FULL' or id_lic not in banco:
                             itens = capturar_detalhes(session, cnpj, ano, seq)
-                            if itens: # Só salva se tiver itens
+                            if itens:
                                 banco[id_lic] = montar_objeto_licitacao(lic, itens)
                                 novos += 1
-                                # Sleep leve para não travar no FULL
-                                if modo == 'FULL': time.sleep(0.1) 
-
+                                if modo == 'FULL': time.sleep(0.05)
                 pagina += 1
             except: break
 
-    print(f"✅ Processamento concluído. {novos} registros atualizados/novos.")
-
-    # 4. Salva JS Final
+    print(f"✅ Fim. {novos} atualizações.")
     lista = sorted(list(banco.values()), key=lambda x: x.get('data_encerramento') or '', reverse=True)
+    
     os.makedirs('dados', exist_ok=True)
     with open(ARQ_DADOS, 'w', encoding='utf-8') as f:
         f.write(f"const dadosLicitacoes = {json.dumps(lista, indent=4, ensure_ascii=False)};")
