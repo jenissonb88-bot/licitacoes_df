@@ -1,4 +1,4 @@
-import requests, json, os, time, urllib3, concurrent.futures, zipfile, unicodedata
+import requests, json, os, time, urllib3, concurrent.futures, unicodedata
 from datetime import datetime, timedelta
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -8,8 +8,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # === CONFIGURAÇÕES ===
 CNPJ_ALVO = "08778201000126"   # DROGAFONTE
-ARQ_ZIP = 'dados_pncp.zip'
-ARQ_JSON_INTERNO = 'dados_pncp.json'
+ARQ_DADOS = 'dados/oportunidades.js'  # ARQUIVO QUE O GITHUB ESPERA
 ARQ_CHECKPOINT = 'checkpoint.txt'
 
 # === FILTROS ===
@@ -17,11 +16,13 @@ KEYWORDS_SAUDE = [
     "MEDICAMENTO", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGICO", 
     "HIGIENE", "DESCARTAVEL", "SERINGA", "AGULHA", "LUVAS", "GAZE", "ALGODAO"
 ]
+
+# Lista de palavras para excluir (Atualizada)
 BLACKLIST = [
     "ESCOLAR", "CONSTRUCAO", "AUTOMOTIVO", "OBRA", "VEICULO", "REFEICAO", 
     "LANCHE", "ALIMENTICIO", "MOBILIARIO", "TI", "INFORMATICA", "PNEU", 
     "ESTANTE", "CADEIRA", "RODOVIARIO", "PAVIMENTACAO", 
-    "SERVICO", "LOCACAO", "COMODATO", "EXAME"  # Novos termos adicionados
+    "SERVICO", "LOCACAO", "COMODATO", "EXAME"
 ]
 
 # Lista Exata de Estados Solicitados
@@ -47,7 +48,7 @@ def capturar_vencedores(session, it, url_base):
     num = it.get('numeroItem')
     desc = it.get('descricao', '')
     
-    # Filtro de Blacklist no item (aplica as novas palavras aqui também)
+    # Filtro de Blacklist no item
     if any(b in normalize(desc) for b in BLACKLIST): return None
 
     # Objeto padrão: Item Aberto / Em Andamento (Usa valores ESTIMADOS)
@@ -87,9 +88,9 @@ def capturar_vencedores(session, it, url_base):
                     })
                 return resultados
     except:
-        pass # Se der erro na API de resultados, falha silenciosamente e usa o estimado
+        pass 
     
-    # Se não tem resultado ou deu erro, retorna o item estimado para não perder a informação
+    # Se não tem resultado ou deu erro, retorna o item estimado
     return [item_padrao]
 
 def set_github_output(key, value):
@@ -103,34 +104,28 @@ def run():
     session.mount("https://", HTTPAdapter(max_retries=retries))
     
     # 1. Checkpoint
-    cp = open(ARQ_CHECKPOINT).read().strip() if os.path.exists(ARQ_CHECKPOINT) else "20250101"
+    cp = open(ARQ_CHECKPOINT).read().strip() if os.path.exists(ARQ_CHECKPOINT) else "20260101"
     try: data_atual = datetime.strptime(cp, '%Y%m%d')
     except: data_atual = datetime.now()
 
-    if data_atual.date() >= datetime.now().date():
+    if data_atual.date() > datetime.now().date():
         print("📅 Dados atualizados até hoje.")
         set_github_output("CONTINUAR_EXECUCAO", "false")
         return
 
     print(f"🚀 Sniper PNCP | Processando: {data_atual.strftime('%d/%m/%Y')}")
 
-    # 2. Carregar e Limpar Banco Antigo
+    # 2. Carregar Banco Antigo (lendo o JS existente)
     banco = {}
-    if os.path.exists(ARQ_ZIP):
+    if os.path.exists(ARQ_DADOS):
         try:
-            with zipfile.ZipFile(ARQ_ZIP, 'r') as z:
-                if ARQ_JSON_INTERNO in z.namelist():
-                    dados_brutos = json.load(z.open(ARQ_JSON_INTERNO))
-                    print(f"📦 Carregados {len(dados_brutos)} registros antigos.")
-                    mantidos = 0
-                    for l in dados_brutos:
-                        if l.get('uf') in UFS_ALVO and eh_relevante(l.get('objeto')):
-                            chave = l.get('id') or l.get('id_licitacao')
-                            if chave: 
-                                banco[chave] = l
-                                mantidos += 1
-                    print(f"🧹 Base limpa: {mantidos} mantidos.")
-        except Exception as e: print(f"⚠️ Erro ZIP: {e}")
+            with open(ARQ_DADOS, 'r', encoding='utf-8') as f:
+                content = f.read().replace('const dadosLicitacoes = ', '').rstrip(';')
+                if content:
+                    dados_antigos = json.loads(content)
+                    # Converte lista para dict para facilitar atualização
+                    banco = {l['id']: l for l in dados_antigos}
+        except Exception as e: print(f"⚠️ Erro ao ler JS antigo: {e}")
 
     # 3. Coleta do Dia
     pagina = 1
@@ -173,19 +168,13 @@ def run():
                         num_compra = lic.get('numeroCompra')
                         str_edital = f"Edital nº {num_compra}/{ano}" if (num_compra and ano) else "Edital S/N"
                         str_uasg = str(unidade_orgao.get('codigoUnidade') or "---")
-                        
-                        # NOVOS CAMPOS: CIDADE E UNIDADE
                         str_cidade = unidade_orgao.get('municipioNome') or ""
                         str_unidade_compradora = unidade_orgao.get('nomeUnidade') or ""
 
-                        # Data de Atualização
-                        raw_dt_att = lic.get('dataAtualizacao', '')
-                        try:
-                            dt_obj = datetime.fromisoformat(str(raw_dt_att))
-                            str_att = dt_obj.strftime('%Y%m%d')
-                        except:
-                            str_att = data_atual.strftime('%Y%m%d')
-                        
+                        # Data de Atualização e Publicação
+                        data_pub = lic.get('dataPublicacaoPncp')
+                        data_enc = lic.get('dataEncerramentoProposta')
+
                         # --- PAGINAÇÃO DE ITENS ---
                         url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
                         lista_itens_completa = []
@@ -209,20 +198,23 @@ def run():
                                 res = f.result()
                                 if res: itens_finais.extend(res)
                         
-                        # Salva se tiver itens (agora inclui itens sem resultado)
+                        # Salva se tiver itens
                         if itens_finais:
                             banco[id_lic] = {
                                 "id": id_lic,
                                 "uf": uf_sigla,
                                 "cidade": str_cidade,
                                 "unidade": str_unidade_compradora,
-                                "data": data_atual.strftime('%Y%m%d'),
-                                "data_att": str_att,
+                                "data_pub": data_pub,
+                                "data_encerramento_proposta": data_enc,
                                 "orgao": orgao.get('razaoSocial'),
                                 "objeto": lic.get('objetoCompra'),
                                 "edital": str_edital,
                                 "uasg": str_uasg,
-                                "link": f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
+                                "valor_total_estimado": lic.get('valorTotalEstimado', 0),
+                                "is_sigiloso": lic.get('niValorTotalEstimado', False),
+                                "qtd_total_itens": len(itens_finais),
+                                "link_pncp": f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
                                 "itens": itens_finais
                             }
                             novos_registros += 1
@@ -236,14 +228,13 @@ def run():
 
     print(f"✅ Fim. Novos: {novos_registros}")
 
-    # 4. Salvar
-    with open(ARQ_JSON_INTERNO, 'w', encoding='utf-8') as f:
-        json.dump(list(banco.values()), f, ensure_ascii=False, indent=2)
+    # 4. Salvar no formato JS (para compatibilidade com o HTML)
+    lista_final = list(banco.values())
+    lista_final.sort(key=lambda x: x.get('data_encerramento_proposta') or '', reverse=True)
     
-    with zipfile.ZipFile(ARQ_ZIP, 'w', zipfile.ZIP_DEFLATED) as z:
-        z.write(ARQ_JSON_INTERNO)
-    
-    if os.path.exists(ARQ_JSON_INTERNO): os.remove(ARQ_JSON_INTERNO)
+    os.makedirs('dados', exist_ok=True)
+    with open(ARQ_DADOS, 'w', encoding='utf-8') as f:
+        f.write(f"const dadosLicitacoes = {json.dumps(lista_final, indent=4, ensure_ascii=False)};")
 
     # 5. Checkpoint
     proximo_dia = (data_atual + timedelta(days=1)).strftime('%Y%m%d')
