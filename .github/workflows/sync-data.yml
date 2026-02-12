@@ -2,49 +2,44 @@ name: Monitoramento PNCP Iterativo
 
 on:
   schedule:
-    - cron: '0 11 * * *' # Roda todo dia às 08h BRT
-  workflow_dispatch: # Permite iniciar manualmente
+    - cron: '0 11 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
-  actions: write # Necessário para o robô disparar a si mesmo
+  actions: write
 
 jobs:
   run-robot:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      - name: Install dependencies
-        run: pip install requests urllib3
+      - name: Coletar
+        run: |
+          pip install requests urllib3
+          python app.py
 
-      - name: Executar um dia de coleta
-        run: python app.py
-
-      - name: Commit e Push
+      - name: Save and Push
         run: |
           git config --global user.name "Bot PNCP"
           git config --global user.email "bot@pncp.com"
-          git add dados/oportunidades.js checkpoint.txt
-          git commit -m "Coleta diária finalizada" || exit 0
+          git add .
+          git commit -m "Dia $(cat checkpoint.txt) processado" || exit 0
           git push
 
-      - name: Verificar se deve continuar
+      - name: Re-trigger
+        if: hashFiles('finish.txt') == ''
         run: |
-          if [ ! -f "finish.txt" ]; then
-            echo "Ainda há dias pendentes. Disparando nova tarefa..."
-            curl -X POST \
-              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/main.yml/dispatches" \
-              -d '{"ref":"main"}'
-          else
-            echo "Varredura completa finalizada!"
-            rm finish.txt
-          fi
+          echo "Disparando próxima tarefa..."
+          curl -X POST \
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/${{ github.repository }}/actions/workflows/main.yml/dispatches \
+          -d '{"ref":"main"}'
