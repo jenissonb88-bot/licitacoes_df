@@ -20,7 +20,8 @@ KEYWORDS_SAUDE = [
 BLACKLIST = [
     "ESCOLAR", "CONSTRUCAO", "AUTOMOTIVO", "OBRA", "VEICULO", "REFEICAO", 
     "LANCHE", "ALIMENTICIO", "MOBILIARIO", "TI", "INFORMATICA", "PNEU", 
-    "ESTANTE", "CADEIRA", "RODOVIARIO", "PAVIMENTACAO"
+    "ESTANTE", "CADEIRA", "RODOVIARIO", "PAVIMENTACAO", 
+    "SERVICO", "LOCACAO", "COMODATO", "EXAME"  # Novos termos adicionados
 ]
 
 # Lista Exata de Estados Solicitados
@@ -46,7 +47,7 @@ def capturar_vencedores(session, it, url_base):
     num = it.get('numeroItem')
     desc = it.get('descricao', '')
     
-    # Filtro de Blacklist no item
+    # Filtro de Blacklist no item (aplica as novas palavras aqui também)
     if any(b in normalize(desc) for b in BLACKLIST): return None
 
     # Objeto padrão: Item Aberto / Em Andamento (Usa valores ESTIMADOS)
