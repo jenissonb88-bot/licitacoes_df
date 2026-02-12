@@ -16,7 +16,7 @@ ARQ_DADOS = 'dados/oportunidades.js'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 
 KEYWORDS_SAUDE = ["MEDICAMENTO", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGICO", "HIGIENE", "DESCARTAVEL", "SERINGA", "AGULHA", "LUVAS", "GAZE", "ALGODAO", "SAUDE", "INSUMO"]
-BLACKLIST = ["ESCOLAR", "CONSTRUCAO", "AUTOMOTIVO", "OBRA", "VEICULO", "REFEICAO", "LANCHE", "ALIMENTICIO", "MOBILIARIO", "TI", "INFORMATICA", "PNEU", "ESTANTE", "CADEIRA", "RODOVIARIO", "PAVIMENTACAO", "SERVICO"]
+BLACKLIST = ["ESCOLAR", "CONSTRUCAO", "AUTOMOTIVO", "OBRA", "VEICULO", "REFEICAO", "LANCHE", "ALIMENTICIO", "MOBILIARIO", "TI", "INFORMATICA", "PNEU", "ESTANTE", "CADEIRA", "RODOVIARIO", "PAVIMENTACAO"]
 UFS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "RO", "GO", "MT", "MS", "DF"]
 
 def normalize(t): 
@@ -30,26 +30,44 @@ def eh_relevante(t):
 def criar_sessao():
     session = requests.Session()
     session.verify = False
-    retry = Retry(total=5, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+    # Retry mais agressivo para garantir a captura dos itens
+    retry = Retry(total=8, backoff_factor=2, status_forcelist=[429, 500, 502, 503, 504])
     session.mount("https://", HTTPAdapter(max_retries=retry))
-    session.headers.update({'User-Agent': 'MonitorSaude/8.0', 'Accept': 'application/json'})
+    session.headers.update({'User-Agent': 'MonitorSaude/8.1', 'Accept': 'application/json'})
     return session
 
 def buscar_detalhes_item(session, cnpj, ano, seq):
     """
-    Busca os itens e resultados.
-    Documentação Swagger: /contratacoes/publicacao/{cnpj}/{ano}/{sequencial}/itens
+    Busca os itens e resultados com tratamento de erro reforçado.
     """
     url_base = f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{cnpj}/{ano}/{seq}"
+    
     try:
-        # Página 1 com 50 itens (geralmente suficiente para saúde, evita timeout)
-        res_itens = session.get(f"{url_base}/itens", params={"pagina":1, "tamanhoPagina":50}, timeout=15)
-        res_resultados = session.get(f"{url_base}/resultados", params={"pagina":1, "tamanhoPagina":50}, timeout=15)
+        # Tenta buscar itens (Página 1, até 200 itens)
+        url_itens = f"{url_base}/itens"
+        res_itens = session.get(url_itens, params={"pagina":1, "tamanhoPagina":200}, timeout=20)
         
-        itens = res_itens.json() if res_itens.status_code == 200 else []
-        resultados = res_resultados.json() if res_resultados.status_code == 200 else []
+        # Se falhar, tenta novamente após 2 segundos
+        if res_itens.status_code != 200:
+            time.sleep(2)
+            res_itens = session.get(url_itens, params={"pagina":1, "tamanhoPagina":200}, timeout=20)
+
+        # Se ainda falhar, retorna vazio mas loga o erro
+        if res_itens.status_code != 200:
+            print(f"   ❌ Erro HTTP {res_itens.status_code} ao buscar itens de {cnpj}/{seq}")
+            return []
+
+        itens = res_itens.json()
+        if not itens: return [] # Lista vazia retornada pela API
+
+        # Busca Resultados (opcional, não bloqueante)
+        try:
+            res_resultados = session.get(f"{url_base}/resultados", params={"pagina":1, "tamanhoPagina":200}, timeout=10)
+            resultados = res_resultados.json() if res_resultados.status_code == 200 else []
+        except:
+            resultados = []
         
-        # Mapeia vencedores pelo numeroItem
+        # Mapeia vencedores
         mapa_res = {r['numeroItem']: r for r in resultados}
         
         processados = []
@@ -82,14 +100,14 @@ def buscar_detalhes_item(session, cnpj, ano, seq):
             
         return processados
     except Exception as e:
-        print(f"Erro ao baixar itens: {e}")
+        print(f"   ⚠️ Exceção ao buscar itens: {e}")
         return []
 
 def main():
     session = criar_sessao()
     banco = {}
     
-    # Carrega banco existente
+    # Carrega banco e converte para dicionário
     if os.path.exists(ARQ_DADOS):
         try:
             with open(ARQ_DADOS, 'r', encoding='utf-8') as f:
@@ -113,7 +131,6 @@ def main():
 
     pagina = 1
     while True:
-        # Endpoint de Publicação
         url_pub = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
         params = {"dataInicial": ds, "dataFinal": ds, "codigoModalidadeContratacao": "6", "pagina": pagina, "tamanhoPagina": 50}
         
@@ -136,23 +153,26 @@ def main():
                     seq = lic.get('sequencialCompra')
                     id_lic = f"{cnpj}{ano}{seq}"
                     
-                    # CORREÇÃO DA DATA: Pega o Encerramento. Se nulo, pega Abertura.
                     data_fim = lic.get('dataEncerramentoProposta') or lic.get('dataAberturaProposta')
                     data_pub = lic.get('dataPublicacaoPncp')
 
-                    # LÓGICA DE ATUALIZAÇÃO FORÇADA
-                    # Se não existe OU se existe mas não tem itens processados -> Baixar!
+                    # LÓGICA DE RECUPERAÇÃO DE ITENS PERDIDOS
+                    # Se não existe no banco OU se existe mas a lista de itens está vazia
                     precisa_baixar = False
                     if id_lic not in banco:
                         precisa_baixar = True
-                    elif 'itens_processados' not in banco[id_lic] or not banco[id_lic]['itens_processados']:
+                    elif not banco[id_lic].get('itens_processados'): # Verifica se a lista está vazia
                         precisa_baixar = True
+                        print(f"   ♻️ Recuperando itens perdidos: {id_lic}...")
                     
                     if precisa_baixar:
-                        print(f"   📥 Baixando Itens (+): {id_lic}...")
                         itens_detalhados = buscar_detalhes_item(session, cnpj, ano, seq)
-                        time.sleep(0.5) # Pausa leve para não bloquear
                         
+                        if itens_detalhados:
+                            print(f"   ✅ Itens capturados: {len(itens_detalhados)} para {id_lic}")
+                        else:
+                            print(f"   ⚠️ Atenção: 0 itens encontrados para {id_lic}")
+
                         banco[id_lic] = {
                             "id": id_lic,
                             "uf": uf,
@@ -161,16 +181,14 @@ def main():
                             "uasg": unid.get('codigoUnidade') or "---",
                             "objeto": objeto,
                             "numero": f"{lic.get('numeroCompra')}/{ano}",
-                            "quantidade_itens": lic.get('quantidadeItens', 0),
-                            "data_pub": data_pub,       # DATA 1
-                            "data_fim_prop": data_fim,  # DATA 2 (Corrigida)
+                            "quantidade_itens": len(itens_detalhados), # Atualiza com o real
+                            "data_pub": data_pub,
+                            "data_fim_prop": data_fim,
                             "valor_total": lic.get('valorTotalEstimado', 0),
                             "link_pncp": f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
                             "itens_processados": itens_detalhados
                         }
-                    else:
-                        # Se já existe e tem itens, apenas atualiza a data se necessário
-                        banco[id_lic]['data_fim_prop'] = data_fim
+                        time.sleep(0.2) # Pausa pequena para não levar block
 
             if pagina >= dados.get('totalPaginas', 1): break
             pagina += 1
@@ -180,7 +198,6 @@ def main():
 
     # Salva
     lista_final = list(banco.values())
-    # Ordena pela data de FIM de proposta (mais urgentes primeiro)
     lista_final.sort(key=lambda x: x.get('data_fim_prop') or '', reverse=True)
     
     os.makedirs('dados', exist_ok=True)
