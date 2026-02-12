@@ -1,51 +1,60 @@
-name: Sincronização Recursiva PNCP
+name: Monitoramento PNCP
 
 on:
+  # Agendamento Automático
   schedule:
-    - cron: '0 9 * * *' # Roda todo dia às 06:00 Brasília
-  workflow_dispatch: # Permite rodar manualmente
+    # 1. Diário às 08:00 BRT (11:00 UTC) - Busca dia anterior
+    - cron: '0 11 * * *'
+    
+    # 2. Quinzenal (Dias 1 e 16) às 08:30 BRT - Busca Completa (Resultados)
+    - cron: '30 11 1,16 * *'
+
+  # Permite rodar manualmente clicando no botão
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: 'Tipo de Busca (DAILY ou FULL)'
+        required: true
+        default: 'DAILY'
 
 jobs:
-  build:
+  run-robot:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      actions: write
-
+    
     steps:
-      - name: Checkout do código
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      - name: Configurar Python
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.9'
 
-      - name: Instalar Dependências
-        run: pip install requests
-
-      - name: Executar Coleta
-        run: python app.py
-
-      - name: Salvar Dados e Checkpoint
+      - name: Install dependencies
         run: |
-          git config --global user.name "Bot Coleta PNCP"
-          git config --global user.email "bot@pncp.com"
-          git add dados/oportunidades.js checkpoint.txt
-          git commit -m "Auto: Atualização de dados e checkpoint [skip ci]" || echo "Sem mudanças"
-          git push
+          pip install requests urllib3
 
-      - name: Disparar Próxima Rodada
+      - name: Determinar Modo de Execução
+        id: mode_check
         run: |
-          if [ -f env.txt ]; then
-            source env.txt
-            if [ "$CONTINUAR_EXECUCAO" = "true" ]; then
-              echo "🔄 Há dias pendentes. Disparando próxima execução..."
-              curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                -H "Accept: application/vnd.github.v3+json" \
-                https://api.github.com/repos/${{ github.repository }}/actions/workflows/sync-data.yml/dispatches \
-                -d '{"ref":"main"}'
-            else
-              echo "✅ Sincronização finalizada até a data atual."
-            fi
+          # Se for disparo manual, usa o input. Se for cron, decide pelo dia.
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "MODE=${{ github.event.inputs.modo }}" >> $GITHUB_ENV
+          elif [ "$(date +%d)" == "01" ] || [ "$(date +%d)" == "16" ]; then
+            echo "MODE=FULL" >> $GITHUB_ENV
+          else
+            echo "MODE=DAILY" >> $GITHUB_ENV
           fi
+
+      - name: Executar Robô PNCP
+        run: python app.py
+        env:
+          MODE: ${{ env.MODE }}
+
+      - name: Commit e Push dos Dados
+        run: |
+          git config --global user.name "Bot PNCP"
+          git config --global user.email "bot@pncp.com"
+          git add dados/oportunidades.js
+          git commit -m "Atualização Automática: ${{ env.MODE }}" || echo "Nada a alterar"
+          git push
