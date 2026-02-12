@@ -1,5 +1,20 @@
 const dadosLicitacoes = [
     {
+        "id": "4613741000018020251171",
+        "uf": "SP",
+        "cidade": "Bauru",
+        "orgao": "MUNICIPIO DE BAURU",
+        "uasg": "986219",
+        "objeto": "Aquisição de itens para uso hospitalar para as unidades de urgência e emergência de Bauru, SP, devidamente especificados no anexo I do edital, através do sistema de registro de preços.",
+        "numero": "660/2025",
+        "quantidade_itens": 0,
+        "data_pub": "2026-01-25T16:01:17",
+        "data_abertura": "2025-11-17T09:00:00",
+        "valor_total": 31810.0,
+        "link_pncp": "https://pncp.gov.br/app/editais/46137410000180/2025/1171",
+        "itens_processados": []
+    },
+    {
         "id": "139370320001602026159",
         "uf": "BA",
         "cidade": "Salvador",
