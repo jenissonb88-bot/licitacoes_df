@@ -31,13 +31,14 @@ jobs:
           git config --global user.name "Bot PNCP"
           git config --global user.email "bot@pncp.com"
           git add .
-          git commit -m "Dia $(cat checkpoint.txt) processado" || exit 0
+          git commit -m "Dia processado: $(cat checkpoint.txt)" || exit 0
           git push
 
       - name: Re-trigger
+        # Só dispara se o arquivo finish.txt NÃO existir
         if: hashFiles('finish.txt') == ''
         run: |
-          echo "Disparando próxima tarefa..."
+          echo "Dia concluído com sucesso. Chamando próxima tarefa..."
           curl -X POST \
           -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
           -H "Accept: application/vnd.github.v3+json" \
