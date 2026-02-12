@@ -10,10 +10,14 @@
         .table thead { background-color: #0d6efd; color: white; font-size: 0.72rem; text-transform: uppercase; }
         .modal-xl { max-width: 95%; }
         .col-money { text-align: right; font-family: 'Consolas', monospace; }
-        .text-estimado { text-decoration: line-through; color: #999; font-size: 0.85em; }
-        .group-winner { background-color: #d1e7dd; color: #0f5132; font-weight: bold; }
-        .group-loser { background-color: #fff3cd; color: #664d03; font-weight: bold; }
+        .text-estimado { text-decoration: line-through; color: #999; font-size: 0.85em; margin-right: 5px; }
+        
+        /* Cores de Agrupamento */
+        .group-winner { background-color: #d1e7dd; color: #0f5132; font-weight: bold; border-top: 2px solid #198754; }
+        .group-loser { background-color: #fff3cd; color: #664d03; font-weight: bold; border-top: 2px solid #ffc107; }
+        
         .paginacao { display: flex; justify-content: center; gap: 10px; margin: 20px 0; }
+        .filters input { margin-bottom: 5px; }
     </style>
 </head>
 <body>
@@ -25,11 +29,11 @@
     </div>
 
     <div class="card mb-3 border-0 shadow-sm">
-        <div class="card-body p-2">
+        <div class="card-body p-2 filters">
             <div class="row g-2">
                 <div class="col-md-2"><input type="text" id="filtroUf" class="form-control form-control-sm" placeholder="UF" onkeyup="aplicarFiltros()"></div>
-                <div class="col-md-3"><input type="text" id="filtroOrgao" class="form-control form-control-sm" placeholder="Órgão" onkeyup="aplicarFiltros()"></div>
-                <div class="col-md-5"><input type="text" id="filtroObjeto" class="form-control form-control-sm" placeholder="Objeto" onkeyup="aplicarFiltros()"></div>
+                <div class="col-md-3"><input type="text" id="filtroOrgao" class="form-control form-control-sm" placeholder="Órgão / UASG" onkeyup="aplicarFiltros()"></div>
+                <div class="col-md-5"><input type="text" id="filtroObjeto" class="form-control form-control-sm" placeholder="Objeto (ex: Soro)" onkeyup="aplicarFiltros()"></div>
                 <div class="col-md-2"><button class="btn btn-sm btn-secondary w-100" onclick="limparFiltros()">Limpar</button></div>
             </div>
         </div>
@@ -39,12 +43,12 @@
         <table class="table table-hover align-middle mb-0">
             <thead>
                 <tr>
-                    <th>Pub. / Abertura</th>
-                    <th>UF</th>
+                    <th>Publicado</th>
+                    <th>Fim Propostas</th> <th>UF</th>
                     <th>Órgão / UASG</th>
                     <th>Edital</th>
                     <th style="width: 30%">Objeto</th>
-                    <th>Valor Total</th>
+                    <th>Valor Global</th>
                     <th class="text-center">Ações</th>
                 </tr>
             </thead>
@@ -54,7 +58,11 @@
 
     <div class="paginacao">
         <button id="btnAnt" class="btn btn-sm btn-outline-primary" onclick="mudarPagina(-1)">Anterior</button>
-        <span id="infoPag" class="align-self-center fw-bold"></span>
+        <div class="d-flex align-items-center gap-2">
+            <span>Pág</span>
+            <input type="number" id="inputPagina" class="form-control form-control-sm text-center" style="width: 50px;" onchange="irParaPagina()">
+            <span id="infoPag"></span>
+        </div>
         <button id="btnProx" class="btn btn-sm btn-outline-primary" onclick="mudarPagina(1)">Próximo</button>
     </div>
 </div>
@@ -63,19 +71,19 @@
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white py-2">
-                <h6 class="modal-title">Detalhamento dos Itens</h6>
+                <h6 class="modal-title">Detalhamento por Fornecedor</h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-0">
                 <div class="table-responsive" style="max-height: 70vh;">
                     <table class="table table-bordered table-sm mb-0">
-                        <thead class="table-light sticky-top" style="top:0">
+                        <thead class="table-light sticky-top" style="top:0; z-index: 10;">
                             <tr>
                                 <th>Item</th>
                                 <th>Descrição</th>
-                                <th>Qtd</th>
-                                <th>Valor Unit. (Est. / Final)</th>
-                                <th>Valor Total Final</th>
+                                <th class="text-center">Qtd</th>
+                                <th class="text-end">Unit. Estimado / Final</th>
+                                <th class="text-end">Total Final</th>
                             </tr>
                         </thead>
                         <tbody id="itensBody"></tbody>
@@ -105,17 +113,20 @@
         const tbody = document.getElementById('tableBody');
         tbody.innerHTML = '';
         const slice = dadosView.slice((pag-1)*POR_PAGINA, pag*POR_PAGINA);
+        const totalPags = Math.ceil(dadosView.length/POR_PAGINA) || 1;
         
         slice.forEach(d => {
             const dPub = new Date(d.data_pub).toLocaleDateString();
+            // Data Encerramento ajustada
             const dAbr = d.data_abertura ? new Date(d.data_abertura).toLocaleString().slice(0,16) : '-';
             const badge = (d.data_abertura && new Date(d.data_abertura) > new Date()) ? 'bg-success' : 'bg-secondary';
             
             tbody.innerHTML += `
                 <tr>
-                    <td><small>${dPub}</small><br><span class="badge ${badge}">${dAbr}</span></td>
+                    <td><small>${dPub}</small></td>
+                    <td><span class="badge ${badge}">${dAbr}</span></td>
                     <td><b>${d.uf}</b></td>
-                    <td><div class="text-truncate" style="max-width:200px" title="${d.orgao}">${d.orgao}</div><small>${d.uasg}</small></td>
+                    <td><div class="text-truncate" style="max-width:220px" title="${d.orgao}">${d.orgao}</div><small class="text-muted">${d.uasg}</small></td>
                     <td>${d.numero}<br><span class="badge bg-secondary">${d.quantidade_itens} it</span></td>
                     <td><div class="text-truncate" style="max-width:250px">${d.objeto}</div></td>
                     <td class="fw-bold text-primary">${fmt.format(d.valor_total)}</td>
@@ -127,15 +138,16 @@
         });
         
         document.getElementById('total_count').innerText = dadosView.length;
-        document.getElementById('infoPag').innerText = `Pág ${pag} de ${Math.ceil(dadosView.length/POR_PAGINA)}`;
+        document.getElementById('infoPag').innerText = `de ${totalPags}`;
+        document.getElementById('inputPagina').value = pag;
+        document.getElementById('inputPagina').max = totalPags;
         document.getElementById('btnAnt').disabled = pag === 1;
-        document.getElementById('btnProx').disabled = pag >= Math.ceil(dadosView.length/POR_PAGINA);
+        document.getElementById('btnProx').disabled = pag >= totalPags;
     }
 
-    // Abertura do Modal SEM Fetch (Usa dados locais)
     window.abrirDetalhes = function(id) {
         const item = dadosLicitacoes.find(x => x.id === id);
-        if(!item || !item.itens_processados) return alert("Itens ainda não carregados ou indisponíveis.");
+        if(!item || !item.itens_processados) return alert("Aguarde a próxima atualização do robô para ver os itens deste edital.");
         
         const tbody = document.getElementById('itensBody');
         tbody.innerHTML = '';
@@ -149,16 +161,16 @@
             grupos[chave].push(i);
         });
 
-        // Renderizar Vencedores
+        // 1. Renderizar Vencedores (Ordenados por nome)
         Object.keys(grupos).sort().forEach(chave => {
             if(chave === "Sem Vencedor") return;
-            tbody.innerHTML += `<tr class="group-winner"><td colspan="5">🏆 ${chave}</td></tr>`;
+            tbody.innerHTML += `<tr class="group-winner"><td colspan="5"><i class="fas fa-trophy"></i> ${chave}</td></tr>`;
             grupos[chave].forEach(i => renderLinhaItem(tbody, i));
         });
 
-        // Renderizar Sem Vencedor
+        // 2. Renderizar Sem Vencedor no final
         if(grupos["Sem Vencedor"]) {
-            tbody.innerHTML += `<tr class="group-loser"><td colspan="5">⚠️ Sem Vencedor / Aberto / Fracassado</td></tr>`;
+            tbody.innerHTML += `<tr class="group-loser"><td colspan="5"><i class="fas fa-exclamation-triangle"></i> Sem Vencedor / Aberto / Fracassado</td></tr>`;
             grupos["Sem Vencedor"].forEach(i => renderLinhaItem(tbody, i));
         }
 
@@ -166,22 +178,25 @@
     };
 
     function renderLinhaItem(tbody, i) {
+        // Exibe estimado riscado se tiver vencedor
         const preco = i.tem_vencedor 
-            ? `<span class="text-estimado">${fmt4.format(i.val_est_unit)}</span> <br> <b class="text-success">${fmt4.format(i.val_final_unit)}</b>`
+            ? `<span class="text-estimado">${fmt4.format(i.val_est_unit)}</span> <b>${fmt4.format(i.val_final_unit)}</b>`
             : fmt4.format(i.val_est_unit);
         
         const total = i.tem_vencedor ? fmt.format(i.val_final_total) : '-';
+        const situacao = i.tem_vencedor ? "Homologado" : i.situacao;
 
         tbody.innerHTML += `
             <tr>
                 <td class="text-center">${i.item}</td>
-                <td>${i.descricao} <br> <small class="text-muted">Status: ${i.situacao}</small></td>
+                <td>${i.descricao} <br> <small class="text-muted">${situacao}</small></td>
                 <td class="text-center">${i.qtd}</td>
                 <td class="col-money">${preco}</td>
                 <td class="col-money fw-bold">${total}</td>
             </tr>`;
     }
 
+    // Filtros
     function aplicarFiltros() {
         const u = document.getElementById('filtroUf').value.toUpperCase();
         const o = document.getElementById('filtroOrgao').value.toUpperCase();
@@ -195,11 +210,16 @@
     }
     
     window.limparFiltros = function() {
-        document.querySelectorAll('input').forEach(i => i.value='');
+        document.querySelectorAll('.filters input').forEach(i => i.value='');
         dadosView = [...dadosLicitacoes]; pag=1; render();
     }
     
-    window.mudarPagina = function(d) { pag += d; render(); window.scrollTo(0,0); }
+    window.mudarPagina = function(d) { pag += d; render(); }
+    window.irParaPagina = function() {
+        const p = parseInt(document.getElementById('inputPagina').value);
+        const max = Math.ceil(dadosView.length/POR_PAGINA);
+        if(p>=1 && p<=max) { pag = p; render(); }
+    }
 
     window.onload = init;
 </script>
