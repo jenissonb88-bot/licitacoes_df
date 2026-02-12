@@ -32,21 +32,24 @@ def criar_sessao():
     session.verify = False
     retry = Retry(total=5, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
     session.mount("https://", HTTPAdapter(max_retries=retry))
-    session.headers.update({'User-Agent': 'MonitorSaude/7.1', 'Accept': 'application/json'})
+    session.headers.update({'User-Agent': 'MonitorSaude/8.0', 'Accept': 'application/json'})
     return session
 
 def buscar_detalhes_item(session, cnpj, ano, seq):
-    """ Baixa Itens e Resultados e faz o cruzamento """
+    """
+    Busca os itens e resultados.
+    Documentação Swagger: /contratacoes/publicacao/{cnpj}/{ano}/{sequencial}/itens
+    """
     url_base = f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{cnpj}/{ano}/{seq}"
     try:
-        # Busca Itens e Resultados (Página 1 com 100 itens deve cobrir a maioria)
-        res_itens = session.get(f"{url_base}/itens", params={"pagina":1, "tamanhoPagina":100}, timeout=15)
-        res_resultados = session.get(f"{url_base}/resultados", params={"pagina":1, "tamanhoPagina":100}, timeout=15)
+        # Página 1 com 50 itens (geralmente suficiente para saúde, evita timeout)
+        res_itens = session.get(f"{url_base}/itens", params={"pagina":1, "tamanhoPagina":50}, timeout=15)
+        res_resultados = session.get(f"{url_base}/resultados", params={"pagina":1, "tamanhoPagina":50}, timeout=15)
         
         itens = res_itens.json() if res_itens.status_code == 200 else []
         resultados = res_resultados.json() if res_resultados.status_code == 200 else []
         
-        # Mapa de Resultados (Quem ganhou o quê)
+        # Mapeia vencedores pelo numeroItem
         mapa_res = {r['numeroItem']: r for r in resultados}
         
         processados = []
@@ -62,7 +65,6 @@ def buscar_detalhes_item(session, cnpj, ano, seq):
             }
 
             if res:
-                # ITEM COM VENCEDOR
                 dados_item.update({
                     "tem_vencedor": True,
                     "fornecedor": res['nomeRazaoSocialFornecedor'],
@@ -70,7 +72,6 @@ def buscar_detalhes_item(session, cnpj, ano, seq):
                     "val_final_total": res['valorTotalHomologado']
                 })
             else:
-                # SEM VENCEDOR
                 dados_item.update({
                     "tem_vencedor": False,
                     "fornecedor": "Sem Vencedor",
@@ -80,20 +81,22 @@ def buscar_detalhes_item(session, cnpj, ano, seq):
             processados.append(dados_item)
             
         return processados
-    except:
+    except Exception as e:
+        print(f"Erro ao baixar itens: {e}")
         return []
 
 def main():
     session = criar_sessao()
     banco = {}
     
-    # Carrega banco existente (se houver)
+    # Carrega banco existente
     if os.path.exists(ARQ_DADOS):
         try:
             with open(ARQ_DADOS, 'r', encoding='utf-8') as f:
                 raw = f.read().replace('const dadosLicitacoes = ', '').rstrip(';')
-                lista = json.loads(raw)
-                banco = {item['id']: item for item in lista}
+                if raw:
+                    lista = json.loads(raw)
+                    banco = {item['id']: item for item in lista}
         except: pass
     
     cp = open(ARQ_CHECKPOINT).read().strip() if os.path.exists(ARQ_CHECKPOINT) else "20260101"
@@ -110,6 +113,7 @@ def main():
 
     pagina = 1
     while True:
+        # Endpoint de Publicação
         url_pub = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
         params = {"dataInicial": ds, "dataFinal": ds, "codigoModalidadeContratacao": "6", "pagina": pagina, "tamanhoPagina": 50}
         
@@ -132,15 +136,22 @@ def main():
                     seq = lic.get('sequencialCompra')
                     id_lic = f"{cnpj}{ano}{seq}"
                     
-                    # AJUSTE DA DATA: Prioridade para dataEncerramentoProposta
-                    data_ref = lic.get('dataEncerramentoProposta') or lic.get('dataAberturaProposta')
+                    # CORREÇÃO DA DATA: Pega o Encerramento. Se nulo, pega Abertura.
+                    data_fim = lic.get('dataEncerramentoProposta') or lic.get('dataAberturaProposta')
+                    data_pub = lic.get('dataPublicacaoPncp')
 
-                    # Se não existe no banco, baixa e salva
+                    # LÓGICA DE ATUALIZAÇÃO FORÇADA
+                    # Se não existe OU se existe mas não tem itens processados -> Baixar!
+                    precisa_baixar = False
                     if id_lic not in banco:
-                        print(f"   📥 Baixando Detalhes: {id_lic}...")
-                        
-                        # Baixa itens imediatamente
+                        precisa_baixar = True
+                    elif 'itens_processados' not in banco[id_lic] or not banco[id_lic]['itens_processados']:
+                        precisa_baixar = True
+                    
+                    if precisa_baixar:
+                        print(f"   📥 Baixando Itens (+): {id_lic}...")
                         itens_detalhados = buscar_detalhes_item(session, cnpj, ano, seq)
+                        time.sleep(0.5) # Pausa leve para não bloquear
                         
                         banco[id_lic] = {
                             "id": id_lic,
@@ -151,22 +162,26 @@ def main():
                             "objeto": objeto,
                             "numero": f"{lic.get('numeroCompra')}/{ano}",
                             "quantidade_itens": lic.get('quantidadeItens', 0),
-                            "data_pub": lic.get('dataPublicacaoPncp'),
-                            "data_abertura": data_ref, # Data ajustada conforme pedido
+                            "data_pub": data_pub,       # DATA 1
+                            "data_fim_prop": data_fim,  # DATA 2 (Corrigida)
                             "valor_total": lic.get('valorTotalEstimado', 0),
                             "link_pncp": f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
                             "itens_processados": itens_detalhados
                         }
+                    else:
+                        # Se já existe e tem itens, apenas atualiza a data se necessário
+                        banco[id_lic]['data_fim_prop'] = data_fim
 
             if pagina >= dados.get('totalPaginas', 1): break
             pagina += 1
         except Exception as e: 
-            print(f"Erro: {e}")
+            print(f"Erro na página {pagina}: {e}")
             break
 
     # Salva
     lista_final = list(banco.values())
-    lista_final.sort(key=lambda x: x.get('data_pub', ''), reverse=True)
+    # Ordena pela data de FIM de proposta (mais urgentes primeiro)
+    lista_final.sort(key=lambda x: x.get('data_fim_prop') or '', reverse=True)
     
     os.makedirs('dados', exist_ok=True)
     with open(ARQ_DADOS, 'w', encoding='utf-8') as f:
