@@ -32,18 +32,72 @@ def criar_sessao():
     session.verify = False
     retry = Retry(total=5, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
     session.mount("https://", HTTPAdapter(max_retries=retry))
-    session.headers.update({'User-Agent': 'MonitorSaude/6.3', 'Accept': 'application/json'})
+    session.headers.update({'User-Agent': 'MonitorSaude/7.0', 'Accept': 'application/json'})
     return session
+
+def buscar_detalhes_item(session, cnpj, ano, seq):
+    """
+    Função auxiliar que busca itens e resultados e faz o cruzamento (Merge)
+    Retorna uma lista organizada por Vencedor ou Sem Vencedor
+    """
+    url_base = f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{cnpj}/{ano}/{seq}"
+    try:
+        # Busca Itens e Resultados
+        res_itens = session.get(f"{url_base}/itens", params={"pagina":1, "tamanhoPagina":100}, timeout=10)
+        res_resultados = session.get(f"{url_base}/resultados", params={"pagina":1, "tamanhoPagina":100}, timeout=10)
+        
+        itens = res_itens.json() if res_itens.status_code == 200 else []
+        resultados = res_resultados.json() if res_resultados.status_code == 200 else []
+        
+        # Mapa de Resultados
+        mapa_res = {r['numeroItem']: r for r in resultados}
+        
+        # Agrupamento
+        processados = []
+        for item in itens:
+            res = mapa_res.get(item['numeroItem'])
+            
+            dados_item = {
+                "item": item['numeroItem'],
+                "descricao": item['descricao'],
+                "qtd": item['quantidade'],
+                "val_est_unit": item['valorUnitarioEstimado'],
+                "situacao": item.get('situacaoItemNome', 'Aberto')
+            }
+
+            if res:
+                # Se tem vencedor
+                dados_item.update({
+                    "tem_vencedor": True,
+                    "fornecedor": res['nomeRazaoSocialFornecedor'],
+                    "val_final_unit": res['valorUnitarioHomologado'],
+                    "val_final_total": res['valorTotalHomologado']
+                })
+            else:
+                # Sem vencedor
+                dados_item.update({
+                    "tem_vencedor": False,
+                    "fornecedor": "Sem Vencedor",
+                    "val_final_unit": 0,
+                    "val_final_total": 0
+                })
+            processados.append(dados_item)
+            
+        return processados
+    except:
+        return []
 
 def main():
     session = criar_sessao()
     banco = {}
+    
+    # Carrega banco existente
     if os.path.exists(ARQ_DADOS):
         try:
             with open(ARQ_DADOS, 'r', encoding='utf-8') as f:
-                content = f.read().replace('const dadosLicitacoes = ', '').rstrip(';')
-                banco_lista = json.loads(content)
-                banco = {str(item['id']): item for item in banco_lista}
+                raw = f.read().replace('const dadosLicitacoes = ', '').rstrip(';')
+                lista = json.loads(raw)
+                banco = {item['id']: item for item in lista}
         except: pass
     
     cp = open(ARQ_CHECKPOINT).read().strip() if os.path.exists(ARQ_CHECKPOINT) else "20260101"
@@ -51,21 +105,21 @@ def main():
     hoje = datetime.now()
 
     if data_atual.date() > hoje.date():
-        print("✅ Sistema atualizado.")
-        with open('env.txt', 'w') as f: f.write("CONTINUAR_EXECUCAO=false")
+        print("📅 Atualizado.")
         return
 
     ds = data_atual.strftime('%Y%m%d')
-    print(f"🚀 Sniper PNCP | Analisando: {data_atual.strftime('%d/%m/%Y')}")
+    print(f"🚀 Sniper PNCP | {data_atual.strftime('%d/%m/%Y')}")
 
     pagina = 1
-    novos_no_dia = 0
     while True:
         url_pub = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
         params = {"dataInicial": ds, "dataFinal": ds, "codigoModalidadeContratacao": "6", "pagina": pagina, "tamanhoPagina": 50}
+        
         try:
-            resp = session.get(url_pub, params=params, timeout=25)
+            resp = session.get(url_pub, params=params, timeout=30)
             if resp.status_code != 200: break
+            
             dados = resp.json()
             licitacoes = dados.get('data', [])
             if not licitacoes: break
@@ -81,40 +135,48 @@ def main():
                     seq = lic.get('sequencialCompra')
                     id_lic = f"{cnpj}{ano}{seq}"
                     
-                    # Atualiza ou Adiciona (Merge inteligente)
-                    banco[id_lic] = {
-                        "id": id_lic,
-                        "uf": uf,
-                        "cidade": unid.get('municipioNome') or "",
-                        "orgao": lic.get('orgaoEntidade', {}).get('razaoSocial'),
-                        "uasg": unid.get('codigoUnidade') or "---",
-                        "objeto": objeto,
-                        "numero": f"{lic.get('numeroCompra')}/{ano}",
-                        "quantidade_itens": lic.get('quantidadeItens', 0),
-                        "data_pub": lic.get('dataPublicacaoPncp'),
-                        "data_abertura": lic.get('dataAberturaProposta') or lic.get('dataEncerramentoProposta'),
-                        "valor_total": lic.get('valorTotalEstimado', 0),
-                        "api_params": {"cnpj": cnpj, "ano": ano, "seq": seq},
-                        "link_pncp": f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}"
-                    }
-                    novos_no_dia += 1
+                    # Se for novo ou se quiser atualizar sempre (remova o if se quiser forçar atualização)
+                    if id_lic not in banco:
+                        print(f"   📥 Baixando Itens: {id_lic}...")
+                        
+                        # AQUI ACONTECE A MÁGICA: Baixa os itens AGORA
+                        itens_detalhados = buscar_detalhes_item(session, cnpj, ano, seq)
+                        
+                        banco[id_lic] = {
+                            "id": id_lic,
+                            "uf": uf,
+                            "cidade": unid.get('municipioNome') or "",
+                            "orgao": lic.get('orgaoEntidade', {}).get('razaoSocial'),
+                            "uasg": unid.get('codigoUnidade') or "---",
+                            "objeto": objeto,
+                            "numero": f"{lic.get('numeroCompra')}/{ano}",
+                            "quantidade_itens": lic.get('quantidadeItens', 0),
+                            "data_pub": lic.get('dataPublicacaoPncp'),
+                            "data_abertura": lic.get('dataAberturaProposta') or lic.get('dataEncerramentoProposta'),
+                            "valor_total": lic.get('valorTotalEstimado', 0),
+                            "link_pncp": f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
+                            "itens_processados": itens_detalhados # Salva a lista pronta
+                        }
 
             if pagina >= dados.get('totalPaginas', 1): break
             pagina += 1
-        except: break
+        except Exception as e: 
+            print(f"Erro: {e}")
+            break
 
+    # Salva
     lista_final = list(banco.values())
     lista_final.sort(key=lambda x: x.get('data_pub', ''), reverse=True)
+    
     os.makedirs('dados', exist_ok=True)
     with open(ARQ_DADOS, 'w', encoding='utf-8') as f:
         f.write(f"const dadosLicitacoes = {json.dumps(lista_final, indent=4, ensure_ascii=False)};")
 
-    proximo_dia = (data_atual + timedelta(days=1)).strftime('%Y%m%d')
-    with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo_dia)
-    with open('env.txt', 'w') as f: 
-        f.write(f"CONTINUAR_EXECUCAO={'true' if (data_atual + timedelta(days=1)).date() <= hoje.date() else 'false'}")
-
-    print(f"📊 Novos: {novos_no_dia} | Próximo: {proximo_dia}")
+    proximo = (data_atual + timedelta(days=1)).strftime('%Y%m%d')
+    with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo)
+    
+    continuar = "true" if datetime.strptime(proximo, '%Y%m%d').date() <= hoje.date() else "false"
+    with open('env.txt', 'w') as f: f.write(f"CONTINUAR_EXECUCAO={continuar}")
 
 if __name__ == "__main__":
     main()
