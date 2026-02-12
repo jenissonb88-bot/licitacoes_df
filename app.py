@@ -9,9 +9,122 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 ARQ_DADOS = 'dados/oportunidades.js'
 ARQ_MANUAIS = 'urls.txt'
 
-# Filtros
-KEYWORDS_SAUDE = ["MEDICAMENTO", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGICO", "HIGIENE", "DESCARTAVEL", "SERINGA", "AGULHA", "LUVAS", "GAZE", "ALGODAO"]
-BLACKLIST = ["ESCOLAR", "CONSTRUCAO", "AUTOMOTIVO", "OBRA", "VEICULO", "REFEICAO", "LANCHE", "ALIMENTICIO", "MOBILIARIO", "TI", "INFORMATICA", "PNEU", "ESTANTE", "CADEIRA", "RODOVIARIO", "PAVIMENTACAO", "SERVICO", "LOCACAO", "COMODATO", "EXAME"]
+# === LISTA MESTRE DE PALAVRAS-CHAVE (GENÉRICAS + ESPECÍFICAS) ===
+# Esta lista combina termos gerais com a sua lista detalhada de medicamentos e materiais
+KEYWORDS_SAUDE = [
+    # --- Genéricos ---
+    "MEDICAMENTO", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGICO", 
+    "HIGIENE", "DESCARTAVEL", "SERINGA", "AGULHA", "LUVAS", "GAZE", "ALGODAO", 
+    "SAUDE", "INSUMO", "ODONTOLOGICO", "LABORATORIAL", "ENFERMAGEM",
+
+    # --- Letra A ---
+    "AAS", "ABIRATERONA", "ACEBROFILINA", "ACETILCISTEINA", "ACICLOVIR", 
+    "ACIDO FOLICO", "ACIDO TRANEXAMICO", "ACIDO URSODESOXICOLICO", "ACIDO VALPROICO", 
+    "ADENOSINA", "ADRENALINA", "ALBENDAZOL", "ALFAST", "ALOPURINOL", "ALPRAZOLAM", 
+    "AMBROXOL", "AMINOFILINA", "AMIODARONA", "AMITRIPTILINA", "AMOXICILINA", 
+    "CLAVULANATO", "AMPICILINA", "SULBACTAM", "ANASTROZOL", "ANFOTERICINA", 
+    "ANLODIPINO", "ATENOLOL", "ATORVASTATINA", "ATRACURIO", "ATROPINA", 
+    "AZITROMICINA", "AZTREONAM", "ABSORVENTE", "AGUA BI-DESTILADA", 
+    "AGUA PARA INJECAO", "HIPODERMICA", "ALCOOL 70", "ALCOOL GEL", "ALCOOL ABSOLUTO", 
+    "ALGODAO HIDROFILO", "ALGODAO ORTOPEDICO", "ATADURA", "CREPOM", "GESSADA", 
+    "AVENTAL",
+
+    # --- Letra B ---
+    "BACLOFENO", "BECLOMETASONA", "BETAMETASONA", "BETAXOLOL", "BICARBONATO", 
+    "BIMATOPROSTA", "BIPERIDENO", "BISACODIL", "BISOPROLOL", "BORTEZOMIBE", 
+    "BOSENTANA", "BROMAZEPAM", "BROMETO DE IPRATROPIO", "BROMOPRIDA", "BUDESONIDA", 
+    "BUPIVACAINA", "BUPROPIONA", "BOLSA COLETORA", "COLOSTOMIA",
+
+    # --- Letra C ---
+    "CABERGOLINA", "CAPECITABINA", "CAPTOPRIL", "CARBAMAZEPINA", "CARBONATO DE CALCIO", 
+    "CARBONATO DE LITIO", "CARBOPLATINA", "CARVEDILOL", "CEFALEXINA", "CEFALOTINA", 
+    "CEFAZOLINA", "CEFEPIMA", "CEFTAZIDIMA", "CEFTRIAXONA", "CEFUROXIMA", 
+    "CETOCONAZOL", "CETOPROFENO", "CETROTIDE", "CICLOBENZAPRINA", "CICLOPENTOLATO", 
+    "CIMETIDINA", "CINARIZINA", "CIPROFLOXACINO", "CISATRACURIO", "CITALOPRAM", 
+    "CLINDAMICINA", "CLOMIPRAMINA", "CLONAZEPAM", "CLONIDINA", "CLOPIDOGREL", 
+    "CLORETO DE POTASSIO", "CLORETO DE SODIO", "CLORPROMAZINA", "CODEINA", 
+    "COLAGENASE", "COMPLEXO B", "CAMPO CIRURGICO", "CATETER", "INTRAVENOSO", 
+    "OCULOS", "CLOREXIDINA", "COBERTURA", "COLETOR", "PERFUROCORTANTE", "URINA", 
+    "COMPRESSA", "CREME DERMOPROTETOR", "CURATIVO",
+
+    # --- Letra D - E ---
+    "DANTROLENO", "EFEDRINA", "ENALAPRIL", "ENOXAPARINA", "ESCINA", "ESCITALOPRAM", 
+    "ESMOLOL", "ESOMEPRAZOL", "ESPIRONOLACTONA", "ESTRIOL", "ETILEFRINA", 
+    "ETOMIDATO", "EXEMESTANO", "EQUIPO", "MACROGOTAS", "MICROGOTAS", "ESCOVA", 
+    "DEGERMACAO", "ESPARADRAPO", "ETER",
+
+    # --- Letra F ---
+    "FENITOINA", "FENOBARBITAL", "FENTANILA", "FLUCONAZOL", "FLUMAZENIL", 
+    "FLUOCINOLONA", "FLUOXETINA", "FOSFATO DE SODIO", "FOSFOENEMA", "FUROSEMIDA", 
+    "FILTRO HME", "FILTRO VIRAL", "FITA CIRURGICA", "AUTOCLAVE", "FRALDA",
+
+    # --- Letra G ---
+    "GABAPENTINA", "GENCITABINA", "GENTAMICINA", "GLIBENCLAMIDA", "GLICLAZIDA", 
+    "GLICOSE", "GLIMEPIRIDA", "GLUCONATO DE CALCIO", "GLUTARALDEIDO", "GAZE EM ROLO",
+
+    # --- Letra H - I ---
+    "HALOPERIDOL", "HEPARINA", "HIDRALAZINA", "HIDROCLOROTIAZIDA", "HIDROCORTISONA", 
+    "HIDROXIDO DE ALUMINIO", "HIDROXIUREIA", "HIOSCINA", "ESCOPOLAMINA", 
+    "IBUPROFENO", "IMIPRAMINA", "ISOFLURANO", "ISOSSORBIDA", "ISOTRETINOINA", 
+    "ITRACONAZOL",
+
+    # --- Letra L ---
+    "LACTULOSE", "LAMOTRIGINA", "LATANOPROSTA", "LEVETIRACETAM", "LEVOBUPIVACAINA", 
+    "LEVODOPA", "LEVOFLOXACINO", "LEVOMEPROMAZINA", "LEVONORGESTREL", "LEVOSIMENDANA", 
+    "LEVOTIROXINA", "LIDOCAINA", "LISDEXANFETAMINA", "LORATADINA", "LOSARTANA", 
+    "LENCOL HOSPITALAR", "LUVA CIRURGICA", "LUVA PROCEDIMENTO",
+
+    # --- Letra M ---
+    "MEROPENEM", "METADONA", "METARAMINOL", "METFORMINA", "METILDOPA", 
+    "METILERGOMETRINA", "METILPREDNISOLONA", "METOCLOPRAMIDA", "METOPROLOL", 
+    "METRONIDAZOL", "MICONAZOL", "MIDAZOLAM", "MIRTAZAPINA", "MONTELUCASTE", 
+    "MORFINA", "MUPIROCINA", "MASCARA CIRURGICA", "MASCARA N95", "NEBULIZACAO", 
+    "MONITOR GLICEMIA", "TIRAS",
+
+    # --- Letra N - O ---
+    "NALBUFINA", "NALOXONA", "NALTREXONA", "NEOMICINA", "NEOSTIGMINA", "NIFEDIPINO", 
+    "NIMESULIDA", "NINTEDANIBE", "NISTATINA", "NITROGLICERINA", "NITROPRUSSIATO", 
+    "NOREPINEFRINA", "NORTRIPTILINA", "OCTREOTIDA", "OLANZAPINA", "OMEPRAZOL", 
+    "ONDANSETRONA", "OXACILINA", "OXCARBAZEPINA", "OXIBUPROCAINA", "OXITOCINA", 
+    "OLEO DERSANI", "OLEO AGE",
+
+    # --- Letra P - Q ---
+    "PAMIDRONATO", "PANCURONIO", "PANTOPRAZOL", "PARACETAMOL", "PAROXETINA", 
+    "PENICILINA", "PERMETRINA", "PILOCARPINA", "PIPERACILINA", "TAZOBACTAM", 
+    "POLIMIXINA", "PREDNISOLONA", "PREDNISONA", "PREGABALINA", "PROMETAZINA", 
+    "PROPOFOL", "PROPRANOLOL", "QUETIAPINA",
+
+    # --- Letra R ---
+    "REMIFENTANILA", "RISPERIDONA", "RIVAROXABANA", "ROCURONIO", "ROPIVACAINA", 
+    "ROSUVASTATINA",
+
+    # --- Letra S ---
+    "SACCHAROMYCES", "BOULARDII", "SALBUTAMOL", "SENNA", "SERTRALINA", "SEVOFLURANO", 
+    "SIMETICONA", "SINVASTATINA", "SUCCINATO", "SUFENTANILA", "SUGAMADEX", 
+    "SULFADIAZINA", "SULFATO DE MAGNESIO", "SULFATO DE ZINCO", "SUNITINIBE", 
+    "SUXAMETONIO", "SAPATILHA", "PROPE", "SERINGA INSULINA", "SONDA ASPIRACAO", 
+    "SONDA FOLEY", "SONDA NASOGASTRICA", "SORO FISIOLOGICO", "SORO GLICOSADO", 
+    "SUPORTE", "SUPLEMENTO",
+
+    # --- Letra T ---
+    "TEICOPLANINA", "TEMOZOLOMIDA", "TENOXICAM", "TERBUTALINA", "TIAMINA", 
+    "TIGECICLINA", "TIMOLOL", "TIORIDAZINA", "TOBRAMICINA", "TOPIRAMATO", 
+    "TRAMADOL", "TRAVOPROSTA", "TROMETAMOL", "TROPICAMIDA", "TOALHA PAPEL", 
+    "TORNEIRA 3 VIAS", "TOUCA", "TUBO ENDOTRAQUEAL", "TUBO ENSAIO",
+
+    # --- Letra V - Z ---
+    "VALSARTANA", "VANCOMICINA", "VARFARINA", "VASOPRESSINA", "VENLAFAXINA", 
+    "VITAMINA C", "VITAMINA K", "VORICONAZOL", "VASELINA"
+]
+
+# Blacklist (O que NÃO queremos)
+BLACKLIST = [
+    "ESCOLAR", "CONSTRUCAO", "AUTOMOTIVO", "OBRA", "VEICULO", "REFEICAO", 
+    "LANCHE", "ALIMENTICIO", "MOBILIARIO", "TI", "INFORMATICA", "PNEU", 
+    "ESTANTE", "CADEIRA", "RODOVIARIO", "PAVIMENTACAO", 
+    "SERVICO", "LOCACAO", "COMODATO", "EXAME", "LIMPEZA PREDIAL"
+]
+
 UFS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "RO", "GO", "MT", "MS", "DF"]
 
 def normalize(t): 
@@ -19,7 +132,10 @@ def normalize(t):
 
 def eh_relevante(t):
     txt = normalize(t)
-    return not any(b in txt for b in BLACKLIST) and any(k in txt for k in KEYWORDS_SAUDE)
+    # Se tiver na blacklist, rejeita
+    if any(b in txt for b in BLACKLIST): return False
+    # Se tiver QUALQUER uma das keywords, aceita
+    return any(k in txt for k in KEYWORDS_SAUDE)
 
 def criar_sessao():
     s = requests.Session()
@@ -30,19 +146,15 @@ def capturar_detalhes(session, cnpj, ano, seq):
     url_base = f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{cnpj}/{ano}/{seq}"
     itens_map = {}
 
-    # 1. Busca ITENS (Dados do Edital - Estimados)
+    # 1. Busca ITENS (Edital)
     try:
         r = session.get(f"{url_base}/itens", params={"pagina":1, "tamanhoPagina":500}, timeout=20)
         if r.status_code == 200:
             for i in r.json():
-                num = int(i['numeroItem']) # Força Inteiro para ordenar corretamente
-                
-                # Garante valores numéricos float
+                num = int(i['numeroItem'])
                 qtd = float(i.get('quantidade') or 0)
                 unit_est = float(i.get('valorUnitarioEstimado') or 0)
                 total_est = float(i.get('valorTotalEstimado') or 0)
-
-                # Se o total vier zerado da API, calcula manualmente
                 if total_est == 0 and qtd > 0 and unit_est > 0:
                     total_est = round(qtd * unit_est, 2)
 
@@ -50,37 +162,34 @@ def capturar_detalhes(session, cnpj, ano, seq):
                     "item": num,
                     "desc": i.get('descricao', 'Sem descrição'),
                     "qtd": qtd,
-                    "unitario_est": unit_est, # Valor Estimado
-                    "total_est": total_est,   # Valor Estimado
+                    "unitario_est": unit_est,
+                    "total_est": total_est,
                     "situacao": "ABERTO",
                     "tem_resultado": False,
                     "fornecedor": "EM ANDAMENTO",
-                    "unitario_hom": 0.0,      # Valor Homologado (Vazio por enquanto)
+                    "unitario_hom": 0.0,
                     "total_hom": 0.0
                 }
     except: pass
 
-    # 2. Busca RESULTADOS (Dados da Homologação)
+    # 2. Busca RESULTADOS (Homologação)
     try:
         r = session.get(f"{url_base}/resultados", params={"pagina":1, "tamanhoPagina":500}, timeout=20)
         if r.status_code == 200:
             for res in r.json():
                 num = int(res['numeroItem'])
-                
-                # Se o item não existia (item fantasma), cria agora
                 if num not in itens_map:
                     itens_map[num] = {
                         "item": num,
                         "desc": res.get('descricaoItem', 'Item Resultado'),
                         "qtd": float(res.get('quantidadeHomologada') or 0),
-                        "unitario_est": float(res.get('valorUnitarioHomologado') or 0), # Assume igual se não tinha
+                        "unitario_est": float(res.get('valorUnitarioHomologado') or 0),
                         "total_est": float(res.get('valorTotalHomologado') or 0),
                         "situacao": "HOMOLOGADO",
                         "tem_resultado": True,
                         "fornecedor": "", "unitario_hom": 0.0, "total_hom": 0.0
                     }
                 
-                # Atualiza com dados do vencedor
                 itens_map[num]['tem_resultado'] = True
                 itens_map[num]['situacao'] = "HOMOLOGADO"
                 itens_map[num]['fornecedor'] = res.get('nomeRazaoSocialFornecedor', 'VENCEDOR ANÔNIMO')
@@ -88,7 +197,6 @@ def capturar_detalhes(session, cnpj, ano, seq):
                 itens_map[num]['total_hom'] = float(res.get('valorTotalHomologado') or 0)
     except: pass
 
-    # Ordena pelo número do item (1, 2, 3...)
     return sorted(list(itens_map.values()), key=lambda x: x['item'])
 
 def processar_urls_manuais(session, banco):
@@ -105,7 +213,6 @@ def processar_urls_manuais(session, banco):
             cnpj, ano, seq = parts[0], parts[1], parts[2]
             id_lic = f"{cnpj}{ano}{seq}"
             
-            # Força atualização se for manual
             api_url = f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{cnpj}/{ano}/{seq}"
             resp = session.get(api_url, timeout=15)
             if resp.status_code != 200: continue
@@ -135,9 +242,9 @@ def montar_objeto_licitacao(lic, itens, link_manual=None):
         "objeto": lic.get('objetoCompra'),
         "edital": f"{lic.get('numeroCompra')}/{ano}",
         "uasg": unidade.get('codigoUnidade') or "---",
-        "valor_global": float(lic.get('valorTotalEstimado') or 0), # Garante float
+        "valor_global": float(lic.get('valorTotalEstimado') or 0),
         "is_sigiloso": lic.get('niValorTotalEstimado', False),
-        "qtd_itens": len(itens), # Nome da variável corrigido para o HTML
+        "qtd_itens": len(itens),
         "link": link_manual or f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
         "itens": itens
     }
@@ -159,7 +266,7 @@ def run():
     if modo == 'FULL':
         dt_inicio = datetime(2026, 1, 1)
         dt_fim = hoje
-        print("📆 MODO FULL (Quinzenal): Atualizando histórico completo.")
+        print("📆 MODO FULL: Varrendo histórico completo.")
     else:
         ontem = hoje - timedelta(days=1)
         dt_inicio = ontem
