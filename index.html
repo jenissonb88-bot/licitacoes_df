@@ -2,24 +2,48 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Painel Sniper PNCP</title>
+    <title>Sniper PNCP - Painel de Inteligência</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        body { background-color: #f4f7f6; font-size: 0.82rem; }
-        .table thead { background-color: #0d6efd; color: white; font-size: 0.75rem; text-transform: uppercase; }
-        .badge-itens { background-color: #6c757d; color: white; font-weight: bold; }
-        .paginacao-controles { display: flex; justify-content: center; align-items: center; gap: 15px; margin: 20px 0; }
+        body { background-color: #f4f7f6; font-size: 0.82rem; font-family: 'Segoe UI', sans-serif; }
+        .table thead { background-color: #0d6efd; color: white; font-size: 0.72rem; text-transform: uppercase; }
+        .card-filtros { border: none; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .uasg-tag { font-weight: bold; color: #6610f2; font-size: 0.72rem; background: #f0f0f0; padding: 2px 4px; border-radius: 3px; }
+        .paginacao-controles { display: flex; justify-content: center; align-items: center; gap: 10px; margin: 20px 0; padding-bottom: 30px; }
         .modal-xl { max-width: 95%; }
         .table-vencedor { border-left: 5px solid #198754 !important; background-color: #f0fff4 !important; }
+        .table-fracassado { border-left: 5px solid #dc3545 !important; background-color: #fff5f5 !important; }
     </style>
 </head>
 <body>
 
 <div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 class="text-primary fw-bold"><i class="fas fa-crosshairs"></i> Sniper PNCP - Saúde</h4>
-        <span class="badge bg-dark">Total: <span id="total_count">0</span></span>
+        <h4 class="text-primary fw-bold mb-0"><i class="fas fa-crosshairs"></i> Sniper PNCP - Saúde</h4>
+        <div>
+            <span class="badge bg-dark">Total: <span id="total_count">0</span></span>
+            <button class="btn btn-sm btn-outline-primary ms-2" onclick="location.reload()"><i class="fas fa-sync"></i> Atualizar</button>
+        </div>
+    </div>
+
+    <div class="card card-filtros mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2">
+                <div class="col-md-1">
+                    <input type="text" id="filtroUf" class="form-control form-control-sm" placeholder="UF" onkeyup="aplicarFiltros()">
+                </div>
+                <div class="col-md-3">
+                    <input type="text" id="filtroOrgao" class="form-control form-control-sm" placeholder="Órgão ou UASG..." onkeyup="aplicarFiltros()">
+                </div>
+                <div class="col-md-5">
+                    <input type="text" id="filtroObjeto" class="form-control form-control-sm" placeholder="Buscar no Objeto (ex: Soro, Gaze...)" onkeyup="aplicarFiltros()">
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-sm btn-secondary w-100" onclick="limparFiltros()">Limpar Filtros</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="card shadow-sm border-0 overflow-hidden">
@@ -27,8 +51,8 @@
             <thead>
                 <tr>
                     <th>Publicado</th>
-                    <th>Abertura (Prazo)</th>
-                    <th>UF / Cidade</th>
+                    <th>Abertura</th>
+                    <th>UF</th>
                     <th>Órgão / UASG</th>
                     <th>Edital / Itens</th>
                     <th style="width: 25%">Objeto</th>
@@ -41,9 +65,15 @@
     </div>
 
     <div class="paginacao-controles">
-        <button id="btnAnterior" class="btn btn-sm btn-outline-primary" onclick="mudarPagina(-1)"><i class="fas fa-arrow-left"></i> Anterior</button>
-        <span id="infoPagina" class="fw-bold"></span>
-        <button id="btnProximo" class="btn btn-sm btn-outline-primary" onclick="mudarPagina(1)">Próximo <i class="fas fa-arrow-right"></i></button>
+        <button id="btnAnterior" class="btn btn-sm btn-outline-primary" onclick="mudarPagina(-1)"><i class="fas fa-chevron-left"></i></button>
+        
+        <div class="d-flex align-items-center gap-2">
+            <span>Página</span>
+            <input type="number" id="inputPagina" class="form-control form-control-sm text-center" style="width: 60px;" min="1" onchange="irParaPagina()">
+            <span id="infoPagina">de 1</span>
+        </div>
+
+        <button id="btnProximo" class="btn btn-sm btn-outline-primary" onclick="mudarPagina(1)"><i class="fas fa-chevron-right"></i></button>
     </div>
 </div>
 
@@ -57,14 +87,14 @@
             <div class="modal-body">
                 <div id="loader" class="text-center d-none my-5">
                     <div class="spinner-border text-primary" role="status"></div>
-                    <p class="mt-2 text-muted">Consultando API do PNCP...</p>
+                    <p class="mt-2 text-muted">Acessando API do PNCP...</p>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-sm table-bordered">
                         <thead class="table-light">
                             <tr>
                                 <th>#</th>
-                                <th>Descrição do Item / Vencedor</th>
+                                <th>Descrição / Vencedor</th>
                                 <th>Qtd</th>
                                 <th>Unitário (4c)</th>
                                 <th>Total</th>
@@ -83,6 +113,8 @@
 <script>
     const itensPorPagina = 15;
     let paginaAtual = 1;
+    let dadosTrabalho = [];
+
     const fmt2 = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
     const fmt4 = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 4 });
 
@@ -91,36 +123,68 @@
         tbody.innerHTML = '';
         const inicio = (paginaAtual - 1) * itensPorPagina;
         const fim = inicio + itensPorPagina;
-        const lista = dadosLicitacoes.slice(inicio, fim);
+        const lista = dadosTrabalho.slice(inicio, fim);
 
         lista.forEach(item => {
             const dtPub = new Date(item.data_pub).toLocaleDateString();
-            const dtAbr = item.data_abertura ? new Date(item.data_abertura).toLocaleString() : 'Não inf.';
+            const dtAbr = item.data_abertura ? new Date(item.data_abertura).toLocaleString() : 'A definir';
             const isFutura = item.data_abertura && new Date(item.data_abertura) > new Date();
 
             tbody.innerHTML += `
                 <tr>
                     <td><small>${dtPub}</small></td>
                     <td><span class="badge ${isFutura ? 'bg-success' : 'bg-secondary'}">${dtAbr}</span></td>
-                    <td><b>${item.uf}</b><br><small>${item.cidade}</small></td>
-                    <td><div class="fw-bold text-truncate" style="max-width: 250px">${item.orgao}</div><small class="text-muted">UASG: ${item.uasg}</small></td>
-                    <td><b>${item.numero}</b><br><span class="badge badge-itens mt-1">${item.quantidade_itens} itens</span></td>
+                    <td><b>${item.uf}</b></td>
+                    <td><div class="fw-bold text-truncate" style="max-width: 250px">${item.orgao}</div><small class="uasg-tag">UASG: ${item.uasg}</small></td>
+                    <td><b>${item.numero}</b><br><span class="badge bg-secondary mt-1">${item.quantidade_itens} itens</span></td>
                     <td><small>${item.objeto.substring(0, 100)}...</small></td>
                     <td class="fw-bold text-primary">${fmt2.format(item.valor_total)}</td>
                     <td class="text-center">
                         <button class="btn btn-sm btn-primary" onclick='verItens(${JSON.stringify(item.api_params)})'>Itens</button>
-                        <a href="${item.link_pncp}" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="fas fa-link"></i></a>
+                        <a href="${item.link_pncp}" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="fas fa-external-link"></i></a>
                     </td>
                 </tr>`;
         });
 
-        document.getElementById('total_count').innerText = dadosLicitacoes.length;
-        document.getElementById('infoPagina').innerText = `Pág. ${paginaAtual} de ${Math.ceil(dadosLicitacoes.length / itensPorPagina)}`;
+        const totalPaginas = Math.ceil(dadosTrabalho.length / itensPorPagina) || 1;
+        document.getElementById('total_count').innerText = dadosTrabalho.length;
+        document.getElementById('infoPagina').innerText = `de ${totalPaginas}`;
+        document.getElementById('inputPagina').value = paginaAtual;
+        document.getElementById('inputPagina').max = totalPaginas;
         document.getElementById('btnAnterior').disabled = (paginaAtual === 1);
-        document.getElementById('btnProximo').disabled = (fim >= dadosLicitacoes.length);
+        document.getElementById('btnProximo').disabled = (paginaAtual >= totalPaginas);
+    }
+
+    function aplicarFiltros() {
+        const uf = document.getElementById('filtroUf').value.toUpperCase();
+        const orgao = document.getElementById('filtroOrgao').value.toUpperCase();
+        const objeto = document.getElementById('filtroObjeto').value.toUpperCase();
+
+        dadosTrabalho = dadosLicitacoes.filter(item => {
+            return (item.uf || "").toUpperCase().includes(uf) &&
+                   ((item.orgao || "").toUpperCase().includes(orgao) || (item.uasg || "").includes(orgao)) &&
+                   (item.objeto || "").toUpperCase().includes(objeto);
+        });
+        paginaAtual = 1;
+        renderTable();
+    }
+
+    function limparFiltros() {
+        document.getElementById('filtroUf').value = '';
+        document.getElementById('filtroOrgao').value = '';
+        document.getElementById('filtroObjeto').value = '';
+        dadosTrabalho = [...dadosLicitacoes];
+        paginaAtual = 1;
+        renderTable();
     }
 
     function mudarPagina(v) { paginaAtual += v; renderTable(); window.scrollTo(0,0); }
+    
+    function irParaPagina() {
+        const p = parseInt(document.getElementById('inputPagina').value);
+        const total = Math.ceil(dadosTrabalho.length / itensPorPagina);
+        if(p >= 1 && p <= total) { paginaAtual = p; renderTable(); window.scrollTo(0,0); }
+    }
 
     async function verItens(p) {
         const modal = new bootstrap.Modal(document.getElementById('modalItens'));
@@ -141,20 +205,28 @@
             loader.classList.add('d-none');
             itens.forEach(i => {
                 const v = mapaV[i.numeroItem];
+                let statusTxt = v ? "Homologado" : (i.situacaoItemNome || "Sem Vencedor");
+                let classeLinha = v ? "table-vencedor" : (statusTxt.includes("Fracassado") || statusTxt.includes("Deserto") ? "table-fracassado" : "");
+
                 body.innerHTML += `
-                    <tr class="${v ? 'table-vencedor' : ''}">
+                    <tr class="${classeLinha}">
                         <td>${i.numeroItem}</td>
                         <td><b>${i.descricao}</b>${v ? `<br><small class="text-success">🏆 ${v.nomeRazaoSocialFornecedor}</small>` : ''}</td>
                         <td>${i.quantidade}</td>
                         <td>${v ? fmt4.format(v.valorUnitarioHomologado) : fmt4.format(i.valorUnitarioEstimado)}</td>
                         <td>${v ? fmt2.format(v.valorTotalHomologado) : fmt2.format(i.valorTotalEstimado)}</td>
-                        <td><span class="badge ${v ? 'bg-success' : 'bg-secondary'}">${v ? 'Finalizado' : 'Aberto'}</span></td>
+                        <td><span class="badge ${v ? 'bg-success' : 'bg-warning text-dark'}">${statusTxt}</span></td>
                     </tr>`;
             });
         } catch (e) { loader.innerHTML = 'Erro na API.'; }
     }
 
-    window.onload = () => { if(typeof dadosLicitacoes !== 'undefined') renderTable(); };
+    window.onload = () => {
+        if(typeof dadosLicitacoes !== 'undefined') {
+            dadosTrabalho = [...dadosLicitacoes];
+            renderTable();
+        }
+    };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
