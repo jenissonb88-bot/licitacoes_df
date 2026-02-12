@@ -1,21 +1,26 @@
 name: Monitoramento PNCP
 
 on:
-  # Agendamento Automático
+  # 1. Agendamento Automático
   schedule:
-    # 1. Diário às 08:00 BRT (11:00 UTC) - Busca dia anterior
+    # Diário às 08:00 BRT (11:00 UTC) - Busca dia anterior
     - cron: '0 11 * * *'
     
-    # 2. Quinzenal (Dias 1 e 16) às 08:30 BRT - Busca Completa (Resultados)
+    # Quinzenal (Dias 1 e 16) às 08:30 BRT - Busca Completa
     - cron: '30 11 1,16 * *'
 
-  # Permite rodar manualmente clicando no botão
+  # 2. Disparo Manual (Botão)
   workflow_dispatch:
     inputs:
       modo:
         description: 'Tipo de Busca (DAILY ou FULL)'
         required: true
         default: 'DAILY'
+
+# === AQUI ESTÁ A CORREÇÃO ===
+# Dá permissão para o robô salvar arquivos no repositório
+permissions:
+  contents: write
 
 jobs:
   run-robot:
@@ -37,7 +42,6 @@ jobs:
       - name: Determinar Modo de Execução
         id: mode_check
         run: |
-          # Se for disparo manual, usa o input. Se for cron, decide pelo dia.
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "MODE=${{ github.event.inputs.modo }}" >> $GITHUB_ENV
           elif [ "$(date +%d)" == "01" ] || [ "$(date +%d)" == "16" ]; then
@@ -55,6 +59,13 @@ jobs:
         run: |
           git config --global user.name "Bot PNCP"
           git config --global user.email "bot@pncp.com"
+          
+          # Tenta adicionar o arquivo. Se não houver mudança, não falha.
           git add dados/oportunidades.js
-          git commit -m "Atualização Automática: ${{ env.MODE }}" || echo "Nada a alterar"
+          
+          # Só faz commit se houver mudanças
+          timestamp=$(date -u)
+          git commit -m "Atualização Automática: ${{ env.MODE }} em $timestamp" || exit 0
+          
+          # Envia para o repositório
           git push
