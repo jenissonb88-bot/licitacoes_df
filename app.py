@@ -1,24 +1,35 @@
-import requests
-import json
-import os
-import time
-import urllib3
-import unicodedata
+import requests, json, os, time, urllib3, concurrent.futures, zipfile, unicodedata
 from datetime import datetime, timedelta
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+# Desativar avisos de SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # === CONFIGURAÇÕES ===
-DATA_INICIO_VARREDURA = datetime(2026, 1, 1) 
-ARQ_DADOS = 'dados/oportunidades.js'
+CNPJ_ALVO = "08778201000126"   # DROGAFONTE
+ARQ_ZIP = 'dados_pncp.zip'
+ARQ_JSON_INTERNO = 'dados_pncp.json'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 
-# Filtros de Negócio
-KEYWORDS_SAUDE = ["MEDICAMENTO", "FARMACO", "SORO", "REMEDIO", "HOSPITALAR", "CIRURGICO", "HIGIENE", "DESCARTAVEL", "SERINGA", "AGULHA", "LUVAS", "GAZE", "ALGODAO", "SAUDE", "INSUMO"]
-BLACKLIST = ["ESCOLAR", "CONSTRUCAO", "AUTOMOTIVO", "OBRA", "VEICULO", "REFEICAO", "LANCHE", "ALIMENTICIO", "MOBILIARIO", "TI", "INFORMATICA", "PNEU", "ESTANTE", "CADEIRA", "RODOVIARIO", "PAVIMENTACAO", "SERVICO", "EXAME"]
-UFS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "RO", "GO", "MT", "MS", "DF"]
+# === FILTROS ===
+KEYWORDS_SAUDE = [
+    "MEDICAMENTO", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGICO", 
+    "HIGIENE", "DESCARTAVEL", "SERINGA", "AGULHA", "LUVAS", "GAZE", "ALGODAO"
+]
+BLACKLIST = [
+    "ESCOLAR", "CONSTRUCAO", "AUTOMOTIVO", "OBRA", "VEICULO", "REFEICAO", 
+    "LANCHE", "ALIMENTICIO", "MOBILIARIO", "TI", "INFORMATICA", "PNEU", 
+    "ESTANTE", "CADEIRA", "RODOVIARIO", "PAVIMENTACAO"
+]
+
+# Lista Exata de Estados Solicitados
+UFS_ALVO = [
+    "AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE",  # Nordeste
+    "ES", "MG", "RJ", "SP",                                # Sudeste
+    "AM", "PA", "TO", "RO",                                # Norte selecionado
+    "GO", "MT", "MS", "DF"                                 # Centro-Oeste
+]
 
 def normalize(t): 
     if not t: return ""
@@ -26,190 +37,221 @@ def normalize(t):
 
 def eh_relevante(t):
     txt = normalize(t)
-    return any(k in txt for k in KEYWORDS_SAUDE) and not any(b in txt for b in BLACKLIST)
+    return not any(b in txt for b in BLACKLIST) and any(k in txt for k in KEYWORDS_SAUDE)
 
-def criar_sessao():
+def capturar_vencedores(session, it, url_base):
+    """
+    Captura os vencedores (resultados) ou retorna o item estimado se não houver resultado.
+    """
+    num = it.get('numeroItem')
+    desc = it.get('descricao', '')
+    
+    # Filtro de Blacklist no item
+    if any(b in normalize(desc) for b in BLACKLIST): return None
+
+    # Objeto padrão: Item Aberto / Em Andamento (Usa valores ESTIMADOS)
+    item_padrao = {
+        "item": num,
+        "desc": desc,
+        "qtd": it.get('quantidade'),
+        "unitario": it.get('valorUnitarioEstimado'),
+        "total": it.get('valorTotalEstimado'),
+        "fornecedor": "EM ANDAMENTO / SEM RESULTADO",
+        "vitoria": False
+    }
+
+    try:
+        # Tenta buscar resultados (vencedores homologados)
+        url_res = f"{url_base}/{num}/resultados"
+        r = session.get(url_res, timeout=15)
+        
+        if r.status_code == 200:
+            data_resp = r.json()
+            # Normaliza resposta para lista, pois pode vir dict ou list
+            vends = data_resp.get('data', []) if isinstance(data_resp, dict) else data_resp
+            if isinstance(vends, dict): vends = [vends]
+
+            # Se encontrou vencedores, retorna a lista com dados HOMOLOGADOS
+            if vends and len(vends) > 0:
+                resultados = []
+                for v in vends:
+                    resultados.append({
+                        "item": num,
+                        "desc": desc,
+                        "qtd": v.get('quantidadeHomologada'),
+                        "unitario": v.get('valorUnitarioHomologado'),
+                        "total": v.get('valorTotalHomologado'),
+                        "fornecedor": v.get('nomeRazaoSocialFornecedor'),
+                        "vitoria": (CNPJ_ALVO in (v.get('niFornecedor') or ""))
+                    })
+                return resultados
+    except:
+        pass # Se der erro na API de resultados, falha silenciosamente e usa o estimado
+    
+    # Se não tem resultado ou deu erro, retorna o item estimado para não perder a informação
+    return [item_padrao]
+
+def set_github_output(key, value):
+    if "GITHUB_OUTPUT" in os.environ:
+        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+            f.write(f"{key}={value}\n")
+
+def run():
     session = requests.Session()
-    session.verify = False
-    retry = Retry(total=5, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
-    session.mount("https://", HTTPAdapter(max_retries=retry))
-    session.headers.update({'User-Agent': 'MonitorSaude/11.0', 'Accept': 'application/json'})
-    return session
-
-def buscar_detalhes_hibrido(session, cnpj, ano, seq):
-    """
-    Busca Itens e Resultados separadamente e faz a fusão dos dados.
-    Garante fidelidade: Estimado do Item vs Contratado do Resultado.
-    """
-    url_base = f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{cnpj}/{ano}/{seq}"
+    retries = Retry(total=5, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+    session.mount("https://", HTTPAdapter(max_retries=retries))
     
-    lista_itens = []
-    lista_resultados = []
+    # 1. Checkpoint
+    cp = open(ARQ_CHECKPOINT).read().strip() if os.path.exists(ARQ_CHECKPOINT) else "20250101"
+    try: data_atual = datetime.strptime(cp, '%Y%m%d')
+    except: data_atual = datetime.now()
 
-    # 1. Busca Itens (Dados do Edital)
-    try:
-        res_i = session.get(f"{url_base}/itens", params={"pagina":1, "tamanhoPagina":300}, timeout=20)
-        if res_i.status_code == 200: lista_itens = res_i.json()
-    except: pass
-
-    # 2. Busca Resultados (Dados da Homologação)
-    try:
-        res_r = session.get(f"{url_base}/resultados", params={"pagina":1, "tamanhoPagina":300}, timeout=20)
-        if res_r.status_code == 200: lista_resultados = res_r.json()
-    except: pass
-
-    # Dicionário Mestre para Fusão
-    mestre = {}
-
-    # A. Processa Itens Originais
-    for i in lista_itens:
-        num = i['numeroItem']
-        mestre[num] = {
-            "item": num,
-            "descricao": i.get('descricao', 'Sem descrição'),
-            "qtd": i.get('quantidade', 0),
-            "val_est_unit": i.get('valorUnitarioEstimado', 0),
-            "val_est_total": i.get('valorTotalEstimado', 0),
-            "situacao": i.get('situacaoItemNome', 'Aberto'), # Ex: Fracassado, Deserto, Anulado
-            "tem_resultado": False,
-            # Dados de Resultado (Vazios por enquanto)
-            "fornecedor": "",
-            "val_contr_unit": 0,
-            "val_contr_total": 0,
-            "data_resultado": None
-        }
-
-    # B. Processa Resultados e funde/cria
-    for r in lista_resultados:
-        num = r['numeroItem']
-        
-        # Se item não existia (caso de itens criados apenas na homologação), cria agora
-        if num not in mestre:
-            mestre[num] = {
-                "item": num,
-                "descricao": r.get('descricaoItem', 'Item de Resultado'),
-                "qtd": r.get('quantidadeHomologada', 0),
-                "val_est_unit": r.get('valorUnitarioHomologado', 0), # Assume igual se não tinha estimado
-                "val_est_total": r.get('valorTotalHomologado', 0),
-                "situacao": "Homologado",
-                "tem_resultado": True,
-                "fornecedor": "", "val_contr_unit": 0, "val_contr_total": 0, "data_resultado": None
-            }
-        
-        # Atualiza com dados oficiais do resultado
-        mestre[num]["tem_resultado"] = True
-        mestre[num]["fornecedor"] = r.get('nomeRazaoSocialFornecedor', 'Fornecedor não informado')
-        mestre[num]["val_contr_unit"] = r.get('valorUnitarioHomologado', 0)
-        mestre[num]["val_contr_total"] = r.get('valorTotalHomologado', 0)
-        mestre[num]["data_resultado"] = r.get('dataResultado')
-        mestre[num]["situacao"] = "Adjudicado/Homologado"
-
-    # Converte para lista
-    return sorted(list(mestre.values()), key=lambda x: x['item'])
-
-def main():
-    session = criar_sessao()
-    banco = {}
-    
-    # Carrega dados existentes
-    if os.path.exists(ARQ_DADOS):
-        try:
-            with open(ARQ_DADOS, 'r', encoding='utf-8') as f:
-                raw = f.read().replace('const dadosLicitacoes = ', '').rstrip(';')
-                if raw: banco = {i['id']: i for i in json.loads(raw)}
-        except: pass
-    
-    cp = open(ARQ_CHECKPOINT).read().strip() if os.path.exists(ARQ_CHECKPOINT) else "20260101"
-    data_atual = datetime.strptime(cp, '%Y%m%d')
-    hoje = datetime.now()
-
-    if data_atual.date() > hoje.date():
-        print("📅 Dados atualizados.")
-        with open('env.txt', 'w') as f: f.write("CONTINUAR_EXECUCAO=false")
+    if data_atual.date() >= datetime.now().date():
+        print("📅 Dados atualizados até hoje.")
+        set_github_output("CONTINUAR_EXECUCAO", "false")
         return
 
-    ds = data_atual.strftime('%Y%m%d')
-    print(f"🚀 Sniper PNCP | Varredura: {data_atual.strftime('%d/%m/%Y')}")
+    print(f"🚀 Sniper PNCP | Processando: {data_atual.strftime('%d/%m/%Y')}")
 
-    pagina = 1
-    while True:
-        url_pub = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
-        params = {"dataInicial": ds, "dataFinal": ds, "codigoModalidadeContratacao": "6", "pagina": pagina, "tamanhoPagina": 50}
-        
+    # 2. Carregar e Limpar Banco Antigo
+    banco = {}
+    if os.path.exists(ARQ_ZIP):
         try:
-            resp = session.get(url_pub, params=params, timeout=30)
+            with zipfile.ZipFile(ARQ_ZIP, 'r') as z:
+                if ARQ_JSON_INTERNO in z.namelist():
+                    dados_brutos = json.load(z.open(ARQ_JSON_INTERNO))
+                    print(f"📦 Carregados {len(dados_brutos)} registros antigos.")
+                    mantidos = 0
+                    for l in dados_brutos:
+                        if l.get('uf') in UFS_ALVO and eh_relevante(l.get('objeto')):
+                            chave = l.get('id') or l.get('id_licitacao')
+                            if chave: 
+                                banco[chave] = l
+                                mantidos += 1
+                    print(f"🧹 Base limpa: {mantidos} mantidos.")
+        except Exception as e: print(f"⚠️ Erro ZIP: {e}")
+
+    # 3. Coleta do Dia
+    pagina = 1
+    novos_registros = 0
+    
+    while True:
+        try:
+            print(f"  > Varrendo Página {pagina}...")
+            url_pub = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
+            params = {
+                "dataInicial": data_atual.strftime('%Y%m%d'),
+                "dataFinal": data_atual.strftime('%Y%m%d'),
+                "codigoModalidadeContratacao": "6", # Pregão
+                "pagina": pagina,
+                "tamanhoPagina": 50
+            }
+            resp = session.get(url_pub, params=params, timeout=20)
             if resp.status_code != 200: break
             
-            dados = resp.json()
-            licitacoes = dados.get('data', [])
-            if not licitacoes: break
+            lics = resp.json().get('data', [])
+            if not lics: break
 
-            for lic in licitacoes:
-                unid = lic.get('unidadeOrgao', {})
-                uf = unid.get('ufSigla') or lic.get('unidadeFederativaId')
-                objeto = lic.get('objetoCompra') or ""
+            for lic in lics:
+                unidade_orgao = lic.get('unidadeOrgao', {})
+                uf_sigla = unidade_orgao.get('ufSigla')
+                
+                if uf_sigla not in UFS_ALVO: continue 
 
-                if uf in UFS_ALVO and eh_relevante(objeto):
-                    cnpj = lic.get('orgaoEntidade', {}).get('cnpj')
+                if eh_relevante(lic.get('objetoCompra') or ""):
+                    orgao = lic.get('orgaoEntidade', {})
+                    cnpj = orgao.get('cnpj')
                     ano = lic.get('anoCompra')
                     seq = lic.get('sequencialCompra')
+                    
+                    if not (cnpj and ano and seq): continue
                     id_lic = f"{cnpj}{ano}{seq}"
                     
-                    # === DADOS GERAIS SOLICITADOS ===
-                    dt_abertura = lic.get('dataAberturaProposta')
-                    dt_encerramento = lic.get('dataEncerramentoProposta')
-                    val_total = lic.get('valorTotalEstimado', 0)
-                    qtd_itens_total = lic.get('quantidadeItens', 0)
-                    
-                    # Tratamento "Sigiloso" (Se for 0 e tiver flag de sigilo, ou apenas 0)
-                    is_sigiloso = lic.get('niValorTotalEstimado') or (val_total == 0)
-
-                    # Verifica se precisa baixar detalhes (Novo ou Vazio)
-                    precisa_baixar = False
                     if id_lic not in banco:
-                        precisa_baixar = True
-                    elif not banco[id_lic].get('itens'):
-                        precisa_baixar = True
-                        print(f"   ♻️ Atualizando detalhes: {id_lic}...")
-
-                    if precisa_baixar:
-                        itens_detalhados = buscar_detalhes_hibrido(session, cnpj, ano, seq)
+                        # --- FORMATAÇÃO DE CAMPOS ---
+                        num_compra = lic.get('numeroCompra')
+                        str_edital = f"Edital nº {num_compra}/{ano}" if (num_compra and ano) else "Edital S/N"
+                        str_uasg = str(unidade_orgao.get('codigoUnidade') or "---")
                         
-                        banco[id_lic] = {
-                            "id": id_lic,
-                            "orgao": lic.get('orgaoEntidade', {}).get('razaoSocial'),
-                            "unidade_compradora": unid.get('nomeUnidade') or "Não informado",
-                            "cidade": unid.get('municipioNome') or "",
-                            "uf": uf,
-                            "objeto": objeto,
-                            "data_abertura_proposta": dt_abertura,
-                            "data_encerramento_proposta": dt_encerramento,
-                            "valor_total_estimado": val_total,
-                            "is_sigiloso": is_sigiloso,
-                            "qtd_total_itens": qtd_itens_total,
-                            "link_pncp": f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
-                            "api_url": f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{cnpj}/{ano}/{seq}", # Útil para o frontend
-                            "itens": itens_detalhados
-                        }
-                        time.sleep(0.1)
+                        # NOVOS CAMPOS: CIDADE E UNIDADE
+                        str_cidade = unidade_orgao.get('municipioNome') or ""
+                        str_unidade_compradora = unidade_orgao.get('nomeUnidade') or ""
 
-            if pagina >= dados.get('totalPaginas', 1): break
+                        # Data de Atualização
+                        raw_dt_att = lic.get('dataAtualizacao', '')
+                        try:
+                            dt_obj = datetime.fromisoformat(str(raw_dt_att))
+                            str_att = dt_obj.strftime('%Y%m%d')
+                        except:
+                            str_att = data_atual.strftime('%Y%m%d')
+                        
+                        # --- PAGINAÇÃO DE ITENS ---
+                        url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
+                        lista_itens_completa = []
+                        pag_item = 1
+                        while True:
+                            try:
+                                r_it = session.get(url_itens, params={"pagina": pag_item, "tamanhoPagina": 50}, timeout=15)
+                                if r_it.status_code != 200: break
+                                batch = r_it.json()
+                                if not batch: break
+                                lista_itens_completa.extend(batch)
+                                pag_item += 1
+                                if pag_item > 200: break
+                            except: break
+
+                        itens_finais = []
+                        # Processamento paralelo para buscar vencedores de cada item
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as ex:
+                            futures = [ex.submit(capturar_vencedores, session, it, url_itens) for it in lista_itens_completa]
+                            for f in concurrent.futures.as_completed(futures):
+                                res = f.result()
+                                if res: itens_finais.extend(res)
+                        
+                        # Salva se tiver itens (agora inclui itens sem resultado)
+                        if itens_finais:
+                            banco[id_lic] = {
+                                "id": id_lic,
+                                "uf": uf_sigla,
+                                "cidade": str_cidade,
+                                "unidade": str_unidade_compradora,
+                                "data": data_atual.strftime('%Y%m%d'),
+                                "data_att": str_att,
+                                "orgao": orgao.get('razaoSocial'),
+                                "objeto": lic.get('objetoCompra'),
+                                "edital": str_edital,
+                                "uasg": str_uasg,
+                                "link": f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
+                                "itens": itens_finais
+                            }
+                            novos_registros += 1
+            
             pagina += 1
-        except Exception as e: 
-            print(f"Erro Pag {pagina}: {e}")
+            time.sleep(1)
+            
+        except Exception as e:
+            print(f"Erro Loop: {e}")
             break
 
-    # Salva Ordenado por Data de Encerramento (Mais urgente primeiro)
-    lista_final = list(banco.values())
-    lista_final.sort(key=lambda x: x.get('data_encerramento_proposta') or '', reverse=True)
-    
-    os.makedirs('dados', exist_ok=True)
-    with open(ARQ_DADOS, 'w', encoding='utf-8') as f:
-        f.write(f"const dadosLicitacoes = {json.dumps(lista_final, indent=4, ensure_ascii=False)};")
+    print(f"✅ Fim. Novos: {novos_registros}")
 
-    proximo = (data_atual + timedelta(days=1)).strftime('%Y%m%d')
-    with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo)
-    with open('env.txt', 'w') as f: f.write(f"CONTINUAR_EXECUCAO={'true' if (data_atual + timedelta(days=1)).date() <= hoje.date() else 'false'}")
+    # 4. Salvar
+    with open(ARQ_JSON_INTERNO, 'w', encoding='utf-8') as f:
+        json.dump(list(banco.values()), f, ensure_ascii=False, indent=2)
+    
+    with zipfile.ZipFile(ARQ_ZIP, 'w', zipfile.ZIP_DEFLATED) as z:
+        z.write(ARQ_JSON_INTERNO)
+    
+    if os.path.exists(ARQ_JSON_INTERNO): os.remove(ARQ_JSON_INTERNO)
+
+    # 5. Checkpoint
+    proximo_dia = (data_atual + timedelta(days=1)).strftime('%Y%m%d')
+    with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo_dia)
+
+    if datetime.strptime(proximo_dia, '%Y%m%d').date() < datetime.now().date():
+        set_github_output("CONTINUAR_EXECUCAO", "true")
+    else:
+        set_github_output("CONTINUAR_EXECUCAO", "false")
 
 if __name__ == "__main__":
-    main()
+    run()
