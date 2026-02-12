@@ -41,14 +41,13 @@
             <table class="table table-hover table-striped mb-0 table-main">
                 <thead>
                     <tr>
-                        <th>Data Fim</th>
-                        <th>UF</th>
-                        <th>Órgão / UASG</th>
-                        <th>Edital</th>
+                        <th style="width: 100px;">Data Fim</th>
+                        <th style="width: 50px;">UF</th>
+                        <th>Órgão e Unidade Compradora</th> <th style="width: 120px;">Edital</th>
                         <th>Objeto</th>
-                        <th class="text-center">Itens</th>
-                        <th class="text-end">Valor Global</th>
-                        <th class="text-center">Ação</th>
+                        <th class="text-center" style="width: 60px;">Itens</th>
+                        <th class="text-end" style="width: 120px;">Valor Global</th>
+                        <th class="text-center" style="width: 120px;">Ação</th>
                     </tr>
                 </thead>
                 <tbody id="tbody"></tbody>
@@ -112,28 +111,31 @@
         tbody.innerHTML = '';
 
         slice.forEach(d => {
-            // Correção do NaN: Verifica se o valor existe antes de formatar
             const val = (d.is_sigiloso || !d.valor_global) ? '<span class="text-muted small">Sigiloso / R$ 0</span>' : brl.format(d.valor_global);
-            
-            // Correção do Undefined: Usa qtd_itens padronizado no Python
             const qtd = d.qtd_itens !== undefined ? d.qtd_itens : 0;
+            
+            // === AQUI ESTÁ A ALTERAÇÃO VISUAL ===
+            // Formata: "UASG - Órgão" na linha de cima (Negrito)
+            // Formata: "Unidade Compradora" na linha de baixo (Cinza)
+            const linhaOrgao = `<div class="fw-bold text-dark text-truncate" style="max-width:350px" title="${d.uasg} - ${d.orgao}">${d.uasg} - ${d.orgao}</div>`;
+            const linhaUnidade = `<div class="text-muted small text-truncate" style="max-width:350px" title="${d.unidade_compradora}">${d.unidade_compradora}</div>`;
 
             tbody.innerHTML += `
                 <tr>
-                    <td class="fw-bold text-danger" style="width:100px">${dataFmt(d.data_encerramento)}</td>
+                    <td class="fw-bold text-danger">${dataFmt(d.data_encerramento)}</td>
                     <td><b>${d.uf}</b></td>
                     <td>
-                        <div class="text-truncate fw-bold" style="max-width:200px" title="${d.orgao}">${d.orgao}</div>
-                        <small class="text-muted">UASG: ${d.uasg}</small>
+                        ${linhaOrgao}
+                        ${linhaUnidade}
                     </td>
                     <td><span class="badge bg-secondary">${d.edital}</span></td>
                     <td><div class="text-truncate" style="max-width:300px" title="${d.objeto}">${d.objeto}</div></td>
                     <td class="text-center"><span class="badge bg-light text-dark border">${qtd}</span></td>
                     <td class="text-end fw-bold text-primary">${val}</td>
                     <td class="text-center">
-                        <button class="btn btn-sm btn-outline-primary border-0" onclick="ver('${d.id}')"><i class="fas fa-eye"></i></button>
-                        <a href="${d.link}" target="_blank" class="btn btn-sm btn-outline-dark border-0"><i class="fas fa-link"></i></a>
-                        <button class="btn btn-sm btn-outline-danger border-0" onclick="excluir('${d.id}')"><i class="fas fa-trash"></i></button>
+                        <button class="btn btn-sm btn-outline-primary border-0" onclick="ver('${d.id}')" title="Ver Detalhes"><i class="fas fa-eye"></i></button>
+                        <a href="${d.link}" target="_blank" class="btn btn-sm btn-outline-dark border-0" title="Abrir PNCP"><i class="fas fa-link"></i></a>
+                        <button class="btn btn-sm btn-outline-danger border-0" onclick="excluir('${d.id}')" title="Ocultar"><i class="fas fa-trash"></i></button>
                     </td>
                 </tr>
             `;
@@ -155,7 +157,6 @@
             grupos[k].push(i);
         });
 
-        // Ordena chaves para deixar "EM ANDAMENTO" por último ou primeiro conforme preferência
         const chaves = Object.keys(grupos).sort();
 
         chaves.forEach(k => {
@@ -164,7 +165,6 @@
             const cls = isPendente ? 'status-open' : 'status-winner';
             const icone = isPendente ? 'fa-clock' : 'fa-trophy';
             
-            // Cabeçalho Dinâmico: Se pendente, esconde colunas homologadas
             let html = `
             <div class="card mb-3 shadow-sm">
                 <div class="card-header fw-bold ${cls} d-flex justify-content-between">
