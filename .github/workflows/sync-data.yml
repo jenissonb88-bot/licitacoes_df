@@ -1,31 +1,17 @@
-name: Monitoramento PNCP
+name: Monitoramento PNCP Iterativo
 
 on:
-  # 1. Agendamento Automático
   schedule:
-    # Diário às 08:00 BRT (11:00 UTC) - Busca dia anterior
-    - cron: '0 11 * * *'
-    
-    # Quinzenal (Dias 1 e 16) às 08:30 BRT - Busca Completa
-    - cron: '30 11 1,16 * *'
+    - cron: '0 11 * * *' # Roda todo dia às 08h BRT
+  workflow_dispatch: # Permite iniciar manualmente
 
-  # 2. Disparo Manual (Botão)
-  workflow_dispatch:
-    inputs:
-      modo:
-        description: 'Tipo de Busca (DAILY ou FULL)'
-        required: true
-        default: 'DAILY'
-
-# === AQUI ESTÁ A CORREÇÃO ===
-# Dá permissão para o robô salvar arquivos no repositório
 permissions:
   contents: write
+  actions: write # Necessário para o robô disparar a si mesmo
 
 jobs:
   run-robot:
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -36,36 +22,29 @@ jobs:
           python-version: '3.9'
 
       - name: Install dependencies
-        run: |
-          pip install requests urllib3
+        run: pip install requests urllib3
 
-      - name: Determinar Modo de Execução
-        id: mode_check
-        run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "MODE=${{ github.event.inputs.modo }}" >> $GITHUB_ENV
-          elif [ "$(date +%d)" == "01" ] || [ "$(date +%d)" == "16" ]; then
-            echo "MODE=FULL" >> $GITHUB_ENV
-          else
-            echo "MODE=DAILY" >> $GITHUB_ENV
-          fi
-
-      - name: Executar Robô PNCP
+      - name: Executar um dia de coleta
         run: python app.py
-        env:
-          MODE: ${{ env.MODE }}
 
-      - name: Commit e Push dos Dados
+      - name: Commit e Push
         run: |
           git config --global user.name "Bot PNCP"
           git config --global user.email "bot@pncp.com"
-          
-          # Tenta adicionar o arquivo. Se não houver mudança, não falha.
-          git add dados/oportunidades.js
-          
-          # Só faz commit se houver mudanças
-          timestamp=$(date -u)
-          git commit -m "Atualização Automática: ${{ env.MODE }} em $timestamp" || exit 0
-          
-          # Envia para o repositório
+          git add dados/oportunidades.js checkpoint.txt
+          git commit -m "Coleta diária finalizada" || exit 0
           git push
+
+      - name: Verificar se deve continuar
+        run: |
+          if [ ! -f "finish.txt" ]; then
+            echo "Ainda há dias pendentes. Disparando nova tarefa..."
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/main.yml/dispatches" \
+              -d '{"ref":"main"}'
+          else
+            echo "Varredura completa finalizada!"
+            rm finish.txt
+          fi
