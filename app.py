@@ -9,15 +9,14 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 ARQ_DADOS = 'dados/oportunidades.js'
 ARQ_MANUAIS = 'urls.txt'
 
-# === LISTA MESTRE DE PALAVRAS-CHAVE (GENÉRICAS + ESPECÍFICAS) ===
-# Esta lista combina termos gerais com a sua lista detalhada de medicamentos e materiais
+# === PALAVRAS-CHAVE ===
 KEYWORDS_SAUDE = [
     # --- Genéricos ---
     "MEDICAMENTO", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGICO", 
     "HIGIENE", "DESCARTAVEL", "SERINGA", "AGULHA", "LUVAS", "GAZE", "ALGODAO", 
     "SAUDE", "INSUMO", "ODONTOLOGICO", "LABORATORIAL", "ENFERMAGEM",
 
-    # --- Letra A ---
+    # --- Específicos (Sua Lista) ---
     "AAS", "ABIRATERONA", "ACEBROFILINA", "ACETILCISTEINA", "ACICLOVIR", 
     "ACIDO FOLICO", "ACIDO TRANEXAMICO", "ACIDO URSODESOXICOLICO", "ACIDO VALPROICO", 
     "ADENOSINA", "ADRENALINA", "ALBENDAZOL", "ALFAST", "ALOPURINOL", "ALPRAZOLAM", 
@@ -27,16 +26,11 @@ KEYWORDS_SAUDE = [
     "AZITROMICINA", "AZTREONAM", "ABSORVENTE", "AGUA BI-DESTILADA", 
     "AGUA PARA INJECAO", "HIPODERMICA", "ALCOOL 70", "ALCOOL GEL", "ALCOOL ABSOLUTO", 
     "ALGODAO HIDROFILO", "ALGODAO ORTOPEDICO", "ATADURA", "CREPOM", "GESSADA", 
-    "AVENTAL",
-
-    # --- Letra B ---
-    "BACLOFENO", "BECLOMETASONA", "BETAMETASONA", "BETAXOLOL", "BICARBONATO", 
+    "AVENTAL", "BACLOFENO", "BECLOMETASONA", "BETAMETASONA", "BETAXOLOL", "BICARBONATO", 
     "BIMATOPROSTA", "BIPERIDENO", "BISACODIL", "BISOPROLOL", "BORTEZOMIBE", 
     "BOSENTANA", "BROMAZEPAM", "BROMETO DE IPRATROPIO", "BROMOPRIDA", "BUDESONIDA", 
-    "BUPIVACAINA", "BUPROPIONA", "BOLSA COLETORA", "COLOSTOMIA",
-
-    # --- Letra C ---
-    "CABERGOLINA", "CAPECITABINA", "CAPTOPRIL", "CARBAMAZEPINA", "CARBONATO DE CALCIO", 
+    "BUPIVACAINA", "BUPROPIONA", "BOLSA COLETORA", "COLOSTOMIA", "CABERGOLINA", 
+    "CAPECITABINA", "CAPTOPRIL", "CARBAMAZEPINA", "CARBONATO DE CALCIO", 
     "CARBONATO DE LITIO", "CARBOPLATINA", "CARVEDILOL", "CEFALEXINA", "CEFALOTINA", 
     "CEFAZOLINA", "CEFEPIMA", "CEFTAZIDIMA", "CEFTRIAXONA", "CEFUROXIMA", 
     "CETOCONAZOL", "CETOPROFENO", "CETROTIDE", "CICLOBENZAPRINA", "CICLOPENTOLATO", 
@@ -45,85 +39,50 @@ KEYWORDS_SAUDE = [
     "CLORETO DE POTASSIO", "CLORETO DE SODIO", "CLORPROMAZINA", "CODEINA", 
     "COLAGENASE", "COMPLEXO B", "CAMPO CIRURGICO", "CATETER", "INTRAVENOSO", 
     "OCULOS", "CLOREXIDINA", "COBERTURA", "COLETOR", "PERFUROCORTANTE", "URINA", 
-    "COMPRESSA", "CREME DERMOPROTETOR", "CURATIVO",
-
-    # --- Letra D - E ---
-    "DANTROLENO", "EFEDRINA", "ENALAPRIL", "ENOXAPARINA", "ESCINA", "ESCITALOPRAM", 
-    "ESMOLOL", "ESOMEPRAZOL", "ESPIRONOLACTONA", "ESTRIOL", "ETILEFRINA", 
-    "ETOMIDATO", "EXEMESTANO", "EQUIPO", "MACROGOTAS", "MICROGOTAS", "ESCOVA", 
-    "DEGERMACAO", "ESPARADRAPO", "ETER",
-
-    # --- Letra F ---
+    "COMPRESSA", "CREME DERMOPROTETOR", "CURATIVO", "DANTROLENO", "EFEDRINA", 
+    "ENALAPRIL", "ENOXAPARINA", "ESCINA", "ESCITALOPRAM", "ESMOLOL", "ESOMEPRAZOL", 
+    "ESPIRONOLACTONA", "ESTRIOL", "ETILEFRINA", "ETOMIDATO", "EXEMESTANO", "EQUIPO", 
+    "MACROGOTAS", "MICROGOTAS", "ESCOVA", "DEGERMACAO", "ESPARADRAPO", "ETER", 
     "FENITOINA", "FENOBARBITAL", "FENTANILA", "FLUCONAZOL", "FLUMAZENIL", 
     "FLUOCINOLONA", "FLUOXETINA", "FOSFATO DE SODIO", "FOSFOENEMA", "FUROSEMIDA", 
-    "FILTRO HME", "FILTRO VIRAL", "FITA CIRURGICA", "AUTOCLAVE", "FRALDA",
-
-    # --- Letra G ---
+    "FILTRO HME", "FILTRO VIRAL", "FITA CIRURGICA", "AUTOCLAVE", "FRALDA", 
     "GABAPENTINA", "GENCITABINA", "GENTAMICINA", "GLIBENCLAMIDA", "GLICLAZIDA", 
-    "GLICOSE", "GLIMEPIRIDA", "GLUCONATO DE CALCIO", "GLUTARALDEIDO", "GAZE EM ROLO",
-
-    # --- Letra H - I ---
+    "GLICOSE", "GLIMEPIRIDA", "GLUCONATO DE CALCIO", "GLUTARALDEIDO", "GAZE EM ROLO", 
     "HALOPERIDOL", "HEPARINA", "HIDRALAZINA", "HIDROCLOROTIAZIDA", "HIDROCORTISONA", 
     "HIDROXIDO DE ALUMINIO", "HIDROXIUREIA", "HIOSCINA", "ESCOPOLAMINA", 
     "IBUPROFENO", "IMIPRAMINA", "ISOFLURANO", "ISOSSORBIDA", "ISOTRETINOINA", 
-    "ITRACONAZOL",
-
-    # --- Letra L ---
-    "LACTULOSE", "LAMOTRIGINA", "LATANOPROSTA", "LEVETIRACETAM", "LEVOBUPIVACAINA", 
-    "LEVODOPA", "LEVOFLOXACINO", "LEVOMEPROMAZINA", "LEVONORGESTREL", "LEVOSIMENDANA", 
-    "LEVOTIROXINA", "LIDOCAINA", "LISDEXANFETAMINA", "LORATADINA", "LOSARTANA", 
-    "LENCOL HOSPITALAR", "LUVA CIRURGICA", "LUVA PROCEDIMENTO",
-
-    # --- Letra M ---
+    "ITRACONAZOL", "LACTULOSE", "LAMOTRIGINA", "LATANOPROSTA", "LEVETIRACETAM", 
+    "LEVOBUPIVACAINA", "LEVODOPA", "LEVOFLOXACINO", "LEVOMEPROMAZINA", "LEVONORGESTREL", 
+    "LEVOSIMENDANA", "LEVOTIROXINA", "LIDOCAINA", "LISDEXANFETAMINA", "LORATADINA", 
+    "LOSARTANA", "LENCOL HOSPITALAR", "LUVA CIRURGICA", "LUVA PROCEDIMENTO", 
     "MEROPENEM", "METADONA", "METARAMINOL", "METFORMINA", "METILDOPA", 
     "METILERGOMETRINA", "METILPREDNISOLONA", "METOCLOPRAMIDA", "METOPROLOL", 
     "METRONIDAZOL", "MICONAZOL", "MIDAZOLAM", "MIRTAZAPINA", "MONTELUCASTE", 
     "MORFINA", "MUPIROCINA", "MASCARA CIRURGICA", "MASCARA N95", "NEBULIZACAO", 
-    "MONITOR GLICEMIA", "TIRAS",
-
-    # --- Letra N - O ---
-    "NALBUFINA", "NALOXONA", "NALTREXONA", "NEOMICINA", "NEOSTIGMINA", "NIFEDIPINO", 
-    "NIMESULIDA", "NINTEDANIBE", "NISTATINA", "NITROGLICERINA", "NITROPRUSSIATO", 
-    "NOREPINEFRINA", "NORTRIPTILINA", "OCTREOTIDA", "OLANZAPINA", "OMEPRAZOL", 
-    "ONDANSETRONA", "OXACILINA", "OXCARBAZEPINA", "OXIBUPROCAINA", "OXITOCINA", 
-    "OLEO DERSANI", "OLEO AGE",
-
-    # --- Letra P - Q ---
+    "MONITOR GLICEMIA", "TIRAS", "NALBUFINA", "NALOXONA", "NALTREXONA", "NEOMICINA", 
+    "NEOSTIGMINA", "NIFEDIPINO", "NIMESULIDA", "NINTEDANIBE", "NISTATINA", 
+    "NITROGLICERINA", "NITROPRUSSIATO", "NOREPINEFRINA", "NORTRIPTILINA", 
+    "OCTREOTIDA", "OLANZAPINA", "OMEPRAZOL", "ONDANSETRONA", "OXACILINA", 
+    "OXCARBAZEPINA", "OXIBUPROCAINA", "OXITOCINA", "OLEO DERSANI", "OLEO AGE", 
     "PAMIDRONATO", "PANCURONIO", "PANTOPRAZOL", "PARACETAMOL", "PAROXETINA", 
     "PENICILINA", "PERMETRINA", "PILOCARPINA", "PIPERACILINA", "TAZOBACTAM", 
     "POLIMIXINA", "PREDNISOLONA", "PREDNISONA", "PREGABALINA", "PROMETAZINA", 
-    "PROPOFOL", "PROPRANOLOL", "QUETIAPINA",
-
-    # --- Letra R ---
-    "REMIFENTANILA", "RISPERIDONA", "RIVAROXABANA", "ROCURONIO", "ROPIVACAINA", 
-    "ROSUVASTATINA",
-
-    # --- Letra S ---
-    "SACCHAROMYCES", "BOULARDII", "SALBUTAMOL", "SENNA", "SERTRALINA", "SEVOFLURANO", 
-    "SIMETICONA", "SINVASTATINA", "SUCCINATO", "SUFENTANILA", "SUGAMADEX", 
-    "SULFADIAZINA", "SULFATO DE MAGNESIO", "SULFATO DE ZINCO", "SUNITINIBE", 
-    "SUXAMETONIO", "SAPATILHA", "PROPE", "SERINGA INSULINA", "SONDA ASPIRACAO", 
-    "SONDA FOLEY", "SONDA NASOGASTRICA", "SORO FISIOLOGICO", "SORO GLICOSADO", 
-    "SUPORTE", "SUPLEMENTO",
-
-    # --- Letra T ---
-    "TEICOPLANINA", "TEMOZOLOMIDA", "TENOXICAM", "TERBUTALINA", "TIAMINA", 
-    "TIGECICLINA", "TIMOLOL", "TIORIDAZINA", "TOBRAMICINA", "TOPIRAMATO", 
+    "PROPOFOL", "PROPRANOLOL", "QUETIAPINA", "REMIFENTANILA", "RISPERIDONA", 
+    "RIVAROXABANA", "ROCURONIO", "ROPIVACAINA", "ROSUVASTATINA", "SACCHAROMYCES", 
+    "BOULARDII", "SALBUTAMOL", "SENNA", "SERTRALINA", "SEVOFLURANO", "SIMETICONA", 
+    "SINVASTATINA", "SUCCINATO", "SUFENTANILA", "SUGAMADEX", "SULFADIAZINA", 
+    "SULFATO DE MAGNESIO", "SULFATO DE ZINCO", "SUNITINIBE", "SUXAMETONIO", 
+    "SAPATILHA", "PROPE", "SERINGA INSULINA", "SONDA ASPIRACAO", "SONDA FOLEY", 
+    "SONDA NASOGASTRICA", "SORO FISIOLOGICO", "SORO GLICOSADO", "SUPORTE", 
+    "SUPLEMENTO", "TEICOPLANINA", "TEMOZOLOMIDA", "TENOXICAM", "TERBUTALINA", 
+    "TIAMINA", "TIGECICLINA", "TIMOLOL", "TIORIDAZINA", "TOBRAMICINA", "TOPIRAMATO", 
     "TRAMADOL", "TRAVOPROSTA", "TROMETAMOL", "TROPICAMIDA", "TOALHA PAPEL", 
-    "TORNEIRA 3 VIAS", "TOUCA", "TUBO ENDOTRAQUEAL", "TUBO ENSAIO",
-
-    # --- Letra V - Z ---
-    "VALSARTANA", "VANCOMICINA", "VARFARINA", "VASOPRESSINA", "VENLAFAXINA", 
-    "VITAMINA C", "VITAMINA K", "VORICONAZOL", "VASELINA"
+    "TORNEIRA 3 VIAS", "TOUCA", "TUBO ENDOTRAQUEAL", "TUBO ENSAIO", "VALSARTANA", 
+    "VANCOMICINA", "VARFARINA", "VASOPRESSINA", "VENLAFAXINA", "VITAMINA C", 
+    "VITAMINA K", "VORICONAZOL", "VASELINA"
 ]
 
-# Blacklist (O que NÃO queremos)
-BLACKLIST = [
-    "ESCOLAR", "CONSTRUCAO", "AUTOMOTIVO", "OBRA", "VEICULO", "REFEICAO", 
-    "LANCHE", "ALIMENTICIO", "MOBILIARIO", "TI", "INFORMATICA", "PNEU", 
-    "ESTANTE", "CADEIRA", "RODOVIARIO", "PAVIMENTACAO", 
-    "SERVICO", "LOCACAO", "COMODATO", "EXAME", "LIMPEZA PREDIAL"
-]
+BLACKLIST = ["ESCOLAR", "CONSTRUCAO", "AUTOMOTIVO", "OBRA", "VEICULO", "REFEICAO", "LANCHE", "ALIMENTICIO", "MOBILIARIO", "TI", "INFORMATICA", "PNEU", "ESTANTE", "CADEIRA", "RODOVIARIO", "PAVIMENTACAO", "SERVICO", "LOCACAO", "COMODATO", "EXAME", "LIMPEZA PREDIAL"]
 
 UFS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "RO", "GO", "MT", "MS", "DF"]
 
@@ -132,15 +91,21 @@ def normalize(t):
 
 def eh_relevante(t):
     txt = normalize(t)
-    # Se tiver na blacklist, rejeita
     if any(b in txt for b in BLACKLIST): return False
-    # Se tiver QUALQUER uma das keywords, aceita
     return any(k in txt for k in KEYWORDS_SAUDE)
 
 def criar_sessao():
     s = requests.Session()
     s.mount("https://", HTTPAdapter(max_retries=Retry(total=5, backoff_factor=1, status_forcelist=[500,502,503,504])))
     return s
+
+# === NOVA FUNÇÃO DE SALVAMENTO INCREMENTAL ===
+def salvar_banco_disco(banco):
+    """ Salva o banco atual no arquivo JS para garantir persistência """
+    lista = sorted(list(banco.values()), key=lambda x: x.get('data_encerramento') or '', reverse=True)
+    os.makedirs('dados', exist_ok=True)
+    with open(ARQ_DADOS, 'w', encoding='utf-8') as f:
+        f.write(f"const dadosLicitacoes = {json.dumps(lista, indent=4, ensure_ascii=False)};")
 
 def capturar_detalhes(session, cnpj, ano, seq):
     url_base = f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{cnpj}/{ano}/{seq}"
@@ -222,6 +187,9 @@ def processar_urls_manuais(session, banco):
             count += 1
             print(f"   + Manual Adicionado: {id_lic}")
         except: pass
+    
+    # Salva logo após processar manuais
+    if count > 0: salvar_banco_disco(banco)
     return count
 
 def montar_objeto_licitacao(lic, itens, link_manual=None):
@@ -253,6 +221,7 @@ def run():
     session = criar_sessao()
     banco = {}
     
+    # 1. Carrega banco anterior
     if os.path.exists(ARQ_DADOS):
         try:
             with open(ARQ_DADOS, 'r', encoding='utf-8') as f:
@@ -266,7 +235,7 @@ def run():
     if modo == 'FULL':
         dt_inicio = datetime(2026, 1, 1)
         dt_fim = hoje
-        print("📆 MODO FULL: Varrendo histórico completo.")
+        print("📆 MODO FULL: Varrendo histórico completo dia a dia...")
     else:
         ontem = hoje - timedelta(days=1)
         dt_inicio = ontem
@@ -276,13 +245,16 @@ def run():
     delta = dt_fim - dt_inicio
     dias_para_processar = [dt_inicio + timedelta(days=i) for i in range(delta.days + 1)]
     
-    novos = 0
-    novos += processar_urls_manuais(session, banco)
+    processar_urls_manuais(session, banco)
 
+    # 2. Loop por DIA (Inicia tarefa, processa, salva e finaliza)
     for data_atual in dias_para_processar:
         str_data = data_atual.strftime('%Y%m%d')
-        print(f"   > Varrendo: {str_data}")
+        print(f"   > Iniciando varredura do dia: {data_atual.strftime('%d/%m/%Y')}")
+        
         pagina = 1
+        novos_no_dia = 0
+        
         while True:
             url = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
             params = {"dataInicial": str_data, "dataFinal": str_data, "codigoModalidadeContratacao": "6", "pagina": pagina, "tamanhoPagina": 50}
@@ -299,21 +271,26 @@ def run():
                         seq = lic.get('sequencialCompra')
                         id_lic = f"{cnpj}{ano}{seq}"
 
+                        # Em FULL mode, atualizamos sempre para pegar resultados novos
                         if modo == 'FULL' or id_lic not in banco:
                             itens = capturar_detalhes(session, cnpj, ano, seq)
                             if itens:
                                 banco[id_lic] = montar_objeto_licitacao(lic, itens)
-                                novos += 1
+                                novos_no_dia += 1
                                 if modo == 'FULL': time.sleep(0.05)
                 pagina += 1
             except: break
+        
+        # === PONTO CRUCIAL: SALVA AO FIM DE CADA DIA ===
+        if novos_no_dia > 0 or modo == 'FULL':
+            salvar_banco_disco(banco)
+            print(f"   💾 [Check-point] Dados do dia {data_atual.strftime('%d/%m')} salvos. (+{novos_no_dia} registros)")
+        else:
+            print(f"   - Dia {data_atual.strftime('%d/%m')} sem novos registros relevantes.")
 
-    print(f"✅ Fim. {novos} atualizações.")
-    lista = sorted(list(banco.values()), key=lambda x: x.get('data_encerramento') or '', reverse=True)
-    
-    os.makedirs('dados', exist_ok=True)
-    with open(ARQ_DADOS, 'w', encoding='utf-8') as f:
-        f.write(f"const dadosLicitacoes = {json.dumps(lista, indent=4, ensure_ascii=False)};")
+    print(f"✅ Processamento Total Concluído.")
+    # Salva uma última vez por garantia
+    salvar_banco_disco(banco)
 
 if __name__ == "__main__":
     run()
