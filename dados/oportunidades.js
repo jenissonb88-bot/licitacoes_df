@@ -81901,6 +81901,48 @@ const dadosLicitacoes = [
         ]
     },
     {
+        "id": "05816630000152202510319",
+        "data_pub": "2025-12-13T18:31:27",
+        "data_encerramento": "2025-12-31T10:45:00",
+        "uf": "BA",
+        "cidade": "Feira de Santana",
+        "orgao": "FUNDO ESTADUAL DE SAUDE DO ESTADO DA BAHIA",
+        "unidade_compradora": "FUNDO ESTADUAL DE SAUDE - HOSPITAL REGIONAL CLERISTON ANDRADE",
+        "objeto": "Aquisição de bens comuns",
+        "edital": "19085PE0452025/2025",
+        "uasg": "19085",
+        "valor_global": 99972.0,
+        "is_sigiloso": false,
+        "qtd_itens": 2,
+        "link": "https://pncp.gov.br/app/editais/05816630000152/2025/10319",
+        "itens": [
+            {
+                "item": 28797,
+                "desc": "INSULINA, humana nph",
+                "qtd": 600.0,
+                "unitario_est": 52.36,
+                "total_est": 31416.0,
+                "situacao": "ABERTO",
+                "tem_resultado": false,
+                "fornecedor": "EM ANDAMENTO",
+                "unitario_hom": 0.0,
+                "total_hom": 0.0
+            },
+            {
+                "item": 28800,
+                "desc": "INSULINA, humana regular, solucao injetavel 100 UI/mL ( R ) fr. com 10mL",
+                "qtd": 1200.0,
+                "unitario_est": 57.13,
+                "total_est": 68556.0,
+                "situacao": "ABERTO",
+                "tem_resultado": false,
+                "fornecedor": "EM ANDAMENTO",
+                "unitario_hom": 0.0,
+                "total_hom": 0.0
+            }
+        ]
+    },
+    {
         "id": "0039442900010020253865",
         "data_pub": "2025-12-12T07:01:09",
         "data_encerramento": "2025-12-29T14:00:00",
