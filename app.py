@@ -11,14 +11,16 @@ ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_MANUAIS = 'urls.txt'
 ARQ_FINISH = 'finish.txt'
 
-# === PALAVRAS-CHAVE ===
+# === PALAVRAS-CHAVE (RADICAIS) ===
 KEYWORDS = [
     "MEDICAMENT", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGIC", "HIGIENE", 
     "DESCARTAVEL", "SERINGA", "AGULHA", "LUVAS", "GAZE", "ALGODAO", "SAUDE", "INSUMO",
     "AMOXICILIN", "AMPICILIN", "CEFALEXIN", "CEFTRIAXON", "DIPIRON", "PARACETAMOL",
     "INSULIN", "GLICOSE", "HIDROCORTISON", "FUROSEMID", "OMEPRAZOL", "LOSARTAN",
     "ATENOLOL", "SULFATO", "CLORETO", "EQUIPO", "CATETER", "SONDA", "AVENTAL", 
-    "MASCARA", "N95", "ALCOOL", "CURATIVO", "ESPARADRAPO", "PROPE", "TOUCA"
+    "MASCARA", "N95", "ALCOOL", "CURATIVO", "ESPARADRAPO", "PROPE", "TOUCA",
+    # --- Novas palavras (Dietas/Nutrição) ---
+    "DIETA", "ENTERAL", "SUPLEMENT", "FORMULA", "CALORIC", "PROTEIC"
 ]
 
 BLACKLIST = [
@@ -34,16 +36,6 @@ UFS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "R
 def normalize(t):
     if not t: return ""
     return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
-
-def eh_relevante(texto_objeto, itens_raw=[]):
-    obj = normalize(texto_objeto)
-    if any(b in obj for b in BLACKLIST): return False
-    if any(k in obj for k in KEYWORDS): return True
-    for it in itens_raw:
-        desc_item = normalize(it.get('descricao', ''))
-        if any(b in desc_item for b in BLACKLIST): continue
-        if any(k in desc_item for k in KEYWORDS): return True
-    return False
 
 def criar_sessao():
     s = requests.Session()
@@ -81,8 +73,10 @@ def buscar_todos_resultados(session, cnpj, ano, seq):
         except: break
     return resultados
 
-def capturar_detalhes_completos(session, cnpj, ano, seq, itens_raw):
+def capturar_detalhes_completos(itens_raw, resultados_raw):
     itens_map = {}
+    
+    # 1. Mapeia os itens da aba "Itens"
     for i in itens_raw:
         try:
             num = int(i['numeroItem'])
@@ -100,18 +94,33 @@ def capturar_detalhes_completos(session, cnpj, ano, seq, itens_raw):
             }
         except: continue
 
-    resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq)
+    # 2. Processa a aba "Resultados" (Homologações)
     for res in resultados_raw:
         try:
             num = int(res['numeroItem'])
+            fornecedor = res.get('nomeRazaoSocialFornecedor', 'VENCEDOR ANÔNIMO')
+            unit_hom = float(res.get('valorUnitarioHomologado') or 0)
+            total_hom = float(res.get('valorTotalHomologado') or 0)
+            qtd_hom = float(res.get('quantidadeHomologada') or 0)
+            desc_res = res.get('descricaoItem', 'Item Resultado')
+
             if num in itens_map:
                 itens_map[num].update({
                     "tem_resultado": True, "situacao": "HOMOLOGADO",
-                    "fornecedor": res.get('nomeRazaoSocialFornecedor', 'VENCEDOR ANÔNIMO'),
-                    "unitario_hom": float(res.get('valorUnitarioHomologado') or 0),
-                    "total_hom": float(res.get('valorTotalHomologado') or 0)
+                    "fornecedor": fornecedor,
+                    "unitario_hom": unit_hom, "total_hom": total_hom
                 })
+            else:
+                # O ITEM SÓ EXISTIA NA ABA RESULTADOS (Correção Aplicada Aqui)
+                itens_map[num] = {
+                    "item": num, "desc": desc_res, "qtd": qtd_hom,
+                    "unitario_est": unit_hom, "total_est": total_hom, # Assume o valor homologado como estimado para não ficar zerado
+                    "situacao": "HOMOLOGADO", "tem_resultado": True,
+                    "fornecedor": fornecedor,
+                    "unitario_hom": unit_hom, "total_hom": total_hom
+                }
         except: continue
+
     return sorted(list(itens_map.values()), key=lambda x: x['item'])
 
 def processar_urls_manuais(session, banco):
@@ -130,7 +139,9 @@ def processar_urls_manuais(session, banco):
             if resp.status_code == 200:
                 lic = resp.json()
                 itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
-                detalhes = capturar_detalhes_completos(session, cnpj, ano, seq, itens_raw)
+                resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq)
+                
+                detalhes = capturar_detalhes_completos(itens_raw, resultados_raw)
                 unid = lic.get('unidadeOrgao', {})
                 banco[id_lic] = {
                     "id": id_lic, "data_pub": lic.get('dataPublicacaoPncp'),
@@ -152,9 +163,7 @@ def processar_urls_manuais(session, banco):
     return count
 
 def run():
-    # 0. Garante que o arquivo finish.txt seja apagado no início
-    if os.path.exists(ARQ_FINISH):
-        os.remove(ARQ_FINISH)
+    if os.path.exists(ARQ_FINISH): os.remove(ARQ_FINISH)
 
     session = criar_sessao()
     banco = {}
@@ -198,40 +207,70 @@ def run():
                     cnpj, ano, seq = lic['orgaoEntidade']['cnpj'], lic['anoCompra'], lic['sequencialCompra']
                     id_lic = f"{cnpj}{ano}{seq}"
                     
-                    itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
+                    # 1. Verifica Objeto
+                    eh_rel = False
+                    obj_norm = normalize(lic.get('objetoCompra'))
+                    if not any(b in obj_norm for b in BLACKLIST):
+                        if any(k in obj_norm for k in KEYWORDS): eh_rel = True
+                    
+                    itens_raw = []
+                    resultados_raw = []
 
-                    if eh_relevante(lic.get('objetoCompra'), itens_raw):
-                        detalhes = capturar_detalhes_completos(session, cnpj, ano, seq, itens_raw)
-                        banco[id_lic] = {
-                            "id": id_lic, "data_pub": lic.get('dataPublicacaoPncp'),
-                            "data_encerramento": lic.get('dataEncerramentoProposta'),
-                            "uf": uf, "cidade": unid.get('municipioNome'),
-                            "orgao": lic['orgaoEntidade']['razaoSocial'],
-                            "unidade_compradora": unid.get('nomeUnidade'),
-                            "objeto": lic.get('objetoCompra'),
-                            "edital": f"{lic.get('numeroCompra')}/{ano}",
-                            "uasg": unid.get('codigoUnidade') or "---",
-                            "valor_global": float(lic.get('valorTotalEstimado') or 0),
-                            "is_sigiloso": lic.get('niValorTotalEstimado', False),
-                            "qtd_itens": len(detalhes), "link": f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
-                            "itens": detalhes
-                        }
-                        novos_no_dia += 1
+                    # 2. Se o objeto não tem a palavra, verifica os itens
+                    if not eh_rel:
+                        itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
+                        for it in itens_raw:
+                            desc = normalize(it.get('descricao', ''))
+                            if any(b in desc for b in BLACKLIST): continue
+                            if any(k in desc for k in KEYWORDS):
+                                eh_rel = True
+                                break
+                    
+                    # 3. Se os itens vierem vazios (ex: licitação fechada), verifica os resultados
+                    if not eh_rel and not itens_raw:
+                        resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq)
+                        for res in resultados_raw:
+                            desc = normalize(res.get('descricaoItem', ''))
+                            if any(b in desc for b in BLACKLIST): continue
+                            if any(k in desc for k in KEYWORDS):
+                                eh_rel = True
+                                break
+
+                    # 4. Se passou nos filtros, salva!
+                    if eh_rel:
+                        if not itens_raw: itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
+                        if not resultados_raw: resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq)
+                        
+                        detalhes = capturar_detalhes_completos(itens_raw, resultados_raw)
+                        
+                        if detalhes: # Só salva se realmente conseguiu capturar algum item
+                            banco[id_lic] = {
+                                "id": id_lic, "data_pub": lic.get('dataPublicacaoPncp'),
+                                "data_encerramento": lic.get('dataEncerramentoProposta'),
+                                "uf": uf, "cidade": unid.get('municipioNome'),
+                                "orgao": lic['orgaoEntidade']['razaoSocial'],
+                                "unidade_compradora": unid.get('nomeUnidade'),
+                                "objeto": lic.get('objetoCompra'),
+                                "edital": f"{lic.get('numeroCompra')}/{ano}",
+                                "uasg": unid.get('codigoUnidade') or "---",
+                                "valor_global": float(lic.get('valorTotalEstimado') or 0),
+                                "is_sigiloso": lic.get('niValorTotalEstimado', False),
+                                "qtd_itens": len(detalhes), "link": f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
+                                "itens": detalhes
+                            }
+                            novos_no_dia += 1
     except Exception as e:
         print(f"Erro na varredura: {e}")
 
-    # Salva Banco
     lista = sorted(list(banco.values()), key=lambda x: x.get('data_encerramento') or '', reverse=True)
     os.makedirs('dados', exist_ok=True)
     with open(ARQ_DADOS, 'w', encoding='utf-8') as f:
         f.write(f"const dadosLicitacoes = {json.dumps(lista, indent=4, ensure_ascii=False)};")
 
-    # Atualiza o Checkpoint para o próximo dia
     proximo_dia = (data_alvo + timedelta(days=1))
     with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo_dia.strftime('%Y%m%d'))
     print(f"💾 Checkpoint movido para: {proximo_dia.strftime('%d/%m/%Y')} | Licitações salvas: {novos_no_dia}")
 
-    # Verifica se o PRÓXIMO dia já é no futuro. Se for, manda parar.
     if proximo_dia.date() > hoje.date():
         print("🎉 Alcançamos a data atual! Ciclo de varredura finalizado.")
         with open(ARQ_FINISH, 'w') as f: f.write('done')
