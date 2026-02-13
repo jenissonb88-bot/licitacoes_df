@@ -11,7 +11,7 @@ ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_MANUAIS = 'urls.txt'
 ARQ_FINISH = 'finish.txt'
 
-# === PALAVRAS-CHAVE (RADICAIS) ===
+# === PALAVRAS-CHAVE ===
 KEYWORDS = [
     "MEDICAMENT", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGIC", "HIGIENE", 
     "DESCARTAVEL", "SERINGA", "AGULHA", "LUVAS", "GAZE", "ALGODAO", "SAUDE", "INSUMO",
@@ -21,7 +21,6 @@ KEYWORDS = [
     "MASCARA", "N95", "ALCOOL", "CURATIVO", "ESPARADRAPO", "PROPE", "TOUCA"
 ]
 
-# === LISTA NEGRA RESTAURADA E AMPLIADA ===
 BLACKLIST = [
     "ESCOLAR", "CONSTRUCAO", "AUTOMOTIVO", "OBRA", "VEICULO", "REFEICAO", 
     "LANCHE", "ALIMENTICIO", "MOBILIARIO", "TI", "INFORMATICA", "PNEU", 
@@ -42,7 +41,7 @@ def eh_relevante(texto_objeto, itens_raw=[]):
     if any(k in obj for k in KEYWORDS): return True
     for it in itens_raw:
         desc_item = normalize(it.get('descricao', ''))
-        if any(b in desc_item for b in BLACKLIST): continue # Pula item se for serviço
+        if any(b in desc_item for b in BLACKLIST): continue
         if any(k in desc_item for k in KEYWORDS): return True
     return False
 
@@ -51,7 +50,6 @@ def criar_sessao():
     s.mount("https://", HTTPAdapter(max_retries=Retry(total=5, backoff_factor=1, status_forcelist=[500,502,503,504])))
     return s
 
-# Busca itens da forma correta (Paginação de 50)
 def buscar_todos_itens(session, cnpj, ano, seq):
     url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
     itens = []
@@ -64,7 +62,7 @@ def buscar_todos_itens(session, cnpj, ano, seq):
             if not data: break
             itens.extend(data)
             pag += 1
-            if pag > 100: break # Limite de segurança
+            if pag > 100: break 
         except: break
     return itens
 
@@ -85,8 +83,6 @@ def buscar_todos_resultados(session, cnpj, ano, seq):
 
 def capturar_detalhes_completos(session, cnpj, ano, seq, itens_raw):
     itens_map = {}
-    
-    # Processa os itens que já foram baixados
     for i in itens_raw:
         try:
             num = int(i['numeroItem'])
@@ -104,7 +100,6 @@ def capturar_detalhes_completos(session, cnpj, ano, seq, itens_raw):
             }
         except: continue
 
-    # Busca Resultados
     resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq)
     for res in resultados_raw:
         try:
@@ -117,7 +112,6 @@ def capturar_detalhes_completos(session, cnpj, ano, seq, itens_raw):
                     "total_hom": float(res.get('valorTotalHomologado') or 0)
                 })
         except: continue
-
     return sorted(list(itens_map.values()), key=lambda x: x['item'])
 
 def processar_urls_manuais(session, banco):
@@ -158,8 +152,13 @@ def processar_urls_manuais(session, banco):
     return count
 
 def run():
+    # 0. Garante que o arquivo finish.txt seja apagado no início
+    if os.path.exists(ARQ_FINISH):
+        os.remove(ARQ_FINISH)
+
     session = criar_sessao()
     banco = {}
+    
     if os.path.exists(ARQ_DADOS):
         try:
             with open(ARQ_DADOS, 'r', encoding='utf-8') as f:
@@ -171,16 +170,18 @@ def run():
 
     if not os.path.exists(ARQ_CHECKPOINT):
         with open(ARQ_CHECKPOINT, 'w') as f: f.write("20260101")
+    
     with open(ARQ_CHECKPOINT, 'r') as f: data_str = f.read().strip()
     data_alvo = datetime.strptime(data_str, '%Y%m%d')
     hoje = datetime.now()
 
     if data_alvo.date() > hoje.date():
+        print("✅ Todas as datas até hoje já foram processadas!")
         with open(ARQ_FINISH, 'w') as f: f.write('done')
         return
 
     str_data = data_alvo.strftime('%Y%m%d')
-    print(f"🚀 Coletando: {data_alvo.strftime('%d/%m/%Y')}")
+    print(f"🚀 Coletando Dia: {data_alvo.strftime('%d/%m/%Y')}")
 
     url_pub = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
     params = {"dataInicial": str_data, "dataFinal": str_data, "codigoModalidadeContratacao": "6", "pagina": 1, "tamanhoPagina": 50}
@@ -197,10 +198,6 @@ def run():
                     cnpj, ano, seq = lic['orgaoEntidade']['cnpj'], lic['anoCompra'], lic['sequencialCompra']
                     id_lic = f"{cnpj}{ano}{seq}"
                     
-                    # Ignora se já existe no banco e não tem modo de forçar atualização
-                    if id_lic in banco: continue
-
-                    # Baixa os itens corretamente
                     itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
 
                     if eh_relevante(lic.get('objetoCompra'), itens_raw):
@@ -223,14 +220,21 @@ def run():
     except Exception as e:
         print(f"Erro na varredura: {e}")
 
+    # Salva Banco
     lista = sorted(list(banco.values()), key=lambda x: x.get('data_encerramento') or '', reverse=True)
     os.makedirs('dados', exist_ok=True)
     with open(ARQ_DADOS, 'w', encoding='utf-8') as f:
         f.write(f"const dadosLicitacoes = {json.dumps(lista, indent=4, ensure_ascii=False)};")
 
-    proximo_dia = (data_alvo + timedelta(days=1)).strftime('%Y%m%d')
-    with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo_dia)
-    print(f"💾 Checkpoint: {proximo_dia} | Novos: {novos_no_dia}")
+    # Atualiza o Checkpoint para o próximo dia
+    proximo_dia = (data_alvo + timedelta(days=1))
+    with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo_dia.strftime('%Y%m%d'))
+    print(f"💾 Checkpoint movido para: {proximo_dia.strftime('%d/%m/%Y')} | Licitações salvas: {novos_no_dia}")
+
+    # Verifica se o PRÓXIMO dia já é no futuro. Se for, manda parar.
+    if proximo_dia.date() > hoje.date():
+        print("🎉 Alcançamos a data atual! Ciclo de varredura finalizado.")
+        with open(ARQ_FINISH, 'w') as f: f.write('done')
 
 if __name__ == "__main__":
     run()
