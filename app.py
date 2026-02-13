@@ -31,7 +31,7 @@ BLACKLIST = [
     "LANCHE", "ALIMENTICIO", "MOBILIARIO", "TI", "INFORMATICA", "PNEU", 
     "ESTANTE", "CADEIRA", "RODOVIARIO", "PAVIMENTACAO", "SERVICO", "LOCACAO", 
     "COMODATO", "EXAME", "LIMPEZA PREDIAL", "MANUTENCAO", "ASSISTENCIA MEDICA", 
-    "PLANO DE SAUDE", "ODONTOLOGICA", "TERCEIRIZACAO", "EQUIPAMENTO"
+    "PLANO DE SAUDE", "ODONTOLOGICA", "TERCEIRIZACAO", "EQUIPAMENTO", "MERENDA"
 ]
 
 UFS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "RO", "GO", "MT", "MS", "DF"]
@@ -52,8 +52,9 @@ def criar_sessao():
     s.mount("https://", HTTPAdapter(max_retries=Retry(total=5, backoff_factor=1, status_forcelist=[500,502,503,504])))
     return s
 
+# --- CORREÇÃO DA ROTA: VOLTANDO PARA A API DE CONSULTA (COM PAGINAÇÃO) ---
 def buscar_todos_itens(session, cnpj, ano, seq):
-    url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
+    url = f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{cnpj}/{ano}/{seq}/itens"
     itens = []
     pag = 1
     while True:
@@ -70,7 +71,7 @@ def buscar_todos_itens(session, cnpj, ano, seq):
     return itens
 
 def buscar_todos_resultados(session, cnpj, ano, seq):
-    url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/resultados"
+    url = f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{cnpj}/{ano}/{seq}/resultados"
     resultados = []
     pag = 1
     while True:
@@ -82,6 +83,7 @@ def buscar_todos_resultados(session, cnpj, ano, seq):
             if not lista: break
             resultados.extend(lista)
             pag += 1
+            if pag > 100: break
         except: break
     return resultados
 
@@ -227,7 +229,7 @@ def run():
 
     url_pub = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
     novos_no_dia = 0
-    pagina_pub = 1 # <-- NOVA LÓGICA DE PAGINAÇÃO DIÁRIA
+    pagina_pub = 1 
 
     while True:
         params = {
@@ -242,7 +244,7 @@ def run():
             if r.status_code != 200: break
             
             lics = r.json().get('data', [])
-            if not lics: break # Se a lista vier vazia, significa que as páginas acabaram
+            if not lics: break 
             
             print(f"   Lendo página {pagina_pub} do dia...")
 
@@ -300,7 +302,7 @@ def run():
                             }
                             novos_no_dia += 1
             
-            pagina_pub += 1 # Vai para a próxima página de resultados do dia
+            pagina_pub += 1 
             
         except Exception as e:
             print(f"Erro na varredura da página {pagina_pub}: {e}")
