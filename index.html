@@ -10,21 +10,17 @@
         :root { --primary-dark: #2c3e50; --accent-blue: #3498db; --danger-red: #e74c3c; }
         body { background-color: #f4f7f6; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 0.85rem; }
         
-        /* Cabeçalho */
         .header-bar { background: var(--primary-dark); color: white; padding: 12px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .app-logo { font-size: 1.2rem; font-weight: 700; letter-spacing: 1px; }
 
-        /* Tabela Principal */
         .card-table { border: none; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden; }
         .table-pncp thead { background-color: #34495e; color: white; text-transform: uppercase; font-size: 0.75rem; }
         .table-pncp th { padding: 15px 10px; border: none; }
         .table-pncp td { vertical-align: middle; padding: 12px 10px; border-bottom: 1px solid #eee; }
         
-        /* Estilização Órgão/Unidade */
         .org-uasg { font-weight: 700; color: #333; display: block; }
         .unit-name { color: #7f8c8d; font-size: 0.8rem; display: block; }
 
-        /* Limite de 3 Linhas para o Objeto */
         .text-truncate-3 {
             display: -webkit-box;
             -webkit-line-clamp: 3;
@@ -34,21 +30,17 @@
             white-space: normal;
         }
 
-        /* Status e Valores */
         .val-global { font-family: 'Consolas', monospace; font-weight: 700; color: var(--accent-blue); }
         .date-badge { font-weight: 600; color: var(--danger-red); }
 
-        /* Modal e Grupos */
         .modal-header { background: var(--primary-dark); color: white; }
         .group-card { border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 15px; }
         .group-header { padding: 10px 15px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
         .status-winner { background: #d1e7dd; color: #0f5132; border-left: 5px solid #198754; }
         .status-open { background: #fff3cd; color: #664d03; border-left: 5px solid #ffc107; }
 
-        /* Paginação */
         .pagination-container { background: white; padding: 15px; border-top: 1px solid #eee; display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap; }
         
-        /* Ocultar as setas do input number */
         input[type=number]::-webkit-inner-spin-button, 
         input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
@@ -95,8 +87,7 @@
                         <th class="text-center" style="width: 120px;">Ações</th>
                     </tr>
                 </thead>
-                <tbody id="tbody">
-                    </tbody>
+                <tbody id="tbody"></tbody>
             </table>
         </div>
 
@@ -121,8 +112,7 @@
                 <h6 class="modal-title"><i class="fas fa-info-circle me-2"></i> Detalhamento por Fornecedor / Item</h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div id="modalBody" class="modal-body bg-light">
-                </div>
+            <div id="modalBody" class="modal-body bg-light"></div>
         </div>
     </div>
 </div>
@@ -154,7 +144,7 @@
     let pagina = 1;
     let dadosOriginais = [];
     let dadosFiltrados = [];
-    let totalPaginas = 1; // Variável global para ser lida pela função "Ir para"
+    let totalPaginas = 1;
 
     const fmtBrl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
     const fmtData = d => d ? new Date(d).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '--/--/----';
@@ -223,13 +213,11 @@
         document.getElementById('btnAnt').disabled = (pagina === 1);
         document.getElementById('btnProx').disabled = (pagina === totalPaginas);
         
-        // Sincroniza o campo "Ir para" com a página atual e define os limites
         const inputIr = document.getElementById('inputIrPara');
         inputIr.value = pagina;
         inputIr.max = totalPaginas;
     }
 
-    // NOVA FUNÇÃO: Navegação direta pela caixa de texto
     function irParaPaginaDireta() {
         const input = document.getElementById('inputIrPara');
         let novaPag = parseInt(input.value);
@@ -266,6 +254,7 @@
             const isPendente = k === 'EM ANDAMENTO';
             const classe = isPendente ? 'status-open' : 'status-winner';
             
+            // --- NOVO: Adicionada a coluna ME/EPP no cabeçalho ---
             let tabela = `
                 <div class="group-card shadow-sm mb-3">
                     <div class="group-header ${classe}">
@@ -281,6 +270,7 @@
                                     <th class="text-center" style="width: 60px">Qtd</th>
                                     <th class="text-end" style="width: 100px">Unit. Est.</th>
                                     <th class="text-end" style="width: 100px">Total Est.</th>
+                                    <th class="text-center" style="width: 80px">ME/EPP</th>
                                     ${!isPendente ? '<th class="text-end text-success" style="width: 100px">Unit. Hom.</th>' : ''}
                                     ${!isPendente ? '<th class="text-end text-success" style="width: 100px">Total Hom.</th>' : ''}
                                 </tr>
@@ -288,6 +278,11 @@
                             <tbody>`;
             
             lista.forEach(it => {
+                // Previne falhas se o item antigo não tiver a variável salva no arquivo JSON
+                const badge_meepp = it.me_epp || "Não"; 
+                const cor_badge = badge_meepp === "Sim" ? "bg-primary" : "bg-secondary";
+
+                // --- NOVO: Adicionada a célula da variável na linha da tabela ---
                 tabela += `
                     <tr>
                         <td class="text-center fw-bold">${it.item}</td>
@@ -295,6 +290,7 @@
                         <td class="text-center">${it.qtd}</td>
                         <td class="text-end text-muted">${fmtBrl.format(it.unitario_est)}</td>
                         <td class="text-end text-muted">${fmtBrl.format(it.total_est)}</td>
+                        <td class="text-center"><span class="badge ${cor_badge}">${badge_meepp}</span></td>
                         ${!isPendente ? `<td class="text-end fw-bold text-success">${fmtBrl.format(it.unitario_hom)}</td>` : ''}
                         ${!isPendente ? `<td class="text-end fw-bold text-success">${fmtBrl.format(it.total_hom)}</td>` : ''}
                     </tr>`;
