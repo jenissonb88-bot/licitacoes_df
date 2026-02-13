@@ -11,9 +11,7 @@ ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_MANUAIS = 'urls.txt'
 ARQ_FINISH = 'finish.txt'
 
-# === PALAVRAS-CHAVE (DIVIDIDAS POR REGRA) ===
-
-# 1. Palavras que servem para TODOS os estados
+# === PALAVRAS-CHAVE ===
 KEYWORDS_GERAIS = [
     "MEDICAMENT", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGIC", "HIGIENE", 
     "DESCARTAVEL", "SERINGA", "AGULHA", "LUVAS", "GAZE", "ALGODAO", "SAUDE", "INSUMO",
@@ -23,7 +21,6 @@ KEYWORDS_GERAIS = [
     "MASCARA", "N95", "ALCOOL", "CURATIVO", "ESPARADRAPO", "PROPE", "TOUCA"
 ]
 
-# 2. Palavras exclusivas para o Nordeste
 KEYWORDS_NORDESTE = [
     "DIETA", "ENTERAL", "SUPLEMENT", "FORMULA", "CALORIC", "PROTEIC"
 ]
@@ -44,9 +41,6 @@ def normalize(t):
     return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
 
 def contem_palavra_relevante(texto, uf):
-    """
-    Verifica se o texto possui alguma palavra chave, respeitando a regra do Nordeste.
-    """
     if any(b in texto for b in BLACKLIST): return False
     if any(k in texto for k in KEYWORDS_GERAIS): return True
     if uf in UFS_NORDESTE and any(k in texto for k in KEYWORDS_NORDESTE): return True
@@ -91,6 +85,15 @@ def buscar_todos_resultados(session, cnpj, ano, seq):
 def capturar_detalhes_completos(itens_raw, resultados_raw):
     itens_map = {}
     
+    # Mapeamento Oficial (1 a 3 = Sim | 4 e 5 = Não)
+    mapa_beneficio = {
+        1: "Sim",
+        2: "Sim",
+        3: "Sim",
+        4: "Não",
+        5: "Não"
+    }
+
     for i in itens_raw:
         try:
             num = int(i['numeroItem'])
@@ -99,12 +102,22 @@ def capturar_detalhes_completos(itens_raw, resultados_raw):
             total_est = float(i.get('valorTotalEstimado') or 0)
             if total_est == 0 and qtd > 0 and unit_est > 0:
                 total_est = round(qtd * unit_est, 2)
+            
+            # --- NOVA LÓGICA DE ME/EPP BINÁRIA ---
+            cod_beneficio = i.get('tipoBeneficio') or i.get('tipoBeneficioId') or 5
+            try:
+                cod_beneficio = int(cod_beneficio)
+            except:
+                cod_beneficio = 5 # Padrão é Não (5)
+                
+            me_epp = mapa_beneficio.get(cod_beneficio, "Não")
                 
             itens_map[num] = {
                 "item": num, "desc": i.get('descricao', 'Sem descrição'), "qtd": qtd,
                 "unitario_est": unit_est, "total_est": total_est, "situacao": "ABERTO",
                 "tem_resultado": False, "fornecedor": "EM ANDAMENTO",
-                "unitario_hom": 0.0, "total_hom": 0.0
+                "unitario_hom": 0.0, "total_hom": 0.0,
+                "me_epp": me_epp
             }
         except: continue
 
@@ -129,7 +142,8 @@ def capturar_detalhes_completos(itens_raw, resultados_raw):
                     "unitario_est": unit_hom, "total_est": total_hom,
                     "situacao": "HOMOLOGADO", "tem_resultado": True,
                     "fornecedor": fornecedor,
-                    "unitario_hom": unit_hom, "total_hom": total_hom
+                    "unitario_hom": unit_hom, "total_hom": total_hom,
+                    "me_epp": "Não" 
                 }
         except: continue
 
@@ -219,7 +233,6 @@ def run():
                     cnpj, ano, seq = lic['orgaoEntidade']['cnpj'], lic['anoCompra'], lic['sequencialCompra']
                     id_lic = f"{cnpj}{ano}{seq}"
                     
-                    # 1. Verifica Objeto com a nova regra de UF
                     eh_rel = False
                     obj_norm = normalize(lic.get('objetoCompra'))
                     if contem_palavra_relevante(obj_norm, uf):
@@ -228,7 +241,6 @@ def run():
                     itens_raw = []
                     resultados_raw = []
 
-                    # 2. Se o objeto não tem a palavra, verifica os itens
                     if not eh_rel:
                         itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
                         for it in itens_raw:
@@ -237,7 +249,6 @@ def run():
                                 eh_rel = True
                                 break
                     
-                    # 3. Se itens vierem vazios, verifica resultados
                     if not eh_rel and not itens_raw:
                         resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq)
                         for res in resultados_raw:
@@ -246,7 +257,6 @@ def run():
                                 eh_rel = True
                                 break
 
-                    # 4. Salva se for relevante
                     if eh_rel:
                         if not itens_raw: itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
                         if not resultados_raw: resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq)
