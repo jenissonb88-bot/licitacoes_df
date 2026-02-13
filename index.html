@@ -24,6 +24,16 @@
         .org-uasg { font-weight: 700; color: #333; display: block; }
         .unit-name { color: #7f8c8d; font-size: 0.8rem; display: block; }
 
+        /* Limite de 3 Linhas para o Objeto */
+        .text-truncate-3 {
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: normal;
+        }
+
         /* Status e Valores */
         .val-global { font-family: 'Consolas', monospace; font-weight: 700; color: var(--accent-blue); }
         .date-badge { font-weight: 600; color: var(--danger-red); }
@@ -60,11 +70,7 @@
             <div class="col-md-3"><input id="fOrgao" class="form-control form-control-sm" placeholder="Órgão, UASG ou Unidade" onkeyup="render()"></div>
             <div class="col-md-3"><input id="fObjeto" class="form-control form-control-sm" placeholder="Palavra no Objeto" onkeyup="render()"></div>
             <div class="col-md-2"><input id="fEdital" class="form-control form-control-sm" placeholder="Nº Edital" onkeyup="render()"></div>
-            
-            <div class="col-md-2">
-                <input type="date" id="fDataEnc" class="form-control form-control-sm" title="Filtrar por Data de Encerramento" onchange="render()">
-            </div>
-            
+            <div class="col-md-2"><input type="date" id="fDataEnc" class="form-control form-control-sm" title="Filtrar por Data de Encerramento" onchange="render()"></div>
             <div class="col-md-1"><button class="btn btn-sm btn-secondary w-100" onclick="limparFiltros()">Limpar</button></div>
         </div>
     </div>
@@ -151,24 +157,20 @@
     };
 
     function render() {
-        // Coleta os valores de todos os filtros
         const uf = document.getElementById('fUf').value.toUpperCase();
         const org = document.getElementById('fOrgao').value.toUpperCase();
         const obj = document.getElementById('fObjeto').value.toUpperCase();
         const edt = document.getElementById('fEdital').value.toUpperCase();
-        const dataEnc = document.getElementById('fDataEnc').value; // Retorna no formato YYYY-MM-DD
+        const dataEnc = document.getElementById('fDataEnc').value; 
 
-        // Aplica todos os filtros simultaneamente
         const filtrados = dadosOriginais.filter(d => 
             (d.uf || '').includes(uf) &&
             ((d.orgao || '').toUpperCase().includes(org) || (d.uasg || '').includes(org) || (d.unidade_compradora || '').toUpperCase().includes(org)) &&
             (d.objeto || '').toUpperCase().includes(obj) &&
             (d.edital || '').includes(edt) &&
-            // Lógica do filtro de data: Se a data estiver vazia, passa direto. Se estiver preenchida, o início da string da data da licitação deve bater.
             (!dataEnc || (d.data_encerramento && d.data_encerramento.startsWith(dataEnc)))
         );
 
-        // Paginação
         const totalPaginas = Math.ceil(filtrados.length / ITENS_POR_PAG) || 1;
         if (pagina > totalPaginas) pagina = totalPaginas;
         if (pagina < 1) pagina = 1;
@@ -192,7 +194,9 @@
                         <span class="unit-name">${d.unidade_compradora}</span>
                     </td>
                     <td><span class="badge bg-light text-dark border">${d.edital}</span></td>
-                    <td><div class="text-truncate" style="max-width: 350px;" title="${d.objeto}">${d.objeto}</div></td>
+                    
+                    <td><div class="text-truncate-3" style="max-width: 350px;" title="${d.objeto}">${d.objeto}</div></td>
+                    
                     <td class="text-center fw-bold">${d.qtd_itens || 0}</td>
                     <td class="text-end val-global">${valor}</td>
                     <td class="text-center">
@@ -295,7 +299,7 @@
     }
 
     function mudarPagina(dir) { pagina += dir; render(); window.scrollTo(0,0); }
-    function limparFiltros() { document.querySelectorAll('input').forEach(i => i.value = ''); render(); }
+    function limparFiltros() { document.querySelectorAll('input:not([type="date"])').forEach(i => i.value = ''); document.getElementById('fDataEnc').value = ''; render(); }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
