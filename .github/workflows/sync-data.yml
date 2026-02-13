@@ -2,8 +2,8 @@ name: Monitoramento PNCP Iterativo
 
 on:
   schedule:
-    - cron: '0 11 * * *'
-  workflow_dispatch:
+    - cron: '0 11 * * *' # Executa todo dia às 08:00 (BRT)
+  workflow_dispatch:     # Permite o robô se auto-chamar
 
 permissions:
   contents: write
@@ -13,20 +13,32 @@ jobs:
   run-robot:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout do Código
         uses: actions/checkout@v3
+
+      - name: Lógica de Reinício Quinzenal (Dias 01 e 16)
+        run: |
+          # Verifica se foi um acionamento automático (cron)
+          if [ "${{ github.event_name }}" == "schedule" ]; then
+            DIA=$(date +%d)
+            # Se for dia 01 ou 16, força o robô a voltar para o começo do ano!
+            if [ "$DIA" == "01" ] || [ "$DIA" == "16" ]; then
+              echo "📆 Dia $DIA: Iniciando varredura profunda de atualização!"
+              echo "20260101" > checkpoint.txt
+            fi
+          fi
 
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      - name: Coletar
+      - name: Executar Coleta Diária
         run: |
           pip install requests urllib3
           python app.py
 
-      - name: Save and Push
+      - name: Salvar Dados no Repositório
         run: |
           git config --global user.name "Bot PNCP"
           git config --global user.email "bot@pncp.com"
@@ -34,13 +46,9 @@ jobs:
           git commit -m "Dia processado: $(cat checkpoint.txt)" || exit 0
           git push
 
-      - name: Re-trigger
-        # Só dispara se o arquivo finish.txt NÃO existir
+      - name: Auto-Acionamento (Loop Inteligente)
         if: hashFiles('finish.txt') == ''
         run: |
-          echo "Dia concluído com sucesso. Chamando próxima tarefa..."
-          curl -X POST \
-          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-          -H "Accept: application/vnd.github.v3+json" \
-          https://api.github.com/repos/${{ github.repository }}/actions/workflows/main.yml/dispatches \
-          -d '{"ref":"main"}'
+          echo "Ainda há dias pendentes. Disparando próxima tarefa imediatamente..."
+          # Usa o CLI oficial do GitHub para chamar a si mesmo com segurança
+          env GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} gh workflow run "${{ github.workflow }}"
