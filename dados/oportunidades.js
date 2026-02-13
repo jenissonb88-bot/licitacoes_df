@@ -42119,5 +42119,35 @@ const dadosLicitacoes = [
         "qtd_itens": 0,
         "link": "https://pncp.gov.br/app/editais/25769548000121/2025/326",
         "itens": []
+    },
+    {
+        "id": "4613741000018020251171",
+        "data_pub": "2026-01-25T16:01:17",
+        "data_encerramento": "2025-11-17T09:00:00",
+        "uf": "SP",
+        "cidade": "Bauru",
+        "orgao": "MUNICIPIO DE BAURU",
+        "unidade_compradora": "PREFEITURA MUNICIPAL DE BAURU/SP",
+        "objeto": "Aquisição de itens para uso hospitalar para as unidades de urgência e emergência de Bauru, SP, devidamente especificados no anexo I do edital, através do sistema de registro de preços.",
+        "edital": "660/2025",
+        "uasg": "986219",
+        "valor_global": 31810.0,
+        "is_sigiloso": false,
+        "qtd_itens": 1,
+        "link": "https://pncp.gov.br/app/editais/46137410000180/2025/1171",
+        "itens": [
+            {
+                "item": 1,
+                "desc": "CADEIRA DE BANHO - 300 KG - UNIDADES DE URGÊNCIA Cadeira de Banho; Estrutura Em Aço Inox Tubular de 1 3/4 x 1.50mm; para Obeso Até 300 Kg; Assento Chapa de Aço Inoxidável de 1.50mm, Estrutura C/tubos de Aço Inoxidável 25x25x1.20mm; Encosto Reto Em Chapa de Aço Inoxidável de 1.50mm; Com Rodízios Giratórios de 8\", Sendo 2 Com Freios traseiros; Com Apoio para Braços e Pês Fixos; CÓD BEC 2073099",
+                "qtd": 10.0,
+                "unitario_est": 3181.0,
+                "total_est": 31810.0,
+                "situacao": "ABERTO",
+                "tem_resultado": false,
+                "fornecedor": "EM ANDAMENTO",
+                "unitario_hom": 0.0,
+                "total_hom": 0.0
+            }
+        ]
     }
 ];
