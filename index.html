@@ -38,6 +38,13 @@
         .pagination-container { background: white; padding: 15px; border-top: 1px solid #eee; display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap; }
         input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
+        
+        /* Estilo do Resumo */
+        .resumo-licitacao { border-left: 4px solid var(--accent-blue); background: #fff; padding: 15px; border-radius: 0 6px 6px 0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        .resumo-licitacao h6 { font-weight: 700; color: var(--primary-dark); margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+        .resumo-dado { font-size: 0.85rem; margin-bottom: 5px; }
+        .resumo-label { font-weight: 600; color: #555; }
+        .resumo-objeto { background: #f8f9fa; padding: 10px; border-radius: 4px; border: 1px solid #e9ecef; margin-top: 10px; font-size: 0.85rem; color: #444; }
     </style>
 </head>
 <body>
@@ -99,7 +106,7 @@
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header py-2">
-                <h6 class="modal-title"><i class="fas fa-info-circle me-2"></i> Detalhamento por Fornecedor / Item</h6>
+                <h6 class="modal-title"><i class="fas fa-list-alt me-2"></i> Detalhamento da Licitação</h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div id="modalBody" class="modal-body bg-light"></div>
@@ -136,6 +143,8 @@
     const fmtBrl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
     const fmtUnit = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 4 });
     const fmtData = d => d ? new Date(d).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '--/--/----';
+    // Nova formatação para mostrar a hora no resumo
+    const fmtDataHora = d => d ? new Date(d).toLocaleString('pt-BR', {timeZone: 'UTC'}) : '--/--/----';
 
     window.onload = () => {
         const excluidos = JSON.parse(localStorage.getItem('sniper_excluidos') || '[]');
@@ -174,7 +183,6 @@
         lote.forEach(d => {
             const valor = (d.is_sigiloso || !d.valor_global) ? '<span class="text-muted">Sigiloso</span>' : fmtBrl.format(d.valor_global);
             
-            // --- LÓGICA DE EXCLUSIVIDADE ME/EPP COM NOVA COR ---
             let totalItens = d.itens ? d.itens.length : 0;
             let qtdSim = d.itens ? d.itens.filter(i => i.me_epp === "Sim").length : 0;
             let tarjaMeEpp = "";
@@ -183,7 +191,6 @@
                 if (qtdSim === totalItens) {
                     tarjaMeEpp = '<span class="badge bg-danger mt-1 d-block w-100" style="font-size: 0.7rem;">EXCLUSIVO</span>';
                 } else if (qtdSim > 0) {
-                    // ALTERADO AQUI PARA AMARELO/LARANJA (bg-warning text-dark)
                     tarjaMeEpp = '<span class="badge bg-warning text-dark mt-1 d-block w-100" style="font-size: 0.7rem;">PARCIAL</span>';
                 } else {
                     tarjaMeEpp = '<span class="badge bg-success mt-1 d-block w-100" style="font-size: 0.7rem;">AMPLO</span>';
@@ -239,8 +246,35 @@
         if (!lic) return;
 
         const body = document.getElementById('modalBody');
-        body.innerHTML = '';
+        
+        // --- 1. CONSTRUÇÃO DO RESUMO (CABEÇALHO) ---
+        const valorGlobal = (lic.is_sigiloso || !lic.valor_global) ? '<span class="text-muted">Sigiloso</span>' : `<span class="text-success fw-bold">${fmtBrl.format(lic.valor_global)}</span>`;
+        
+        let htmlBase = `
+            <div class="resumo-licitacao">
+                <h6>Resumo do Edital ${lic.edital}</h6>
+                <div class="row">
+                    <div class="col-md-7">
+                        <div class="resumo-dado"><span class="resumo-label">Órgão:</span> ${lic.orgao}</div>
+                        <div class="resumo-dado"><span class="resumo-label">Unidade (UASG):</span> ${lic.unidade_compradora} (${lic.uasg}) - ${lic.cidade}/${lic.uf}</div>
+                        <div class="resumo-dado mt-2"><span class="resumo-label">Valor Global:</span> ${valorGlobal}</div>
+                    </div>
+                    <div class="col-md-5">
+                        <div class="resumo-dado"><span class="resumo-label"><i class="far fa-calendar-alt text-primary"></i> Publicação:</span> ${fmtDataHora(lic.data_pub)}</div>
+                        <div class="resumo-dado"><span class="resumo-label"><i class="far fa-clock text-danger"></i> Encerramento:</span> <strong class="text-danger">${fmtDataHora(lic.data_encerramento)}</strong></div>
+                        <div class="mt-2">
+                            <a href="${lic.link}" target="_blank" class="btn btn-sm btn-outline-primary"><i class="fas fa-external-link-alt me-1"></i> Abrir no Portal PNCP</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="resumo-objeto">
+                    <span class="resumo-label">Objeto Completo:</span><br>
+                    ${lic.objeto}
+                </div>
+            </div>
+        `;
 
+        // --- 2. CONSTRUÇÃO DAS TABELAS DE ITENS ---
         const grupos = {};
         lic.itens.forEach(i => {
             const k = i.fornecedor || 'EM ANDAMENTO';
@@ -315,9 +349,10 @@
             });
 
             tabela += `</tbody></table></div></div>`;
-            body.innerHTML += tabela;
+            htmlBase += tabela;
         });
 
+        body.innerHTML = htmlBase;
         new bootstrap.Modal(document.getElementById('modalDetalhes')).show();
     }
 
