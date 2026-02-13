@@ -21,28 +21,22 @@
         .org-uasg { font-weight: 700; color: #333; display: block; }
         .unit-name { color: #7f8c8d; font-size: 0.8rem; display: block; }
 
-        .text-truncate-3 {
-            display: -webkit-box;
-            -webkit-line-clamp: 3;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: normal;
-        }
+        .text-truncate-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal; }
 
         .val-global { font-family: 'Consolas', monospace; font-weight: 700; color: var(--accent-blue); }
         .date-badge { font-weight: 600; color: var(--danger-red); }
 
         .modal-header { background: var(--primary-dark); color: white; }
         .group-card { border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 15px; }
-        .group-header { padding: 10px 15px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+        .group-header { padding: 10px 15px; font-weight: 600; display: flex; align-items: center; }
+        
+        /* CORES DOS GRUPOS */
         .status-winner { background: #d1e7dd; color: #0f5132; border-left: 5px solid #198754; }
         .status-open { background: #fff3cd; color: #664d03; border-left: 5px solid #ffc107; }
+        .status-canceled { background: #f8d7da; color: #842029; border-left: 5px solid #dc3545; }
 
         .pagination-container { background: white; padding: 15px; border-top: 1px solid #eee; display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap; }
-        
-        input[type=number]::-webkit-inner-spin-button, 
-        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
     </style>
 </head>
@@ -51,12 +45,8 @@
 <div class="header-bar d-flex justify-content-between align-items-center sticky-top">
     <div class="app-logo"><i class="fas fa-crosshairs me-2"></i>SNIPER PNCP</div>
     <div class="d-flex gap-2">
-        <button class="btn btn-sm btn-success" onclick="abrirModalManual()">
-            <i class="fas fa-plus-circle me-1"></i> Adicionar URL
-        </button>
-        <button class="btn btn-sm btn-outline-light" onclick="location.reload()">
-            <i class="fas fa-sync-alt"></i>
-        </button>
+        <button class="btn btn-sm btn-success" onclick="abrirModalManual()"><i class="fas fa-plus-circle me-1"></i> Adicionar URL</button>
+        <button class="btn btn-sm btn-outline-light" onclick="location.reload()"><i class="fas fa-sync-alt"></i></button>
     </div>
 </div>
 
@@ -127,9 +117,6 @@
             <div class="modal-body">
                 <p class="small text-muted">Cole o link do PNCP. O robô irá processar esta URL em sua próxima execução.</p>
                 <input type="text" id="urlManual" class="form-control form-control-sm mb-3" placeholder="https://pncp.gov.br/app/editais/...">
-                <div class="alert alert-info py-2 small">
-                    <i class="fas fa-info-circle me-1"></i> Nota: Para executar, o robô precisa ler o arquivo <b>urls.txt</b> no seu GitHub.
-                </div>
             </div>
             <div class="modal-footer py-1">
                 <button class="btn btn-primary btn-sm" onclick="salvarUrlManual()">Enviar para Fila</button>
@@ -146,13 +133,23 @@
     let dadosFiltrados = [];
     let totalPaginas = 1;
 
+    // --- NOVA CONFIGURAÇÃO DE CASAS DECIMAIS ---
+    // Totais e Globais continuam com 2 casas
     const fmtBrl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    
+    // Valores Unitários vão até 4 casas decimais quando necessário
+    const fmtUnit = new Intl.NumberFormat('pt-BR', { 
+        style: 'currency', 
+        currency: 'BRL', 
+        minimumFractionDigits: 2, 
+        maximumFractionDigits: 4 
+    });
+    
     const fmtData = d => d ? new Date(d).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '--/--/----';
 
     window.onload = () => {
         const excluidos = JSON.parse(localStorage.getItem('sniper_excluidos') || '[]');
         const raw = (typeof dadosLicitacoes !== 'undefined') ? dadosLicitacoes : [];
-        
         dadosOriginais = raw.filter(d => !excluidos.includes(d.id));
         dadosFiltrados = [...dadosOriginais];
         render();
@@ -186,7 +183,6 @@
 
         lote.forEach(d => {
             const valor = (d.is_sigiloso || !d.valor_global) ? '<span class="text-muted">Sigiloso</span>' : fmtBrl.format(d.valor_global);
-            
             tbody.innerHTML += `
                 <tr>
                     <td class="date-badge">${fmtData(d.data_encerramento)}</td>
@@ -221,13 +217,8 @@
     function irParaPaginaDireta() {
         const input = document.getElementById('inputIrPara');
         let novaPag = parseInt(input.value);
-
-        if (isNaN(novaPag) || novaPag < 1) {
-            novaPag = 1;
-        } else if (novaPag > totalPaginas) {
-            novaPag = totalPaginas;
-        }
-
+        if (isNaN(novaPag) || novaPag < 1) novaPag = 1;
+        else if (novaPag > totalPaginas) novaPag = totalPaginas;
         pagina = novaPag;
         render();
         window.scrollTo(0,0);
@@ -243,23 +234,43 @@
         const grupos = {};
         lic.itens.forEach(i => {
             const k = i.fornecedor || 'EM ANDAMENTO';
-            if (!grupos[k]) grupos[k] = [];
-            grupos[k].push(i);
+            if (!grupos[k]) grupos[k] = { itens: [], totalGanho: 0 };
+            grupos[k].itens.push(i);
+            grupos[k].totalGanho += (i.total_hom || 0);
         });
 
         const chaves = Object.keys(grupos).sort();
 
         chaves.forEach(k => {
-            const lista = grupos[k];
-            const isPendente = k === 'EM ANDAMENTO';
-            const classe = isPendente ? 'status-open' : 'status-winner';
+            const dadosGrupo = grupos[k];
+            const lista = dadosGrupo.itens;
             
-            // --- NOVO: Adicionada a coluna ME/EPP no cabeçalho ---
+            const isPendente = k === 'EM ANDAMENTO';
+            const isCancelado = ['CANCELAD', 'FRACASSAD', 'DESERT', 'ANULAD', 'REVOGAD'].some(palavra => k.toUpperCase().includes(palavra));
+            const isVencedor = !isPendente && !isCancelado;
+
+            let classe = 'status-open';
+            let icone = 'fa-clock';
+            let badgeTotal = '';
+
+            if (isCancelado) {
+                classe = 'status-canceled';
+                icone = 'fa-ban';
+            } else if (isVencedor) {
+                classe = 'status-winner';
+                icone = 'fa-trophy';
+                // Total da badge usando formatação de 2 casas (fmtBrl)
+                badgeTotal = `<span class="badge bg-success ms-auto fs-6">Total Ganho: ${fmtBrl.format(dadosGrupo.totalGanho)}</span>`;
+            }
+
             let tabela = `
                 <div class="group-card shadow-sm mb-3">
                     <div class="group-header ${classe}">
-                        <span><i class="fas ${isPendente ? 'fa-clock' : 'fa-trophy'} me-2"></i> ${k}</span>
-                        <span class="badge bg-white text-dark border">${lista.length} Itens</span>
+                        <div class="d-flex align-items-center w-100">
+                            <span><i class="fas ${icone} me-2"></i> ${k}</span>
+                            ${badgeTotal}
+                            <span class="badge bg-white text-dark border ms-2">${lista.length} Itens</span>
+                        </div>
                     </div>
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered mb-0 align-middle">
@@ -278,21 +289,20 @@
                             <tbody>`;
             
             lista.forEach(it => {
-                // Previne falhas se o item antigo não tiver a variável salva no arquivo JSON
                 const badge_meepp = it.me_epp || "Não"; 
                 const cor_badge = badge_meepp === "Sim" ? "bg-primary" : "bg-secondary";
 
-                // --- NOVO: Adicionada a célula da variável na linha da tabela ---
+                // --- APLICADO O NOVO FORMATADOR (fmtUnit) PARA AS COLUNAS UNITÁRIAS ---
                 tabela += `
                     <tr>
                         <td class="text-center fw-bold">${it.item}</td>
                         <td style="font-size: 0.8rem;">${it.desc}</td>
                         <td class="text-center">${it.qtd}</td>
-                        <td class="text-end text-muted">${fmtBrl.format(it.unitario_est)}</td>
+                        <td class="text-end text-muted">${fmtUnit.format(it.unitario_est)}</td>
                         <td class="text-end text-muted">${fmtBrl.format(it.total_est)}</td>
                         <td class="text-center"><span class="badge ${cor_badge}">${badge_meepp}</span></td>
-                        ${!isPendente ? `<td class="text-end fw-bold text-success">${fmtBrl.format(it.unitario_hom)}</td>` : ''}
-                        ${!isPendente ? `<td class="text-end fw-bold text-success">${fmtBrl.format(it.total_hom)}</td>` : ''}
+                        ${!isPendente ? `<td class="text-end fw-bold ${isCancelado ? 'text-danger' : 'text-success'}">${fmtUnit.format(it.unitario_hom)}</td>` : ''}
+                        ${!isPendente ? `<td class="text-end fw-bold ${isCancelado ? 'text-danger' : 'text-success'}">${fmtBrl.format(it.total_hom)}</td>` : ''}
                     </tr>`;
             });
 
@@ -304,7 +314,7 @@
     }
 
     function excluirLicitacao(id) {
-        if (confirm('Deseja ocultar esta licitação permanentemente desta lista?')) {
+        if (confirm('Deseja ocultar esta licitação permanentemente?')) {
             const excluidos = JSON.parse(localStorage.getItem('sniper_excluidos') || '[]');
             excluidos.push(id);
             localStorage.setItem('sniper_excluidos', JSON.stringify(excluidos));
@@ -312,19 +322,8 @@
         }
     }
 
-    function abrirModalManual() {
-        new bootstrap.Modal(document.getElementById('modalManual')).show();
-    }
-
-    function salvarUrlManual() {
-        const url = document.getElementById('urlManual').value;
-        if (!url.includes('pncp.gov.br')) {
-            alert('Por favor, insira um link válido do portal PNCP.');
-            return;
-        }
-        alert('Instrução: Copie este link e cole no arquivo "urls.txt" do seu repositório no GitHub para que o robô faça a captura na próxima execução.');
-    }
-
+    function abrirModalManual() { new bootstrap.Modal(document.getElementById('modalManual')).show(); }
+    function salvarUrlManual() { alert('Copie a URL e cole no arquivo urls.txt no GitHub.'); }
     function mudarPagina(dir) { pagina += dir; render(); window.scrollTo(0,0); }
     function limparFiltros() { document.querySelectorAll('input:not([type="date"])').forEach(i => i.value = ''); document.getElementById('fDataEnc').value = ''; render(); }
 </script>
