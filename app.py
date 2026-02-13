@@ -19,7 +19,7 @@ KEYWORDS_GERAIS = [
     "INSULIN", "GLICOSE", "HIDROCORTISON", "FUROSEMID", "OMEPRAZOL", "LOSARTAN",
     "ATENOLOL", "SULFATO", "CLORETO", "EQUIPO", "CATETER", "SONDA", "AVENTAL", 
     "MASCARA", "N95", "ALCOOL", "CURATIVO", "ESPARADRAPO", "PROPE", "TOUCA",
-    "EPI", "PROTECAO INDIVIDUAL"  # <-- Adicionadas
+    "EPI", "PROTECAO INDIVIDUAL"
 ]
 
 KEYWORDS_NORDESTE = [
@@ -31,7 +31,7 @@ BLACKLIST = [
     "LANCHE", "ALIMENTICIO", "MOBILIARIO", "TI", "INFORMATICA", "PNEU", 
     "ESTANTE", "CADEIRA", "RODOVIARIO", "PAVIMENTACAO", "SERVICO", "LOCACAO", 
     "COMODATO", "EXAME", "LIMPEZA PREDIAL", "MANUTENCAO", "ASSISTENCIA MEDICA", 
-    "PLANO DE SAUDE", "ODONTOLOGICA", "TERCEIRIZACAO", "EQUIPAMENTO" # <-- Adicionada
+    "PLANO DE SAUDE", "ODONTOLOGICA", "TERCEIRIZACAO", "EQUIPAMENTO"
 ]
 
 UFS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "RO", "GO", "MT", "MS", "DF"]
@@ -61,10 +61,8 @@ def buscar_todos_itens(session, cnpj, ano, seq):
             r = session.get(url, params={"pagina": pag, "tamanhoPagina": 50}, timeout=15)
             if r.status_code != 200: break
             dados = r.json()
-            
             lista = dados.get('data', []) if isinstance(dados, dict) else dados
             if not lista: break
-            
             itens.extend(lista)
             pag += 1
             if pag > 100: break 
@@ -80,10 +78,8 @@ def buscar_todos_resultados(session, cnpj, ano, seq):
             r = session.get(url, params={"pagina": pag, "tamanhoPagina": 50}, timeout=15)
             if r.status_code != 200: break
             dados = r.json()
-            
             lista = dados.get('data', []) if isinstance(dados, dict) else dados
             if not lista: break
-            
             resultados.extend(lista)
             pag += 1
         except: break
@@ -91,15 +87,7 @@ def buscar_todos_resultados(session, cnpj, ano, seq):
 
 def capturar_detalhes_completos(itens_raw, resultados_raw):
     itens_map = {}
-    
-    # Mapeamento Oficial (1 a 3 = Sim | 4 e 5 = Não)
-    mapa_beneficio = {
-        1: "Sim",
-        2: "Sim",
-        3: "Sim",
-        4: "Não",
-        5: "Não"
-    }
+    mapa_beneficio = {1: "Sim", 2: "Sim", 3: "Sim", 4: "Não", 5: "Não"}
 
     for i in itens_raw:
         try:
@@ -110,16 +98,12 @@ def capturar_detalhes_completos(itens_raw, resultados_raw):
             if total_est == 0 and qtd > 0 and unit_est > 0:
                 total_est = round(qtd * unit_est, 2)
             
-            # --- NOVA LÓGICA DE ME/EPP BINÁRIA ---
             cod_beneficio = i.get('tipoBeneficio') or i.get('tipoBeneficioId') or 5
-            try:
-                cod_beneficio = int(cod_beneficio)
-            except:
-                cod_beneficio = 5 # Padrão é Não (5)
+            try: cod_beneficio = int(cod_beneficio)
+            except: cod_beneficio = 5
                 
             me_epp = mapa_beneficio.get(cod_beneficio, "Não")
             
-            # IDENTIFICA CANCELAMENTOS / FRACASSOS
             sit_item = str(i.get('situacaoCompraItemNome', '')).upper()
             if any(x in sit_item for x in ['CANCELAD', 'FRACASSAD', 'DESERT', 'ANULAD']):
                 fornecedor_padrao = sit_item
@@ -140,8 +124,6 @@ def capturar_detalhes_completos(itens_raw, resultados_raw):
     for res in resultados_raw:
         try:
             num = int(res['numeroItem'])
-            
-            # Se não há nome de fornecedor no resultado, pode ser um registro de fracasso
             fornecedor = res.get('nomeRazaoSocialFornecedor')
             if not fornecedor:
                 ind_res = str(res.get('indicadorResultadoNome', '')).upper()
@@ -244,13 +226,26 @@ def run():
     print(f"🚀 Coletando Dia: {data_alvo.strftime('%d/%m/%Y')}")
 
     url_pub = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
-    params = {"dataInicial": str_data, "dataFinal": str_data, "codigoModalidadeContratacao": "6", "pagina": 1, "tamanhoPagina": 50}
-    
     novos_no_dia = 0
-    try:
-        r = session.get(url_pub, params=params, timeout=25)
-        if r.status_code == 200:
+    pagina_pub = 1 # <-- NOVA LÓGICA DE PAGINAÇÃO DIÁRIA
+
+    while True:
+        params = {
+            "dataInicial": str_data, 
+            "dataFinal": str_data, 
+            "codigoModalidadeContratacao": "6", 
+            "pagina": pagina_pub, 
+            "tamanhoPagina": 50
+        }
+        try:
+            r = session.get(url_pub, params=params, timeout=25)
+            if r.status_code != 200: break
+            
             lics = r.json().get('data', [])
+            if not lics: break # Se a lista vier vazia, significa que as páginas acabaram
+            
+            print(f"   Lendo página {pagina_pub} do dia...")
+
             for lic in lics:
                 unid = lic.get('unidadeOrgao', {})
                 uf = unid.get('ufSigla') or lic.get('unidadeFederativaId')
@@ -304,8 +299,12 @@ def run():
                                 "itens": detalhes
                             }
                             novos_no_dia += 1
-    except Exception as e:
-        print(f"Erro na varredura: {e}")
+            
+            pagina_pub += 1 # Vai para a próxima página de resultados do dia
+            
+        except Exception as e:
+            print(f"Erro na varredura da página {pagina_pub}: {e}")
+            break
 
     lista = sorted(list(banco.values()), key=lambda x: x.get('data_encerramento') or '', reverse=True)
     os.makedirs('dados', exist_ok=True)
