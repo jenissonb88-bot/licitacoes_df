@@ -11,15 +11,20 @@ ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_MANUAIS = 'urls.txt'
 ARQ_FINISH = 'finish.txt'
 
-# === PALAVRAS-CHAVE (RADICAIS) ===
-KEYWORDS = [
+# === PALAVRAS-CHAVE (DIVIDIDAS POR REGRA) ===
+
+# 1. Palavras que servem para TODOS os estados
+KEYWORDS_GERAIS = [
     "MEDICAMENT", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGIC", "HIGIENE", 
     "DESCARTAVEL", "SERINGA", "AGULHA", "LUVAS", "GAZE", "ALGODAO", "SAUDE", "INSUMO",
     "AMOXICILIN", "AMPICILIN", "CEFALEXIN", "CEFTRIAXON", "DIPIRON", "PARACETAMOL",
     "INSULIN", "GLICOSE", "HIDROCORTISON", "FUROSEMID", "OMEPRAZOL", "LOSARTAN",
     "ATENOLOL", "SULFATO", "CLORETO", "EQUIPO", "CATETER", "SONDA", "AVENTAL", 
-    "MASCARA", "N95", "ALCOOL", "CURATIVO", "ESPARADRAPO", "PROPE", "TOUCA",
-    # --- Novas palavras (Dietas/Nutrição) ---
+    "MASCARA", "N95", "ALCOOL", "CURATIVO", "ESPARADRAPO", "PROPE", "TOUCA"
+]
+
+# 2. Palavras exclusivas para o Nordeste
+KEYWORDS_NORDESTE = [
     "DIETA", "ENTERAL", "SUPLEMENT", "FORMULA", "CALORIC", "PROTEIC"
 ]
 
@@ -32,10 +37,20 @@ BLACKLIST = [
 ]
 
 UFS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "RO", "GO", "MT", "MS", "DF"]
+UFS_NORDESTE = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE"]
 
 def normalize(t):
     if not t: return ""
     return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
+
+def contem_palavra_relevante(texto, uf):
+    """
+    Verifica se o texto possui alguma palavra chave, respeitando a regra do Nordeste.
+    """
+    if any(b in texto for b in BLACKLIST): return False
+    if any(k in texto for k in KEYWORDS_GERAIS): return True
+    if uf in UFS_NORDESTE and any(k in texto for k in KEYWORDS_NORDESTE): return True
+    return False
 
 def criar_sessao():
     s = requests.Session()
@@ -76,7 +91,6 @@ def buscar_todos_resultados(session, cnpj, ano, seq):
 def capturar_detalhes_completos(itens_raw, resultados_raw):
     itens_map = {}
     
-    # 1. Mapeia os itens da aba "Itens"
     for i in itens_raw:
         try:
             num = int(i['numeroItem'])
@@ -94,7 +108,6 @@ def capturar_detalhes_completos(itens_raw, resultados_raw):
             }
         except: continue
 
-    # 2. Processa a aba "Resultados" (Homologações)
     for res in resultados_raw:
         try:
             num = int(res['numeroItem'])
@@ -111,10 +124,9 @@ def capturar_detalhes_completos(itens_raw, resultados_raw):
                     "unitario_hom": unit_hom, "total_hom": total_hom
                 })
             else:
-                # O ITEM SÓ EXISTIA NA ABA RESULTADOS (Correção Aplicada Aqui)
                 itens_map[num] = {
                     "item": num, "desc": desc_res, "qtd": qtd_hom,
-                    "unitario_est": unit_hom, "total_est": total_hom, # Assume o valor homologado como estimado para não ficar zerado
+                    "unitario_est": unit_hom, "total_est": total_hom,
                     "situacao": "HOMOLOGADO", "tem_resultado": True,
                     "fornecedor": fornecedor,
                     "unitario_hom": unit_hom, "total_hom": total_hom
@@ -207,11 +219,11 @@ def run():
                     cnpj, ano, seq = lic['orgaoEntidade']['cnpj'], lic['anoCompra'], lic['sequencialCompra']
                     id_lic = f"{cnpj}{ano}{seq}"
                     
-                    # 1. Verifica Objeto
+                    # 1. Verifica Objeto com a nova regra de UF
                     eh_rel = False
                     obj_norm = normalize(lic.get('objetoCompra'))
-                    if not any(b in obj_norm for b in BLACKLIST):
-                        if any(k in obj_norm for k in KEYWORDS): eh_rel = True
+                    if contem_palavra_relevante(obj_norm, uf):
+                        eh_rel = True
                     
                     itens_raw = []
                     resultados_raw = []
@@ -221,29 +233,27 @@ def run():
                         itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
                         for it in itens_raw:
                             desc = normalize(it.get('descricao', ''))
-                            if any(b in desc for b in BLACKLIST): continue
-                            if any(k in desc for k in KEYWORDS):
+                            if contem_palavra_relevante(desc, uf):
                                 eh_rel = True
                                 break
                     
-                    # 3. Se os itens vierem vazios (ex: licitação fechada), verifica os resultados
+                    # 3. Se itens vierem vazios, verifica resultados
                     if not eh_rel and not itens_raw:
                         resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq)
                         for res in resultados_raw:
                             desc = normalize(res.get('descricaoItem', ''))
-                            if any(b in desc for b in BLACKLIST): continue
-                            if any(k in desc for k in KEYWORDS):
+                            if contem_palavra_relevante(desc, uf):
                                 eh_rel = True
                                 break
 
-                    # 4. Se passou nos filtros, salva!
+                    # 4. Salva se for relevante
                     if eh_rel:
                         if not itens_raw: itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
                         if not resultados_raw: resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq)
                         
                         detalhes = capturar_detalhes_completos(itens_raw, resultados_raw)
                         
-                        if detalhes: # Só salva se realmente conseguiu capturar algum item
+                        if detalhes:
                             banco[id_lic] = {
                                 "id": id_lic, "data_pub": lic.get('dataPublicacaoPncp'),
                                 "data_encerramento": lic.get('dataEncerramentoProposta'),
