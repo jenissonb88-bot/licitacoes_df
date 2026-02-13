@@ -52,9 +52,8 @@ def criar_sessao():
     s.mount("https://", HTTPAdapter(max_retries=Retry(total=5, backoff_factor=1, status_forcelist=[500,502,503,504])))
     return s
 
-# --- CORREÇÃO DA ROTA: VOLTANDO PARA A API DE CONSULTA (COM PAGINAÇÃO) ---
 def buscar_todos_itens(session, cnpj, ano, seq):
-    url = f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{cnpj}/{ano}/{seq}/itens"
+    url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
     itens = []
     pag = 1
     while True:
@@ -66,12 +65,11 @@ def buscar_todos_itens(session, cnpj, ano, seq):
             if not lista: break
             itens.extend(lista)
             pag += 1
-            if pag > 100: break 
         except: break
     return itens
 
 def buscar_todos_resultados(session, cnpj, ano, seq):
-    url = f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{cnpj}/{ano}/{seq}/resultados"
+    url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/resultados"
     resultados = []
     pag = 1
     while True:
@@ -83,14 +81,33 @@ def buscar_todos_resultados(session, cnpj, ano, seq):
             if not lista: break
             resultados.extend(lista)
             pag += 1
-            if pag > 100: break
         except: break
     return resultados
 
 def capturar_detalhes_completos(itens_raw, resultados_raw):
     itens_map = {}
+    
+    # Dicionários Oficiais do Manual da API do PNCP
     mapa_beneficio = {1: "Sim", 2: "Sim", 3: "Sim", 4: "Não", 5: "Não"}
+    
+    mapa_situacao_item = {
+        1: "EM ANDAMENTO",
+        2: "HOMOLOGADO",
+        3: "ANULADO",
+        4: "REVOGADO",
+        5: "FRACASSADO",
+        6: "DESERTO"
+    }
+    
+    mapa_indicador_resultado = {
+        1: "INFORMADO", # Tem Vencedor
+        2: "FRACASSADO",
+        3: "DESERTO",
+        4: "ANULADO",
+        5: "REVOGADO"
+    }
 
+    # 1. Mapeia os Itens Base (Lendo IDs numéricos Oficiais)
     for i in itens_raw:
         try:
             num = int(i['numeroItem'])
@@ -100,60 +117,59 @@ def capturar_detalhes_completos(itens_raw, resultados_raw):
             if total_est == 0 and qtd > 0 and unit_est > 0:
                 total_est = round(qtd * unit_est, 2)
             
-            cod_beneficio = i.get('tipoBeneficio') or i.get('tipoBeneficioId') or 5
-            try: cod_beneficio = int(cod_beneficio)
-            except: cod_beneficio = 5
-                
-            me_epp = mapa_beneficio.get(cod_beneficio, "Não")
+            # Benefício ME/EPP
+            cod_beneficio = i.get('tipoBeneficioId') or 5
+            me_epp = mapa_beneficio.get(int(cod_beneficio), "Não")
             
-            sit_item = str(i.get('situacaoCompraItemNome', '')).upper()
-            if any(x in sit_item for x in ['CANCELAD', 'FRACASSAD', 'DESERT', 'ANULAD']):
-                fornecedor_padrao = sit_item
-                situacao_padrao = sit_item
-            else:
-                fornecedor_padrao = "EM ANDAMENTO"
-                situacao_padrao = "ABERTO"
+            # Situação do Item
+            cod_situacao = i.get('situacaoCompraItemId') or 1
+            sit_nome = mapa_situacao_item.get(int(cod_situacao), "EM ANDAMENTO")
+            
+            # Se já nasce como Fracassado/Deserto/Anulado/Revogado
+            fornecedor_padrao = sit_nome if int(cod_situacao) > 2 else "EM ANDAMENTO"
                 
             itens_map[num] = {
                 "item": num, "desc": i.get('descricao', 'Sem descrição'), "qtd": qtd,
-                "unitario_est": unit_est, "total_est": total_est, "situacao": situacao_padrao,
+                "unitario_est": unit_est, "total_est": total_est, "situacao": sit_nome,
                 "tem_resultado": False, "fornecedor": fornecedor_padrao,
-                "unitario_hom": 0.0, "total_hom": 0.0,
-                "me_epp": me_epp
+                "unitario_hom": 0.0, "total_hom": 0.0, "me_epp": me_epp
             }
         except: continue
 
+    # 2. Cruza com os Resultados Oficiais
     for res in resultados_raw:
         try:
             num = int(res['numeroItem'])
-            fornecedor = res.get('nomeRazaoSocialFornecedor')
-            if not fornecedor:
-                ind_res = str(res.get('indicadorResultadoNome', '')).upper()
-                if any(x in ind_res for x in ['CANCELAD', 'FRACASSAD', 'DESERT', 'ANULAD']):
-                    fornecedor = ind_res
-                else:
-                    fornecedor = 'VENCEDOR ANÔNIMO'
+            ind_resultado = int(res.get('indicadorResultadoId') or 1)
+            
+            # Se for Fracassado, Deserto, Anulado ou Revogado (Códigos 2 a 5)
+            if ind_resultado in [2, 3, 4, 5]:
+                sit_resultado = mapa_indicador_resultado.get(ind_resultado)
+                if num in itens_map:
+                    itens_map[num].update({
+                        "tem_resultado": True,
+                        "situacao": sit_resultado,
+                        "fornecedor": sit_resultado
+                    })
                     
-            unit_hom = float(res.get('valorUnitarioHomologado') or 0)
-            total_hom = float(res.get('valorTotalHomologado') or 0)
-            qtd_hom = float(res.get('quantidadeHomologada') or 0)
-            desc_res = res.get('descricaoItem', 'Item Resultado')
+            # Se for Informado/Vencedor (Código 1)
+            elif ind_resultado == 1:
+                fornecedor = res.get('nomeRazaoSocialFornecedor', 'VENCEDOR ANÔNIMO')
+                unit_hom = float(res.get('valorUnitarioHomologado') or 0)
+                total_hom = float(res.get('valorTotalHomologado') or 0)
+                qtd_hom = float(res.get('quantidadeHomologada') or 0)
+                
+                if total_hom == 0 and unit_hom > 0 and qtd_hom > 0:
+                    total_hom = unit_hom * qtd_hom
 
-            if num in itens_map:
-                itens_map[num].update({
-                    "tem_resultado": True, "situacao": "HOMOLOGADO",
-                    "fornecedor": fornecedor,
-                    "unitario_hom": unit_hom, "total_hom": total_hom
-                })
-            else:
-                itens_map[num] = {
-                    "item": num, "desc": desc_res, "qtd": qtd_hom,
-                    "unitario_est": unit_hom, "total_est": total_hom,
-                    "situacao": "HOMOLOGADO", "tem_resultado": True,
-                    "fornecedor": fornecedor,
-                    "unitario_hom": unit_hom, "total_hom": total_hom,
-                    "me_epp": "Não" 
-                }
+                if num in itens_map:
+                    itens_map[num].update({
+                        "tem_resultado": True, 
+                        "situacao": "HOMOLOGADO",
+                        "fornecedor": fornecedor,
+                        "unitario_hom": unit_hom, 
+                        "total_hom": total_hom
+                    })
         except: continue
 
     return sorted(list(itens_map.values()), key=lambda x: x['item'])
@@ -171,8 +187,15 @@ def processar_urls_manuais(session, banco):
             id_lic = f"{cnpj}{ano}{seq}"
             api_url = f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{cnpj}/{ano}/{seq}"
             resp = session.get(api_url, timeout=15)
+            
             if resp.status_code == 200:
                 lic = resp.json()
+                
+                # BLOQUEIO: SÓ ACEITA PREGÃO ELETRÔNICO (CÓDIGO 6)
+                if str(lic.get('modalidadeId')) != "6":
+                    print(f"Ignorando manual: {url} (Não é Pregão Eletrônico)")
+                    continue
+
                 itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
                 resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq)
                 
@@ -232,6 +255,7 @@ def run():
     pagina_pub = 1 
 
     while True:
+        # AQUI O ROBÔ JÁ É TRAVADO PARA BUSCAR SÓ MODALIDADE 6 (PREGÃO) NA API DIÁRIA
         params = {
             "dataInicial": str_data, 
             "dataFinal": str_data, 
