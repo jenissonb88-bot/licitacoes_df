@@ -1,4 +1,4 @@
-import requests, json, os, urllib3, unicodedata
+import requests, json, os, urllib3, unicodedata, re
 from datetime import datetime, timedelta
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -11,27 +11,33 @@ ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_MANUAIS = 'urls.txt'
 ARQ_FINISH = 'finish.txt'
 
-# === PALAVRAS-CHAVE ===
+# === PALAVRAS-CHAVE (Refinadas para não pegar falsos positivos) ===
 KEYWORDS_GERAIS = [
-    "MEDICAMENT", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGIC", "HIGIENE", 
-    "DESCARTAVEL", "SERINGA", "AGULHA", "LUVAS", "GAZE", "ALGODAO", "SAUDE", "INSUMO",
+    "MEDICAMENT", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGIC", 
+    "SERINGA", "AGULHA", "LUVA", "GAZE", "ALGODAO",
     "AMOXICILIN", "AMPICILIN", "CEFALEXIN", "CEFTRIAXON", "DIPIRON", "PARACETAMOL",
     "INSULIN", "GLICOSE", "HIDROCORTISON", "FUROSEMID", "OMEPRAZOL", "LOSARTAN",
     "ATENOLOL", "SULFATO", "CLORETO", "EQUIPO", "CATETER", "SONDA", "AVENTAL", 
     "MASCARA", "N95", "ALCOOL", "CURATIVO", "ESPARADRAPO", "PROPE", "TOUCA",
-    "EPI", "PROTECAO INDIVIDUAL"
+    r"EPI\b", r"EPIS\b", "PROTECAO INDIVIDUAL"
 ]
 
 KEYWORDS_NORDESTE = [
     "DIETA", "ENTERAL", "SUPLEMENT", "FORMULA", "CALORIC", "PROTEIC"
 ]
 
+# === BLACKLIST EXPANDIDA MÁXIMA ===
 BLACKLIST = [
     "ESCOLAR", "CONSTRUCAO", "AUTOMOTIVO", "OBRA", "VEICULO", "REFEICAO", 
     "LANCHE", "ALIMENTICIO", "MOBILIARIO", "TI", "INFORMATICA", "PNEU", 
     "ESTANTE", "CADEIRA", "RODOVIARIO", "PAVIMENTACAO", "SERVICO", "LOCACAO", 
-    "COMODATO", "EXAME", "LIMPEZA PREDIAL", "MANUTENCAO", "ASSISTENCIA MEDICA", 
-    "PLANO DE SAUDE", "ODONTOLOGICA", "TERCEIRIZACAO", "EQUIPAMENTO", "MERENDA"
+    "COMODATO", "EXAME", "LIMPEZA", "MANUTENCAO", "ASSISTENCIA MEDICA", 
+    "PLANO DE SAUDE", "ODONTOLOGICA", "TERCEIRIZACAO", "EQUIPAMENTO",
+    "MERENDA", "COZINHA", "COPA", "HIGIENIZACAO", "EXPEDIENTE", "PAPELARIA",
+    "LIXEIRA", "LIXO", "RODO", "VASSOURA", "COMPUTADOR", "IMPRESSORA", "TONER",
+    "CARTUCHO", "ELETRODOMESTICO", "MECANICA", "PECAS", "TECIDO", "FARDAMENTO",
+    "UNIFORME", "HIDRAULIC", "ELETRIC", "AGRO", "VETERINARI", "ANIMAL", "MUDAS", 
+    "SEMENTES", "BELICO", "MILITAR", "ARMAMENTO", "MUNICAO", "DESCARTAVEIS PARA COPA"
 ]
 
 UFS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "RO", "GO", "MT", "MS", "DF"]
@@ -42,9 +48,18 @@ def normalize(t):
     return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
 
 def contem_palavra_relevante(texto, uf):
+    if not texto: return False
+    # Filtro da Blacklist
     if any(b in texto for b in BLACKLIST): return False
-    if any(k in texto for k in KEYWORDS_GERAIS): return True
-    if uf in UFS_NORDESTE and any(k in texto for k in KEYWORDS_NORDESTE): return True
+    
+    # Busca usando Regex para evitar que "EPI" capture "RECIPIENTE"
+    for k in KEYWORDS_GERAIS:
+        if re.search(r'\b' + k, texto): return True
+        
+    if uf in UFS_NORDESTE:
+        for k in KEYWORDS_NORDESTE:
+            if re.search(r'\b' + k, texto): return True
+            
     return False
 
 def criar_sessao():
@@ -64,68 +79,89 @@ def buscar_todos_itens(session, cnpj, ano, seq):
             lista = dados.get('data', []) if isinstance(dados, dict) else dados
             if not lista: break
             itens.extend(lista)
+            if isinstance(dados, list): break # Se não for paginado, quebra o loop
             pag += 1
+            if pag > 100: break
         except: break
     return itens
 
-def buscar_todos_resultados(session, cnpj, ano, seq):
-    url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/resultados"
+def buscar_todos_resultados(session, cnpj, ano, seq, itens_raw):
     resultados = []
-    pag = 1
-    while True:
-        try:
-            r = session.get(url, params={"pagina": pag, "tamanhoPagina": 50}, timeout=15)
-            if r.status_code != 200: break
-            dados = r.json()
-            lista = dados.get('data', []) if isinstance(dados, dict) else dados
-            if not lista: break
-            resultados.extend(lista)
-            pag += 1
-        except: break
+    urls = [
+        f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{cnpj}/{ano}/{seq}/resultados",
+        f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/resultados"
+    ]
+    
+    # 1. Tenta buscar todos os resultados de uma vez
+    for url in urls:
+        pag = 1
+        while True:
+            try:
+                r = session.get(url, params={"pagina": pag, "tamanhoPagina": 50}, timeout=10)
+                if r.status_code == 200:
+                    dados = r.json()
+                    lista = dados.get('data', []) if isinstance(dados, dict) else dados
+                    if lista:
+                        resultados.extend(lista)
+                        if isinstance(dados, list): break 
+                        pag += 1
+                        continue
+                break
+            except: break
+        if resultados: break
+
+    # 2. GATILHO INFALÍVEL: Se a lista geral falhou, busca item a item nos finalizados
+    if not resultados:
+        for i in itens_raw:
+            situacao = str(i.get('situacaoCompraItemId'))
+            # Se o item estiver Homologado(2), Anulado(3), Revogado(4), Fracassado(5) ou Deserto(6)
+            if situacao in ["2", "3", "4", "5", "6"]:
+                num = i.get('numeroItem') or i.get('sequencialItem')
+                if num:
+                    url_item = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num}/resultados"
+                    try:
+                        r = session.get(url_item, timeout=5)
+                        if r.status_code == 200:
+                            dados = r.json()
+                            lista = dados.get('data', []) if isinstance(dados, dict) else dados
+                            if lista:
+                                resultados.extend(lista)
+                    except: pass
+
     return resultados
 
 def capturar_detalhes_completos(itens_raw, resultados_raw):
     itens_map = {}
     
-    # Dicionários Oficiais do Manual da API do PNCP
     mapa_beneficio = {1: "Sim", 2: "Sim", 3: "Sim", 4: "Não", 5: "Não"}
-    
     mapa_situacao_item = {
-        1: "EM ANDAMENTO",
-        2: "HOMOLOGADO",
-        3: "ANULADO",
-        4: "REVOGADO",
-        5: "FRACASSADO",
-        6: "DESERTO"
+        1: "EM ANDAMENTO", 2: "HOMOLOGADO", 3: "ANULADO", 
+        4: "REVOGADO", 5: "FRACASSADO", 6: "DESERTO"
     }
-    
     mapa_indicador_resultado = {
-        1: "INFORMADO", # Tem Vencedor
-        2: "FRACASSADO",
-        3: "DESERTO",
-        4: "ANULADO",
-        5: "REVOGADO"
+        1: "INFORMADO", 2: "FRACASSADO", 3: "DESERTO", 
+        4: "ANULADO", 5: "REVOGADO"
     }
 
-    # 1. Mapeia os Itens Base (Lendo IDs numéricos Oficiais)
+    # 1. Mapeia os Itens Base
     for i in itens_raw:
         try:
-            num = int(i['numeroItem'])
+            num = i.get('numeroItem') or i.get('sequencialItem')
+            if num is None: continue
+            num = int(num)
+            
             qtd = float(i.get('quantidade') or 0)
             unit_est = float(i.get('valorUnitarioEstimado') or 0)
             total_est = float(i.get('valorTotalEstimado') or 0)
             if total_est == 0 and qtd > 0 and unit_est > 0:
                 total_est = round(qtd * unit_est, 2)
             
-            # Benefício ME/EPP
             cod_beneficio = i.get('tipoBeneficioId') or 5
             me_epp = mapa_beneficio.get(int(cod_beneficio), "Não")
             
-            # Situação do Item
             cod_situacao = i.get('situacaoCompraItemId') or 1
             sit_nome = mapa_situacao_item.get(int(cod_situacao), "EM ANDAMENTO")
             
-            # Se já nasce como Fracassado/Deserto/Anulado/Revogado
             fornecedor_padrao = sit_nome if int(cod_situacao) > 2 else "EM ANDAMENTO"
                 
             itens_map[num] = {
@@ -139,10 +175,13 @@ def capturar_detalhes_completos(itens_raw, resultados_raw):
     # 2. Cruza com os Resultados Oficiais
     for res in resultados_raw:
         try:
-            num = int(res['numeroItem'])
-            ind_resultado = int(res.get('indicadorResultadoId') or 1)
+            num = res.get('numeroItem') or res.get('sequencialItem')
+            if num is None: continue
+            num = int(num)
+
+            ind_resultado = res.get('indicadorResultadoId')
             
-            # Se for Fracassado, Deserto, Anulado ou Revogado (Códigos 2 a 5)
+            # Se a API informa explicitamente que é erro/fracasso
             if ind_resultado in [2, 3, 4, 5]:
                 sit_resultado = mapa_indicador_resultado.get(ind_resultado)
                 if num in itens_map:
@@ -151,15 +190,13 @@ def capturar_detalhes_completos(itens_raw, resultados_raw):
                         "situacao": sit_resultado,
                         "fornecedor": sit_resultado
                     })
-                    
-            # Se for Informado/Vencedor (Código 1)
-            elif ind_resultado == 1:
-                fornecedor = res.get('nomeRazaoSocialFornecedor', 'VENCEDOR ANÔNIMO')
-                unit_hom = float(res.get('valorUnitarioHomologado') or 0)
-                total_hom = float(res.get('valorTotalHomologado') or 0)
-                qtd_hom = float(res.get('quantidadeHomologada') or 0)
+            else:
+                fornecedor = res.get('nomeRazaoSocialFornecedor') or res.get('nomeFornecedor') or 'VENCEDOR ANÔNIMO'
+                unit_hom = float(res.get('valorUnitarioHomologado') or res.get('precoUnitario') or res.get('valorUnitario') or 0)
+                total_hom = float(res.get('valorTotalHomologado') or res.get('valorTotal') or 0)
+                qtd_hom = float(res.get('quantidadeHomologada') or 1)
                 
-                if total_hom == 0 and unit_hom > 0 and qtd_hom > 0:
+                if total_hom == 0 and unit_hom > 0:
                     total_hom = unit_hom * qtd_hom
 
                 if num in itens_map:
@@ -191,13 +228,10 @@ def processar_urls_manuais(session, banco):
             if resp.status_code == 200:
                 lic = resp.json()
                 
-                # BLOQUEIO: SÓ ACEITA PREGÃO ELETRÔNICO (CÓDIGO 6)
-                if str(lic.get('modalidadeId')) != "6":
-                    print(f"Ignorando manual: {url} (Não é Pregão Eletrônico)")
-                    continue
+                if str(lic.get('modalidadeId')) != "6": continue
 
                 itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
-                resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq)
+                resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq, itens_raw)
                 
                 detalhes = capturar_detalhes_completos(itens_raw, resultados_raw)
                 unid = lic.get('unidadeOrgao', {})
@@ -255,7 +289,6 @@ def run():
     pagina_pub = 1 
 
     while True:
-        # AQUI O ROBÔ JÁ É TRAVADO PARA BUSCAR SÓ MODALIDADE 6 (PREGÃO) NA API DIÁRIA
         params = {
             "dataInicial": str_data, 
             "dataFinal": str_data, 
@@ -296,7 +329,7 @@ def run():
                                 break
                     
                     if not eh_rel and not itens_raw:
-                        resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq)
+                        resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq, itens_raw)
                         for res in resultados_raw:
                             desc = normalize(res.get('descricaoItem', ''))
                             if contem_palavra_relevante(desc, uf):
@@ -305,7 +338,7 @@ def run():
 
                     if eh_rel:
                         if not itens_raw: itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
-                        if not resultados_raw: resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq)
+                        if not resultados_raw: resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq, itens_raw)
                         
                         detalhes = capturar_detalhes_completos(itens_raw, resultados_raw)
                         
