@@ -1296,6 +1296,36 @@ const dadosLicitacoes = [
         ]
     },
     {
+        "id": "172173320001252024247",
+        "data_pub": "2026-02-07T08:57:32",
+        "data_encerramento": "2026-02-24T09:00:00",
+        "uf": "MG",
+        "cidade": "Belo Horizonte",
+        "orgao": "INSTITUTO DE PREVIDENCIA DOS SERVIDORES DO ESTADO MG",
+        "unidade_compradora": "GEASU-DEAC",
+        "objeto": "de 41  Módulo de Bateria Li-ion para equipamento  Cardioversor, marca Instramed, modelo Cardiomax Referencia 11013  descritos no código 001967509 do CATMAS  sob a forma de entrega integral",
+        "edital": "287/2024",
+        "uasg": "2012015",
+        "valor_global": 0.0,
+        "is_sigiloso": false,
+        "qtd_itens": 1,
+        "link": "https://pncp.gov.br/app/editais/17217332000125/2024/247",
+        "itens": [
+            {
+                "item": 1,
+                "desc": "BATERIA PARA EQUIPAMENTO MEDICO/HOSPITALAR - TENSAO: 14,4  V; CORRENTE: 4 Ah; REFERENCIA: 11013; EQUIPAMENTO: CARDIOVERSOR CARDIOMAX;",
+                "qtd": 41.0,
+                "unitario_est": 0.0,
+                "total_est": 0.0,
+                "situacao": "ABERTO",
+                "tem_resultado": false,
+                "fornecedor": "EM ANDAMENTO",
+                "unitario_hom": 0.0,
+                "total_hom": 0.0
+            }
+        ]
+    },
+    {
         "id": "07954480000179202525723",
         "data_pub": "2026-02-06T07:00:20",
         "data_encerramento": "2026-02-24T08:30:00",
