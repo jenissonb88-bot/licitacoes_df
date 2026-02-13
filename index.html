@@ -70,7 +70,7 @@
                         <th style="width: 100px;">Encerramento</th>
                         <th style="width: 40px;">UF</th>
                         <th>Código - Órgão / Unidade Compradora</th>
-                        <th style="width: 100px;">Edital</th>
+                        <th style="width: 110px;" class="text-center">Edital</th>
                         <th>Objeto da Licitação</th>
                         <th class="text-center" style="width: 60px;">Itens</th>
                         <th class="text-end" style="width: 130px;">Valor Global</th>
@@ -133,18 +133,8 @@
     let dadosFiltrados = [];
     let totalPaginas = 1;
 
-    // --- NOVA CONFIGURAÇÃO DE CASAS DECIMAIS ---
-    // Totais e Globais continuam com 2 casas
     const fmtBrl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-    
-    // Valores Unitários vão até 4 casas decimais quando necessário
-    const fmtUnit = new Intl.NumberFormat('pt-BR', { 
-        style: 'currency', 
-        currency: 'BRL', 
-        minimumFractionDigits: 2, 
-        maximumFractionDigits: 4 
-    });
-    
+    const fmtUnit = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 4 });
     const fmtData = d => d ? new Date(d).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '--/--/----';
 
     window.onload = () => {
@@ -183,6 +173,23 @@
 
         lote.forEach(d => {
             const valor = (d.is_sigiloso || !d.valor_global) ? '<span class="text-muted">Sigiloso</span>' : fmtBrl.format(d.valor_global);
+            
+            // --- LÓGICA DE EXCLUSIVIDADE ME/EPP COM NOVA COR ---
+            let totalItens = d.itens ? d.itens.length : 0;
+            let qtdSim = d.itens ? d.itens.filter(i => i.me_epp === "Sim").length : 0;
+            let tarjaMeEpp = "";
+
+            if (totalItens > 0) {
+                if (qtdSim === totalItens) {
+                    tarjaMeEpp = '<span class="badge bg-danger mt-1 d-block w-100" style="font-size: 0.7rem;">EXCLUSIVO</span>';
+                } else if (qtdSim > 0) {
+                    // ALTERADO AQUI PARA AMARELO/LARANJA (bg-warning text-dark)
+                    tarjaMeEpp = '<span class="badge bg-warning text-dark mt-1 d-block w-100" style="font-size: 0.7rem;">PARCIAL</span>';
+                } else {
+                    tarjaMeEpp = '<span class="badge bg-success mt-1 d-block w-100" style="font-size: 0.7rem;">AMPLO</span>';
+                }
+            }
+
             tbody.innerHTML += `
                 <tr>
                     <td class="date-badge">${fmtData(d.data_encerramento)}</td>
@@ -191,7 +198,10 @@
                         <span class="org-uasg">${d.uasg} - ${d.orgao}</span>
                         <span class="unit-name">${d.unidade_compradora}</span>
                     </td>
-                    <td><span class="badge bg-light text-dark border">${d.edital}</span></td>
+                    <td class="text-center align-middle">
+                        <span class="badge bg-light text-dark border d-block w-100">${d.edital}</span>
+                        ${tarjaMeEpp}
+                    </td>
                     <td><div class="text-truncate-3" style="max-width: 350px;" title="${d.objeto}">${d.objeto}</div></td>
                     <td class="text-center fw-bold">${d.qtd_itens || 0}</td>
                     <td class="text-end val-global">${valor}</td>
@@ -259,7 +269,6 @@
             } else if (isVencedor) {
                 classe = 'status-winner';
                 icone = 'fa-trophy';
-                // Total da badge usando formatação de 2 casas (fmtBrl)
                 badgeTotal = `<span class="badge bg-success ms-auto fs-6">Total Ganho: ${fmtBrl.format(dadosGrupo.totalGanho)}</span>`;
             }
 
@@ -292,7 +301,6 @@
                 const badge_meepp = it.me_epp || "Não"; 
                 const cor_badge = badge_meepp === "Sim" ? "bg-primary" : "bg-secondary";
 
-                // --- APLICADO O NOVO FORMATADOR (fmtUnit) PARA AS COLUNAS UNITÁRIAS ---
                 tabela += `
                     <tr>
                         <td class="text-center fw-bold">${it.item}</td>
