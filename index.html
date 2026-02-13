@@ -46,7 +46,12 @@
         .status-open { background: #fff3cd; color: #664d03; border-left: 5px solid #ffc107; }
 
         /* Paginação */
-        .pagination-container { background: white; padding: 15px; border-top: 1px solid #eee; display: flex; justify-content: center; align-items: center; gap: 15px; }
+        .pagination-container { background: white; padding: 15px; border-top: 1px solid #eee; display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap; }
+        
+        /* Ocultar as setas do input number */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
     </style>
 </head>
 <body>
@@ -99,6 +104,12 @@
             <button class="btn btn-sm btn-outline-secondary" onclick="mudarPagina(-1)" id="btnAnt">Anterior</button>
             <span class="text-muted">Página <span id="pagAtual" class="fw-bold">1</span> de <span id="pagTotal">1</span></span>
             <button class="btn btn-sm btn-outline-secondary" onclick="mudarPagina(1)" id="btnProx">Próximo</button>
+            
+            <div class="d-flex align-items-center ms-md-3 border-start ps-md-3">
+                <label for="inputIrPara" class="text-muted small me-2 mb-0">Ir para:</label>
+                <input type="number" id="inputIrPara" class="form-control form-control-sm text-center" style="width: 60px;" min="1" value="1" onkeypress="if(event.key === 'Enter') irParaPaginaDireta()">
+                <button class="btn btn-sm btn-secondary ms-2" onclick="irParaPaginaDireta()">Ir</button>
+            </div>
         </div>
     </div>
 </div>
@@ -143,6 +154,7 @@
     let pagina = 1;
     let dadosOriginais = [];
     let dadosFiltrados = [];
+    let totalPaginas = 1; // Variável global para ser lida pela função "Ir para"
 
     const fmtBrl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
     const fmtData = d => d ? new Date(d).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '--/--/----';
@@ -171,7 +183,7 @@
             (!dataEnc || (d.data_encerramento && d.data_encerramento.startsWith(dataEnc)))
         );
 
-        const totalPaginas = Math.ceil(filtrados.length / ITENS_POR_PAG) || 1;
+        totalPaginas = Math.ceil(filtrados.length / ITENS_POR_PAG) || 1;
         if (pagina > totalPaginas) pagina = totalPaginas;
         if (pagina < 1) pagina = 1;
         
@@ -194,9 +206,7 @@
                         <span class="unit-name">${d.unidade_compradora}</span>
                     </td>
                     <td><span class="badge bg-light text-dark border">${d.edital}</span></td>
-                    
                     <td><div class="text-truncate-3" style="max-width: 350px;" title="${d.objeto}">${d.objeto}</div></td>
-                    
                     <td class="text-center fw-bold">${d.qtd_itens || 0}</td>
                     <td class="text-end val-global">${valor}</td>
                     <td class="text-center">
@@ -212,6 +222,27 @@
         document.getElementById('pagTotal').innerText = totalPaginas;
         document.getElementById('btnAnt').disabled = (pagina === 1);
         document.getElementById('btnProx').disabled = (pagina === totalPaginas);
+        
+        // Sincroniza o campo "Ir para" com a página atual e define os limites
+        const inputIr = document.getElementById('inputIrPara');
+        inputIr.value = pagina;
+        inputIr.max = totalPaginas;
+    }
+
+    // NOVA FUNÇÃO: Navegação direta pela caixa de texto
+    function irParaPaginaDireta() {
+        const input = document.getElementById('inputIrPara');
+        let novaPag = parseInt(input.value);
+
+        if (isNaN(novaPag) || novaPag < 1) {
+            novaPag = 1;
+        } else if (novaPag > totalPaginas) {
+            novaPag = totalPaginas;
+        }
+
+        pagina = novaPag;
+        render();
+        window.scrollTo(0,0);
     }
 
     function verDetalhes(id) {
