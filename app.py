@@ -18,7 +18,8 @@ KEYWORDS_GERAIS = [
     "AMOXICILIN", "AMPICILIN", "CEFALEXIN", "CEFTRIAXON", "DIPIRON", "PARACETAMOL",
     "INSULIN", "GLICOSE", "HIDROCORTISON", "FUROSEMID", "OMEPRAZOL", "LOSARTAN",
     "ATENOLOL", "SULFATO", "CLORETO", "EQUIPO", "CATETER", "SONDA", "AVENTAL", 
-    "MASCARA", "N95", "ALCOOL", "CURATIVO", "ESPARADRAPO", "PROPE", "TOUCA"
+    "MASCARA", "N95", "ALCOOL", "CURATIVO", "ESPARADRAPO", "PROPE", "TOUCA",
+    "EPI", "PROTECAO INDIVIDUAL"  # <-- Adicionadas
 ]
 
 KEYWORDS_NORDESTE = [
@@ -30,7 +31,7 @@ BLACKLIST = [
     "LANCHE", "ALIMENTICIO", "MOBILIARIO", "TI", "INFORMATICA", "PNEU", 
     "ESTANTE", "CADEIRA", "RODOVIARIO", "PAVIMENTACAO", "SERVICO", "LOCACAO", 
     "COMODATO", "EXAME", "LIMPEZA PREDIAL", "MANUTENCAO", "ASSISTENCIA MEDICA", 
-    "PLANO DE SAUDE", "ODONTOLOGICA", "TERCEIRIZACAO"
+    "PLANO DE SAUDE", "ODONTOLOGICA", "TERCEIRIZACAO", "EQUIPAMENTO" # <-- Adicionada
 ]
 
 UFS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "RO", "GO", "MT", "MS", "DF"]
@@ -59,9 +60,12 @@ def buscar_todos_itens(session, cnpj, ano, seq):
         try:
             r = session.get(url, params={"pagina": pag, "tamanhoPagina": 50}, timeout=15)
             if r.status_code != 200: break
-            data = r.json()
-            if not data: break
-            itens.extend(data)
+            dados = r.json()
+            
+            lista = dados.get('data', []) if isinstance(dados, dict) else dados
+            if not lista: break
+            
+            itens.extend(lista)
             pag += 1
             if pag > 100: break 
         except: break
@@ -75,9 +79,12 @@ def buscar_todos_resultados(session, cnpj, ano, seq):
         try:
             r = session.get(url, params={"pagina": pag, "tamanhoPagina": 50}, timeout=15)
             if r.status_code != 200: break
-            data = r.json()
-            if not data: break
-            resultados.extend(data)
+            dados = r.json()
+            
+            lista = dados.get('data', []) if isinstance(dados, dict) else dados
+            if not lista: break
+            
+            resultados.extend(lista)
             pag += 1
         except: break
     return resultados
@@ -111,11 +118,20 @@ def capturar_detalhes_completos(itens_raw, resultados_raw):
                 cod_beneficio = 5 # Padrão é Não (5)
                 
             me_epp = mapa_beneficio.get(cod_beneficio, "Não")
+            
+            # IDENTIFICA CANCELAMENTOS / FRACASSOS
+            sit_item = str(i.get('situacaoCompraItemNome', '')).upper()
+            if any(x in sit_item for x in ['CANCELAD', 'FRACASSAD', 'DESERT', 'ANULAD']):
+                fornecedor_padrao = sit_item
+                situacao_padrao = sit_item
+            else:
+                fornecedor_padrao = "EM ANDAMENTO"
+                situacao_padrao = "ABERTO"
                 
             itens_map[num] = {
                 "item": num, "desc": i.get('descricao', 'Sem descrição'), "qtd": qtd,
-                "unitario_est": unit_est, "total_est": total_est, "situacao": "ABERTO",
-                "tem_resultado": False, "fornecedor": "EM ANDAMENTO",
+                "unitario_est": unit_est, "total_est": total_est, "situacao": situacao_padrao,
+                "tem_resultado": False, "fornecedor": fornecedor_padrao,
                 "unitario_hom": 0.0, "total_hom": 0.0,
                 "me_epp": me_epp
             }
@@ -124,7 +140,16 @@ def capturar_detalhes_completos(itens_raw, resultados_raw):
     for res in resultados_raw:
         try:
             num = int(res['numeroItem'])
-            fornecedor = res.get('nomeRazaoSocialFornecedor', 'VENCEDOR ANÔNIMO')
+            
+            # Se não há nome de fornecedor no resultado, pode ser um registro de fracasso
+            fornecedor = res.get('nomeRazaoSocialFornecedor')
+            if not fornecedor:
+                ind_res = str(res.get('indicadorResultadoNome', '')).upper()
+                if any(x in ind_res for x in ['CANCELAD', 'FRACASSAD', 'DESERT', 'ANULAD']):
+                    fornecedor = ind_res
+                else:
+                    fornecedor = 'VENCEDOR ANÔNIMO'
+                    
             unit_hom = float(res.get('valorUnitarioHomologado') or 0)
             total_hom = float(res.get('valorTotalHomologado') or 0)
             qtd_hom = float(res.get('quantidadeHomologada') or 0)
