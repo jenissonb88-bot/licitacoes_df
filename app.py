@@ -11,7 +11,7 @@ ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_MANUAIS = 'urls.txt'
 ARQ_FINISH = 'finish.txt'
 
-# === PALAVRAS-CHAVE (Agora usando Regex para palavras exatas) ===
+# === PALAVRAS-CHAVE ===
 KEYWORDS_GERAIS = [
     "MEDICAMENT", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGIC", 
     "SERINGA", "AGULHA", r"\bLUVA", r"\bGAZE", "ALGODAO",
@@ -26,7 +26,7 @@ KEYWORDS_NORDESTE = [
     "DIETA", "ENTERAL", "SUPLEMENT", "FORMULA", "CALORIC", "PROTEIC"
 ]
 
-# === BLACKLIST BLINDADA ===
+# === BLACKLIST BLINDADA MÁXIMA ===
 BLACKLIST = [
     "ESCOLAR", "CONSTRUCAO", "AUTOMOTIVO", "OBRA", "VEICULO", "REFEICAO", 
     "LANCHE", "ALIMENTICIO", "MOBILIARIO", r"\bTI\b", "INFORMATICA", "PNEU", 
@@ -40,7 +40,15 @@ BLACKLIST = [
     "SEMENTE", "BELICO", "MILITAR", "ARMAMENTO", "MUNICAO", "SOFTWARE", "SAAS",
     "PISCINA", "CIMENTO", "ASFALTO", "BRINQUEDO", "EVENTO", "SHOW", "FESTA",
     "GRAFICA", "PUBLICIDADE", "MARKETING", "PASSAGEM", "HOSPEDAGEM",
-    "AR CONDICIONADO", "TELEFONIA", "INTERNET", "LINK DE DADOS", "SEGURO", "COPO"
+    "AR CONDICIONADO", "TELEFONIA", "INTERNET", "LINK DE DADOS", "SEGURO", "COPO",
+    
+    # --- NOVOS ITENS ADICIONADOS (EXPANSÃO DE MATERIAIS) ---
+    "MATERIAL ESPORTIVO", "ESPORTE", "MATERIAL DE CONSTRUCAO", "MATERIAL ESCOLAR", 
+    "MATERIAL DE EXPEDIENTE", "MATERIAL HIDRAULICO", "MATERIAL ELETRICO",
+    "DIDATICO", "PEDAGOGICO", "FERRAGEM", "FERRAMENTA", "PINTURA", "TINTA", 
+    "MARCENARIA", "MADEIRA", "AGRICOLA", "JARDINAGEM", "ILUMINACAO", "DECORACAO", 
+    "AUDIOVISUAL", "FOTOGRAFICO", "MUSICAL", "INSTRUMENTO MUSICAL", "BRINDE", 
+    "TROFEU", "MEDALHA", "ELETROPORTATIL", "CAMA MESA E BANHO", "EPI"
 ]
 
 UFS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "RO", "GO", "MT", "MS", "DF"]
@@ -99,7 +107,6 @@ def buscar_todos_resultados(session, cnpj, ano, seq, itens_raw):
         f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/resultados"
     ]
     
-    # Tenta a busca geral de resultados
     for url in urls:
         pag = 1
         while True:
@@ -117,24 +124,28 @@ def buscar_todos_resultados(session, cnpj, ano, seq, itens_raw):
             except: break
         if resultados: break
 
-    # GATILHO INFALÍVEL: Puxa resultado item a item se a API travar a lista geral
+    # Gatilho Individual de Resultados (Se a API geral falhar)
     for i in itens_raw:
-        sit = str(i.get('situacaoCompraItemId'))
         num = i.get('numeroItem') or i.get('sequencialItem')
+        if num is None: continue
         
         ja_tem = any(str(r.get('numeroItem') or r.get('sequencialItem')) == str(num) for r in resultados)
+        tem_res = i.get('temResultado', False)
+        sit = str(i.get('situacaoCompraItemId'))
         
-        # Se a API acusa que está fechado (2,3,4,5,6) mas não trouxe na lista geral
-        if sit in ["2", "3", "4", "5", "6"] and not ja_tem:
-            if num:
-                url_item = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num}/resultados"
-                try:
-                    r = session.get(url_item, timeout=5)
-                    if r.status_code == 200:
-                        dados = r.json()
-                        lista = dados.get('data', []) if isinstance(dados, dict) else dados
-                        if lista: resultados.extend(lista)
-                except: pass
+        if (tem_res or sit in ["2", "3", "4", "5", "6"]) and not ja_tem:
+            url_item = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num}/resultados"
+            try:
+                r = session.get(url_item, timeout=5)
+                if r.status_code == 200:
+                    dados = r.json()
+                    lista = dados.get('data', []) if isinstance(dados, dict) else dados
+                    if lista:
+                        for res_item in lista:
+                            if 'numeroItem' not in res_item:
+                                res_item['numeroItem'] = num
+                            resultados.append(res_item)
+            except: pass
 
     return resultados
 
@@ -254,7 +265,7 @@ def run():
                 if raw: banco = {i['id']: i for i in json.loads(raw)}
         except: pass
 
-    # === MÁGICA 1: LIMPEZA RETROATIVA E ATUALIZAÇÃO DE RESULTADOS ANTIGOS ===
+    # LIMPEZA E ATUALIZAÇÃO DA BASE ANTIGA
     hoje = datetime.now()
     if banco:
         print("🔄 Revisando base antiga (Limpando Lixo e Atualizando Resultados)...")
@@ -263,7 +274,6 @@ def run():
             uf = lic.get('uf', '')
             obj_norm = normalize(lic.get('objeto', ''))
             
-            # Filtro reverso: Se for lixo agora, marca para deletar
             eh_rel = False
             if contem_palavra_relevante(obj_norm, uf):
                 eh_rel = True
@@ -277,7 +287,6 @@ def run():
                 ids_remover.append(id_lic)
                 continue
                 
-            # Se for boa, checa se a data do pregão já passou para atualizar o Vencedor
             try:
                 data_enc_str = lic.get('data_encerramento')
                 if data_enc_str:
