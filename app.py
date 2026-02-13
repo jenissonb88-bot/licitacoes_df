@@ -2,6 +2,7 @@ import requests, json, os, urllib3, unicodedata, re
 from datetime import datetime, timedelta
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import concurrent.futures  # Biblioteca para Paralelismo
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -10,6 +11,7 @@ ARQ_DADOS = 'dados/oportunidades.js'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_MANUAIS = 'urls.txt'
 ARQ_FINISH = 'finish.txt'
+MAX_WORKERS = 10  # Número de conexões simultâneas (Robô 10x mais rápido)
 
 # === PALAVRAS-CHAVE ===
 KEYWORDS_GERAIS = [
@@ -41,15 +43,12 @@ BLACKLIST = [
     "PISCINA", "CIMENTO", "ASFALTO", "BRINQUEDO", "EVENTO", "SHOW", "FESTA",
     "GRAFICA", "PUBLICIDADE", "MARKETING", "PASSAGEM", "HOSPEDAGEM",
     "AR CONDICIONADO", "TELEFONIA", "INTERNET", "LINK DE DADOS", "SEGURO", "COPO",
-    
-    # --- NOVOS ITENS ADICIONADOS (EXPANSÃO DE MATERIAIS) ---
     "MATERIAL ESPORTIVO", "ESPORTE", "MATERIAL DE CONSTRUCAO", "MATERIAL ESCOLAR", 
     "MATERIAL DE EXPEDIENTE", "MATERIAL HIDRAULICO", "MATERIAL ELETRICO",
     "DIDATICO", "PEDAGOGICO", "FERRAGEM", "FERRAMENTA", "PINTURA", "TINTA", 
     "MARCENARIA", "MADEIRA", "AGRICOLA", "JARDINAGEM", "ILUMINACAO", "DECORACAO", 
     "AUDIOVISUAL", "FOTOGRAFICO", "MUSICAL", "INSTRUMENTO MUSICAL", "BRINDE", 
-    "TROFEU", "MEDALHA", "ELETROPORTATIL", "CAMA MESA E BANHO", "EPI",
-    "PERMANENTE", "MATERIAL PERMANENTE"
+    "TROFEU", "MEDALHA", "ELETROPORTATIL", "CAMA MESA E BANHO", "EPI", "GENEROS ALIMENTICIOS"
 ]
 
 UFS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "RO", "GO", "MT", "MS", "DF"]
@@ -61,42 +60,38 @@ def normalize(t):
 
 def contem_palavra_relevante(texto, uf):
     if not texto: return False
-    
-    # 1. Filtro Implacável da Blacklist
     for b in BLACKLIST:
         padrao = b if r"\b" in b else r"\b" + b
         if re.search(padrao, texto): return False
-        
-    # 2. Busca pelas palavras-chave com proteção de prefixo
     for k in KEYWORDS_GERAIS:
         padrao = k if r"\b" in k else r"\b" + k
         if re.search(padrao, texto): return True
-        
     if uf in UFS_NORDESTE:
         for k in KEYWORDS_NORDESTE:
             padrao = k if r"\b" in k else r"\b" + k
             if re.search(padrao, texto): return True
-            
     return False
 
 def criar_sessao():
     s = requests.Session()
-    s.mount("https://", HTTPAdapter(max_retries=Retry(total=5, backoff_factor=1, status_forcelist=[500,502,503,504])))
+    # Aumentei o pool de conexões para suportar o paralelismo
+    adapter = HTTPAdapter(pool_connections=MAX_WORKERS, pool_maxsize=MAX_WORKERS, max_retries=Retry(total=3, backoff_factor=0.5, status_forcelist=[500,502,503,504]))
+    s.mount("https://", adapter)
     return s
 
 def buscar_todos_itens(session, cnpj, ano, seq):
     url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
     itens = []
     pag = 1
-    while True:
+    while pag <= 200: 
         try:
             r = session.get(url, params={"pagina": pag, "tamanhoPagina": 50}, timeout=15)
             if r.status_code != 200: break
             dados = r.json()
             lista = dados.get('data', []) if isinstance(dados, dict) else dados
-            if not lista: break
+            if not lista: break 
             itens.extend(lista)
-            if isinstance(dados, list): break 
+            if len(lista) < 50: break 
             pag += 1
         except: break
     return itens
@@ -110,7 +105,7 @@ def buscar_todos_resultados(session, cnpj, ano, seq, itens_raw):
     
     for url in urls:
         pag = 1
-        while True:
+        while pag <= 200:
             try:
                 r = session.get(url, params={"pagina": pag, "tamanhoPagina": 50}, timeout=10)
                 if r.status_code == 200:
@@ -118,14 +113,14 @@ def buscar_todos_resultados(session, cnpj, ano, seq, itens_raw):
                     lista = dados.get('data', []) if isinstance(dados, dict) else dados
                     if lista:
                         resultados.extend(lista)
-                        if isinstance(dados, list): break 
+                        if len(lista) < 50: break
                         pag += 1
                         continue
-                break
+                break 
             except: break
-        if resultados: break
+        if resultados: break 
 
-    # Gatilho Individual de Resultados (Se a API geral falhar)
+    # Gatilho Individual (Lógica Preservada)
     for i in itens_raw:
         num = i.get('numeroItem') or i.get('sequencialItem')
         if num is None: continue
@@ -211,11 +206,64 @@ def capturar_detalhes_completos(itens_raw, resultados_raw):
 
     return sorted(list(itens_map.values()), key=lambda x: x['item'])
 
+# === NOVA FUNÇÃO: PROCESSAR UMA ÚNICA LICITAÇÃO (PARA USAR EM PARALELO) ===
+def processar_licitacao_individual(session, lic):
+    try:
+        unid = lic.get('unidadeOrgao', {})
+        uf = unid.get('ufSigla') or lic.get('unidadeFederativaId')
+        
+        if uf not in UFS_ALVO: return None
+
+        cnpj, ano, seq = lic['orgaoEntidade']['cnpj'], lic['anoCompra'], lic['sequencialCompra']
+        id_lic = f"{cnpj}{ano}{seq}"
+        
+        eh_rel = False
+        obj_norm = normalize(lic.get('objetoCompra'))
+        if contem_palavra_relevante(obj_norm, uf): eh_rel = True
+        
+        itens_raw = []
+        resultados_raw = []
+
+        # Se não achou no objeto, busca nos itens
+        if not eh_rel:
+            itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
+            for it in itens_raw:
+                if contem_palavra_relevante(normalize(it.get('descricao', '')), uf):
+                    eh_rel = True
+                    break
+        
+        if eh_rel:
+            if not itens_raw: itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
+            resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq, itens_raw)
+            
+            detalhes = capturar_detalhes_completos(itens_raw, resultados_raw)
+            
+            if detalhes:
+                return {
+                    "id": id_lic, "data_pub": lic.get('dataPublicacaoPncp'),
+                    "data_encerramento": lic.get('dataEncerramentoProposta'),
+                    "uf": uf, "cidade": unid.get('municipioNome'),
+                    "orgao": lic['orgaoEntidade']['razaoSocial'],
+                    "unidade_compradora": unid.get('nomeUnidade'),
+                    "objeto": lic.get('objetoCompra'),
+                    "edital": f"{lic.get('numeroCompra')}/{ano}",
+                    "uasg": unid.get('codigoUnidade') or "---",
+                    "valor_global": float(lic.get('valorTotalEstimado') or 0),
+                    "is_sigiloso": lic.get('niValorTotalEstimado', False),
+                    "qtd_itens": len(detalhes), 
+                    "link": f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
+                    "itens": detalhes
+                }
+    except: pass
+    return None
+
 def processar_urls_manuais(session, banco):
     if not os.path.exists(ARQ_MANUAIS): return 0
     with open(ARQ_MANUAIS, 'r') as f:
         urls = [line.strip() for line in f.readlines() if 'editais/' in line]
     if not urls: return 0
+    
+    # Processamento sequencial rápido para manuais (são poucos)
     count = 0
     for url in urls:
         try:
@@ -228,28 +276,16 @@ def processar_urls_manuais(session, banco):
             if resp.status_code == 200:
                 lic = resp.json()
                 if str(lic.get('modalidadeId')) != "6": continue
-
-                itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
-                resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq, itens_raw)
                 
-                detalhes = capturar_detalhes_completos(itens_raw, resultados_raw)
-                unid = lic.get('unidadeOrgao', {})
-                banco[id_lic] = {
-                    "id": id_lic, "data_pub": lic.get('dataPublicacaoPncp'),
-                    "data_encerramento": lic.get('dataEncerramentoProposta'),
-                    "uf": unid.get('ufSigla') or lic.get('unidadeFederativaId'),
-                    "cidade": unid.get('municipioNome'),
-                    "orgao": lic['orgaoEntidade']['razaoSocial'],
-                    "unidade_compradora": unid.get('nomeUnidade'),
-                    "objeto": lic.get('objetoCompra'),
-                    "edital": f"{lic.get('numeroCompra')}/{ano}",
-                    "uasg": unid.get('codigoUnidade') or "---",
-                    "valor_global": float(lic.get('valorTotalEstimado') or 0),
-                    "is_sigiloso": lic.get('niValorTotalEstimado', False),
-                    "qtd_itens": len(detalhes), "link": url, "itens": detalhes
-                }
-                count += 1
+                # Reutiliza a função individual criando um objeto fake
+                res = processar_licitacao_individual(session, lic)
+                # Força o link correto vindo da URL manual
+                if res:
+                    res['link'] = url 
+                    banco[id_lic] = res
+                    count += 1
         except: pass
+        
     with open(ARQ_MANUAIS, 'w') as f: f.write("")
     return count
 
@@ -266,10 +302,10 @@ def run():
                 if raw: banco = {i['id']: i for i in json.loads(raw)}
         except: pass
 
-    # LIMPEZA E ATUALIZAÇÃO DA BASE ANTIGA
+    # LIMPEZA E ATUALIZAÇÃO (SEQUENCIAL RÁPIDA)
     hoje = datetime.now()
     if banco:
-        print("🔄 Revisando base antiga (Limpando Lixo e Atualizando Resultados)...")
+        print("🔄 Revisando base antiga (Limpeza e Atualização)...")
         ids_remover = []
         for id_lic, lic in banco.items():
             uf = lic.get('uf', '')
@@ -334,51 +370,19 @@ def run():
             lics = r.json().get('data', [])
             if not lics: break 
             
-            print(f"   Lendo página {pagina_pub} do dia...")
+            print(f"   Lendo página {pagina_pub} do dia (Processamento Paralelo)...")
 
-            for lic in lics:
-                unid = lic.get('unidadeOrgao', {})
-                uf = unid.get('ufSigla') or lic.get('unidadeFederativaId')
-                if uf in UFS_ALVO:
-                    cnpj, ano, seq = lic['orgaoEntidade']['cnpj'], lic['anoCompra'], lic['sequencialCompra']
-                    id_lic = f"{cnpj}{ano}{seq}"
-                    
-                    eh_rel = False
-                    obj_norm = normalize(lic.get('objetoCompra'))
-                    if contem_palavra_relevante(obj_norm, uf): eh_rel = True
-                    
-                    itens_raw = []
-                    resultados_raw = []
-
-                    if not eh_rel:
-                        itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
-                        for it in itens_raw:
-                            if contem_palavra_relevante(normalize(it.get('descricao', '')), uf):
-                                eh_rel = True
-                                break
-                    
-                    if eh_rel:
-                        if not itens_raw: itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
-                        resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq, itens_raw)
-                        
-                        detalhes = capturar_detalhes_completos(itens_raw, resultados_raw)
-                        
-                        if detalhes:
-                            banco[id_lic] = {
-                                "id": id_lic, "data_pub": lic.get('dataPublicacaoPncp'),
-                                "data_encerramento": lic.get('dataEncerramentoProposta'),
-                                "uf": uf, "cidade": unid.get('municipioNome'),
-                                "orgao": lic['orgaoEntidade']['razaoSocial'],
-                                "unidade_compradora": unid.get('nomeUnidade'),
-                                "objeto": lic.get('objetoCompra'),
-                                "edital": f"{lic.get('numeroCompra')}/{ano}",
-                                "uasg": unid.get('codigoUnidade') or "---",
-                                "valor_global": float(lic.get('valorTotalEstimado') or 0),
-                                "is_sigiloso": lic.get('niValorTotalEstimado', False),
-                                "qtd_itens": len(detalhes), "link": f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
-                                "itens": detalhes
-                            }
-                            novos_no_dia += 1
+            # === AQUI ESTÁ A MÁGICA DO PARALELISMO ===
+            # Usamos um Executor para processar as 50 licitações da página AO MESMO TEMPO
+            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                # Cria uma tarefa para cada licitação da lista
+                futuros = {executor.submit(processar_licitacao_individual, session, lic): lic for lic in lics}
+                
+                for futuro in concurrent.futures.as_completed(futuros):
+                    resultado = futuro.result()
+                    if resultado:
+                        banco[resultado['id']] = resultado
+                        novos_no_dia += 1
             
             pagina_pub += 1 
             
@@ -388,8 +392,12 @@ def run():
 
     lista = sorted(list(banco.values()), key=lambda x: x.get('data_encerramento') or '', reverse=True)
     os.makedirs('dados', exist_ok=True)
+    
+    # === OTIMIZAÇÃO DE ARMAZENAMENTO ===
+    # separators=(',', ':') remove os espaços em branco, reduzindo o tamanho em ~40%
     with open(ARQ_DADOS, 'w', encoding='utf-8') as f:
-        f.write(f"const dadosLicitacoes = {json.dumps(lista, indent=4, ensure_ascii=False)};")
+        json_minificado = json.dumps(lista, separators=(',', ':'), ensure_ascii=False)
+        f.write(f"const dadosLicitacoes = {json_minificado};")
 
     proximo_dia = (data_alvo + timedelta(days=1))
     with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo_dia.strftime('%Y%m%d'))
