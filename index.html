@@ -7,54 +7,39 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
-        :root { --primary-dark: #2c3e50; --accent-blue: #3498db; --danger-red: #e74c3c; }
-        body { background-color: #f4f7f6; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 0.85rem; }
+        :root { --primary-dark: #2c3e50; --accent-blue: #3498db; --danger-red: #e74c3c; --success-green: #27ae60; }
+        body { background-color: #f4f7f6; font-family: 'Segoe UI', sans-serif; font-size: 0.85rem; }
         .header-bar { background: var(--primary-dark); color: white; padding: 12px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .app-logo { font-size: 1.2rem; font-weight: 700; letter-spacing: 1px; }
-        .card-table { border: none; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); background: white; margin-bottom: 12px; transition: transform 0.2s; }
-        .card-table:hover { transform: translateY(-2px); }
-        .badge-uf { width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #ebf5fb; color: var(--accent-blue); font-weight: 700; border: 2px solid #d4e6f1; }
-        .status-pill { padding: 2px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
-        .bg-andamento { background: #fff3cd; color: #856404; }
-        .bg-homologado { background: #d4edda; color: #155724; }
-        .bg-cancelado { background: #f8d7da; color: #721c24; }
+        .card-table { border: none; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); background: white; margin-bottom: 12px; padding: 15px; }
+        .badge-exclusive { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; font-size: 0.7rem; padding: 3px 8px; border-radius: 4px; font-weight: bold; }
+        .badge-amplo { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; font-size: 0.7rem; padding: 3px 8px; border-radius: 4px; font-weight: bold; }
+        .badge-sigiloso { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; font-size: 0.7rem; padding: 3px 8px; border-radius: 4px; font-weight: bold; }
         #loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .fornecedor-header { background: #f8f9fa; border-left: 4px solid var(--success-green); padding: 8px 15px; margin-top: 15px; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div id="loader">
-        <div class="spinner-border text-primary" role="status"></div>
-        <div class="mt-3 fw-bold">Sincronizando Inteligência Sniper...</div>
+        <div class="spinner-border text-primary"></div>
+        <div class="mt-3 fw-bold">Carregando Painel Sniper Intelligence...</div>
     </div>
 
     <div class="header-bar d-flex justify-content-between align-items-center">
         <div class="app-logo"><i class="fa-solid fa-crosshairs me-2"></i>SNIPER PNCP</div>
-        <div id="stats" class="small text-white-50">Aguardando dados...</div>
+        <div id="stats" class="small text-white-50">Sincronizando...</div>
     </div>
 
     <div class="container-fluid py-3">
-        <div class="bg-white p-3 rounded shadow-sm mb-3 border-start border-4 border-info">
+        <div class="bg-white p-3 rounded shadow-sm mb-3 border-start border-4 border-primary">
             <div class="row g-2">
-                <div class="col-md-3">
-                    <label class="small fw-bold">Busca Geral</label>
-                    <input type="text" id="fBusca" class="form-control form-control-sm" placeholder="Objeto, item, fornecedor..." onkeyup="pagina=1; render()">
-                </div>
-                <div class="col-md-1">
-                    <label class="small fw-bold">UF</label>
-                    <input type="text" id="fUF" class="form-control form-control-sm" placeholder="UF" onkeyup="pagina=1; render()">
-                </div>
-                <div class="col-md-3">
-                    <label class="small fw-bold">Órgão / Município</label>
-                    <input type="text" id="fLocal" class="form-control form-control-sm" placeholder="Nome do órgão ou cidade..." onkeyup="pagina=1; render()">
-                </div>
-                <div class="col-md-2">
-                    <label class="small fw-bold">Encerramento</label>
-                    <input type="date" id="fDataEnc" class="form-control form-control-sm" onchange="pagina=1; render()">
-                </div>
-                <div class="col-md-3 d-flex align-items-end gap-1">
-                    <button class="btn btn-primary btn-sm w-100" onclick="render()"><i class="fa-solid fa-filter me-1"></i> Filtrar</button>
-                    <button class="btn btn-outline-secondary btn-sm" onclick="limparFiltros()"><i class="fa-solid fa-eraser"></i></button>
+                <div class="col-md-3"><input type="text" id="fBusca" class="form-control form-control-sm" placeholder="Buscar Edital, Objeto ou Item..." onkeyup="pagina=1; render()"></div>
+                <div class="col-md-1"><input type="text" id="fUF" class="form-control form-control-sm" placeholder="UF" onkeyup="pagina=1; render()"></div>
+                <div class="col-md-3"><input type="text" id="fLocal" class="form-control form-control-sm" placeholder="Órgão ou Município..." onkeyup="pagina=1; render()"></div>
+                <div class="col-md-5 text-end">
+                    <button class="btn btn-outline-secondary btn-sm" onclick="limparFiltros()"><i class="fa-solid fa-eraser"></i> Limpar</button>
+                    <button class="btn btn-dark btn-sm" onclick="location.reload()"><i class="fa-solid fa-sync"></i> Atualizar</button>
                 </div>
             </div>
         </div>
@@ -62,19 +47,19 @@
         <div id="containerLicitacoes"></div>
 
         <div class="d-flex justify-content-between align-items-center mt-3">
-            <div id="infoPagina" class="small text-muted fw-bold"></div>
+            <div id="infoPagina" class="small fw-bold"></div>
             <div class="btn-group">
-                <button id="btnAnterior" class="btn btn-sm btn-dark" onclick="mudarPagina(-1)">Anterior</button>
-                <button id="btnProximo" class="btn btn-sm btn-dark" onclick="mudarPagina(1)">Próximo</button>
+                <button id="btnAnterior" class="btn btn-sm btn-outline-dark" onclick="mudarPagina(-1)">Anterior</button>
+                <button id="btnProximo" class="btn btn-sm btn-outline-dark" onclick="mudarPagina(1)">Próximo</button>
             </div>
         </div>
     </div>
 
-    <div class="modal fade" id="modalDetalhes" tabindex="-1" aria-hidden="true">
+    <div class="modal fade" id="modalDetalhes" tabindex="-1">
         <div class="modal-dialog modal-xl modal-dialog-scrollable">
-            <div class="modal-content shadow-lg border-0">
+            <div class="modal-content shadow-lg">
                 <div class="modal-header bg-dark text-white py-2">
-                    <h6 class="modal-title" id="modalTitulo">Detalhamento da Oportunidade</h6>
+                    <h6 class="modal-title">Detalhes da Licitação e Resultados</h6>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body p-0" id="modalCorpo"></div>
@@ -87,23 +72,19 @@
     <script>
         let dadosLicitacoes = [];
         let pagina = 1;
-        const itensPorPagina = 15;
+        const itensPorPagina = 12;
 
         async function carregarDados() {
             try {
-                // Cache buster para ignorar cache de disco
-                const resp = await fetch(`dados/oportunidades.json.gz?t=${new Date().getTime()}`);
-                if (!resp.ok) throw new Error();
-
+                const url = `dados/oportunidades.json.gz?v=${Date.now()}`;
+                const resp = await fetch(url);
                 const ds = new DecompressionStream("gzip");
-                const stream = resp.body.pipeThrough(ds);
-                const texto = await new Response(stream).text();
-                
+                const texto = await new Response(resp.body.pipeThrough(ds)).text();
                 dadosLicitacoes = JSON.parse(texto);
                 document.getElementById('loader').style.display = 'none';
                 render();
             } catch (e) {
-                document.getElementById('loader').innerHTML = `<div class="text-danger fw-bold">Erro ao carregar dados. Verifique a pasta 'dados/'.</div>`;
+                document.getElementById('loader').innerHTML = `<div class="text-danger">Erro ao carregar banco de dados GZ.</div>`;
             }
         }
 
@@ -112,50 +93,57 @@
             const busca = document.getElementById('fBusca').value.toLowerCase();
             const uf = document.getElementById('fUF').value.toUpperCase();
             const local = document.getElementById('fLocal').value.toLowerCase();
-            const dataEnc = document.getElementById('fDataEnc').value;
-            const excluidos = JSON.parse(localStorage.getItem('sniper_excluidos') || '[]');
 
             let filtrados = dadosLicitacoes.filter(l => {
-                if (excluidos.includes(l.id)) return false;
-                const matchBusca = !busca || l.objeto.toLowerCase().includes(busca) || l.itens.some(i => i.desc.toLowerCase().includes(busca));
+                const matchBusca = !busca || l.id.includes(busca) || l.objeto.toLowerCase().includes(busca) || l.itens.some(i => i.desc.toLowerCase().includes(busca));
                 const matchUF = !uf || l.uf === uf;
                 const matchLocal = !local || l.orgao.toLowerCase().includes(local) || l.cidade.toLowerCase().includes(local);
-                const matchData = !dataEnc || (l.data_encerramento && l.data_encerramento.includes(dataEnc));
-                return matchBusca && matchUF && matchLocal && matchData;
+                return matchBusca && matchUF && matchLocal;
             });
 
-            const totalPaginas = Math.ceil(filtrados.length / itensPorPagina);
-            const inicio = (pagina - 1) * itensPorPagina;
-            const exibidos = filtrados.slice(inicio, inicio + itensPorPagina);
-
-            document.getElementById('stats').innerText = `${filtrados.length} oportunidades filtradas`;
-            document.getElementById('infoPagina').innerText = `Página ${pagina} de ${totalPaginas || 1}`;
-            document.getElementById('btnAnterior').disabled = pagina === 1;
-            document.getElementById('btnProximo').disabled = pagina >= totalPaginas;
-
-            container.innerHTML = filtrados.length === 0 ? '<div class="alert alert-warning">Nenhuma licitação encontrada.</div>' : '';
-
+            const exibidos = filtrados.slice((pagina - 1) * itensPorPagina, pagina * itensPorPagina);
+            document.getElementById('infoPagina').innerText = `Página ${pagina} de ${Math.ceil(filtrados.length / itensPorPagina) || 1}`;
+            
+            container.innerHTML = '';
             exibidos.forEach(l => {
-                const valorEst = l.itens.reduce((sum, i) => sum + (i.total_est || 0), 0);
-                const encerramento = l.data_encerramento ? new Date(l.data_encerramento).toLocaleString('pt-BR') : '---';
+                // Cálculo de Valor e Exclusividade
+                const totalEstimado = l.itens.reduce((acc, i) => acc + (i.total_est || 0), 0);
+                const isSigiloso = totalEstimado <= 0;
+                
+                // Lógica de Exclusividade baseada nos itens
+                const totalItens = l.itens.length;
+                const exclusivas = l.itens.filter(i => i.me_epp === 'Sim').length;
+                let badgeExclusividade = '';
+                
+                if (exclusivas === totalItens) {
+                    badgeExclusividade = '<span class="badge-exclusive">TODO EXCLUSIVO ME/EPP</span>';
+                } else if (exclusivas > 0) {
+                    badgeExclusividade = '<span class="badge-amplo" style="background:#e2e3e5; color:#383d41;">PARCIALMENTE EXCLUSIVO</span>';
+                } else {
+                    badgeExclusividade = '<span class="badge-amplo">AMPLA PARTICIPAÇÃO</span>';
+                }
 
                 container.innerHTML += `
-                    <div class="card card-table p-3">
-                        <div class="row align-items-center g-3">
-                            <div class="col-auto"><div class="badge-uf">${l.uf || '??'}</div></div>
-                            <div class="col-md-4">
+                    <div class="card card-table">
+                        <div class="row align-items-center">
+                            <div class="col-md-3">
+                                <div class="small text-muted fw-bold">Edital/ID</div>
+                                <div class="text-primary fw-bold">${l.id}</div>
+                                <div class="mt-1">${badgeExclusividade}</div>
+                            </div>
+                            <div class="col-md-3 border-start">
                                 <div class="fw-bold text-dark text-truncate">${l.orgao}</div>
-                                <div class="text-muted small"><i class="fa-solid fa-calendar-day me-1"></i>Encerra: ${encerramento}</div>
+                                <div class="small text-muted">${l.cidade || ''} - ${l.uf}</div>
                             </div>
-                            <div class="col-md-4 border-start px-3">
-                                <div class="small text-secondary text-truncate-2">${l.objeto}</div>
+                            <div class="col-md-3 border-start small text-secondary">
+                                ${l.objeto.substring(0, 100)}...
                             </div>
-                            <div class="col text-end border-start">
-                                <div class="fw-bold text-primary">R$ ${valorEst.toLocaleString('pt-BR', {minimumFractionDigits:2})}</div>
-                                <div class="mt-2">
-                                    <button class="btn btn-sm btn-dark py-1" onclick="verDetalhes('${l.id}')">DETALHES</button>
-                                    <button class="btn btn-sm btn-outline-danger py-1" onclick="excluirLicitacao('${l.id}')"><i class="fa-solid fa-eye-slash"></i></button>
+                            <div class="col-md-3 border-start text-end">
+                                <div class="small text-muted">Total Estimado</div>
+                                <div class="fw-bold ${isSigiloso ? 'text-danger' : 'text-success'} fs-6">
+                                    ${isSigiloso ? '<span class="badge-sigiloso"><i class="fa-solid fa-eye-slash me-1"></i>SIGILOSO</span>' : 'R$ ' + totalEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                                 </div>
+                                <button class="btn btn-sm btn-dark mt-2" onclick="verDetalhes('${l.id}')">DETALHES ITENS</button>
                             </div>
                         </div>
                     </div>`;
@@ -164,61 +152,59 @@
 
         function verDetalhes(id) {
             const l = dadosLicitacoes.find(x => x.id === id);
-            const body = document.getElementById('modalCorpo');
+            const corpo = document.getElementById('modalCorpo');
             const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+            const grupos = {};
+            l.itens.forEach(it => {
+                const key = it.fornecedor || "EM ANDAMENTO";
+                if (!grupos[key]) grupos[key] = [];
+                grupos[key].push(it);
+            });
 
             let html = `
                 <div class="p-3 bg-light border-bottom">
-                    <h6 class="mb-1 fw-bold text-primary">${l.orgao}</h6>
-                    <p class="small text-muted mb-2">${l.objeto}</p>
-                    <div class="d-flex gap-2">
-                        <a href="${l.link}" target="_blank" class="btn btn-xs btn-success small text-white px-3"><i class="fa-solid fa-link me-1"></i>ABRIR NO PNCP</a>
-                        <span class="badge bg-secondary p-2">UF: ${l.uf}</span>
-                        <span class="badge bg-secondary p-2">ITENS: ${l.itens.length}</span>
-                    </div>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-hover table-sm mb-0" style="font-size: 0.75rem;">
-                        <thead class="table-dark">
-                            <tr>
-                                <th class="ps-3">#</th>
-                                <th>DESCRIÇÃO DO ITEM</th>
-                                <th class="text-center">QTD</th>
-                                <th class="text-end">UNIT. EST.</th>
-                                <th class="text-end">TOTAL EST.</th>
-                                <th class="ps-3">SITUAÇÃO</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${l.itens.map(it => `
-                                <tr>
-                                    <td class="ps-3">${it.item}</td>
-                                    <td class="fw-bold">${it.desc}</td>
-                                    <td class="text-center">${it.qtd}</td>
-                                    <td class="text-end">${fmt.format(it.unitario_est)}</td>
-                                    <td class="text-end fw-bold text-primary">${fmt.format(it.total_est)}</td>
-                                    <td class="ps-3"><span class="status-pill bg-andamento">${it.situacao}</span></td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
+                    <h6 class="text-primary fw-bold mb-1">${l.orgao} | ID: ${l.id}</h6>
+                    <p class="small text-muted mb-0">${l.objeto}</p>
                 </div>`;
-            body.innerHTML = html;
-            new bootstrap.Modal(document.getElementById('modalDetalhes')).show();
-        }
 
-        function excluirLicitacao(id) {
-            if(confirm('Ocultar esta oportunidade?')) {
-                let ex = JSON.parse(localStorage.getItem('sniper_excluidos') || '[]');
-                ex.push(id);
-                localStorage.setItem('sniper_excluidos', JSON.stringify(ex));
-                render();
-            }
+            Object.keys(grupos).forEach(forn => {
+                html += `
+                    <div class="fornecedor-header"><i class="fa-solid fa-building me-2"></i>${forn}</div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0" style="font-size: 0.75rem;">
+                            <thead class="table-secondary">
+                                <tr>
+                                    <th class="ps-3">Item</th>
+                                    <th>Descrição</th>
+                                    <th class="text-center">ME/EPP</th>
+                                    <th class="text-center">Qtd</th>
+                                    <th class="text-end">V. Unitário</th>
+                                    <th class="text-end pe-3">V. Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${grupos[forn].map(it => `
+                                    <tr>
+                                        <td class="ps-3">${it.item}</td>
+                                        <td class="fw-bold">${it.desc}</td>
+                                        <td class="text-center">${it.me_epp === 'Sim' ? '<span class="badge-exclusive">SIM</span>' : '-'}</td>
+                                        <td class="text-center">${it.qtd}</td>
+                                        <td class="text-end">${fmt.format(it.unitario_hom || it.unitario_est)}</td>
+                                        <td class="text-end pe-3 fw-bold ${it.unitario_hom > 0 ? 'text-success' : ''}">${fmt.format(it.total_hom || it.total_est)}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>`;
+            });
+
+            corpo.innerHTML = html;
+            new bootstrap.Modal(document.getElementById('modalDetalhes')).show();
         }
 
         function mudarPagina(dir) { pagina += dir; render(); window.scrollTo(0,0); }
         function limparFiltros() { document.querySelectorAll('input').forEach(i => i.value = ''); render(); }
-
         window.onload = carregarDados;
     </script>
 </body>
