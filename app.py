@@ -4,32 +4,33 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import concurrent.futures
 
-# Desativar avisos de SSL (comum em portais de governo)
+# Desativar alertas de segurança de sites governamentais
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# === CONFIGURAÇÕES DE ARQUIVOS ===
+# === CONFIGURAÇÕES ===
 ARQ_DADOS = 'dados/oportunidades.json.gz'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_CSV = 'Exportar Dados.csv'
-MAX_WORKERS = 15  # Velocidade máxima
+MAX_WORKERS = 15 
 
-# === PALAVRAS-CHAVE DE SAÚDE ===
+# Palavras-chave base (Saúde)
 KEYWORDS_SAUDE = [
     "MEDICAMENT", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGIC", 
-    "SERINGA", "AGULHA", "LUVA", "GAZE", "ALGODAO", "AMOXICILIN", "DIPIRON",
-    "EQUIPO", "CATETER", "SONDA", "AVENTAL", "MASCARA", "CURATIVO"
+    "SERINGA", "AGULHA", "LUVA", "GAZE", "ALGODAO", "EQUIPO", "CATETER", 
+    "SONDA", "AVENTAL", "MASCARA", "CURATIVO", "ESPARADRAPO"
 ]
 
 def normalizar(texto):
     if not isinstance(texto, str): return ""
     return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').upper()
 
-def carregar_csv():
-    """Carrega fármacos do arquivo CSV e combina com as palavras-chave gerais."""
+def carregar_inteligencia_csv():
+    """Lê o seu CSV e extrai nomes de fármacos para busca."""
     keywords = set(KEYWORDS_SAUDE)
     if os.path.exists(ARQ_CSV):
         try:
             df = pd.read_csv(ARQ_CSV, encoding='latin1', sep=None, engine='python')
+            # Busca colunas que possam conter nomes de remédios
             col = [c for c in df.columns if 'FARMACO' in normalizar(c) or 'DESC' in normalizar(c)]
             if col:
                 for k in df[col[0]].dropna().unique():
@@ -38,40 +39,43 @@ def carregar_csv():
         except: pass
     return list(keywords)
 
-def validar_item(desc):
-    d = normalizar(desc)
-    return any(k in d for k in KEYWORDS_GLOBAL)
+def validar_item(descricao):
+    desc_norm = normalizar(descricao)
+    return any(k in desc_norm for k in KEYWORDS_GLOBAL)
+
+def criar_sessao():
+    s = requests.Session()
+    s.headers.update({"User-Agent": "Mozilla/5.0"})
+    retry = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
+    s.mount("https://", HTTPAdapter(max_retries=retry))
+    return s
 
 def processar_licitacao(lic, session):
-    """Processa uma licitação individual e seus itens."""
+    """Extrai itens e dados técnicos de cada licitação encontrada."""
     try:
-        cnpj = re.sub(r'\D', '', str(lic['orgao_cnpj']))
-        lic_id = f"{cnpj}{lic['ano_compra']}{lic['sequencial_compra']}"
+        cnpj_limpo = re.sub(r'\D', '', str(lic['orgao_cnpj']))
+        lic_id = f"{cnpj_limpo}{lic['ano_compra']}{lic['sequencial_compra']}"
         
-        # URL da API de Itens do PNCP
-        url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{lic['ano_compra']}/{lic['sequencial_compra']}/itens"
-        ri = session.get(url_itens, timeout=15, verify=False)
-        if ri.status_code != 200: return None
+        # API de Itens do PNCP
+        url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj_limpo}/compras/{lic['ano_compra']}/{lic['sequencial_compra']}/itens"
+        r = session.get(url_itens, timeout=15, verify=False)
+        if r.status_code != 200: return None
         
         itens_validos = []
-        for it in ri.json():
+        for it in r.json():
             if validar_item(it.get('descricao', '')):
-                # --- LÓGICA DE BENEFÍCIO ME/EPP (1,2,3 = Sim | 4,5 = Não) ---
-                beneficio_id = it.get('tipoBeneficioId')
-                me_epp = "Sim" if beneficio_id in [1, 2, 3] else "Não"
-                
-                val_unit = float(it.get('valor_unitario_estimado') or 0)
+                val = float(it.get('valor_unitario_estimado') or 0)
                 qtd = float(it.get('quantidade') or 0)
                 
                 itens_validos.append({
                     "item": it.get('numero_item'),
                     "desc": it.get('descricao'),
                     "qtd": qtd,
-                    "unitario_est": val_unit,
-                    "total_est": val_unit * qtd,
-                    "me_epp": me_epp,
-                    "fornecedor": it.get('nomeFornecedor') or "EM ANDAMENTO",
-                    "situacao": it.get('situacao_compra_item_nome', 'EM ANDAMENTO')
+                    "unitario_est": val,
+                    "total_est": val * qtd,
+                    "me_epp_id": it.get('tipoBeneficioId'), # O Faxineiro usará isso
+                    "situacao": it.get('situacao_compra_item_nome', 'EM ANDAMENTO'),
+                    "fornecedor": it.get('nomeFornecedor') or "EM ANDAMENTO"
                 })
         
         if not itens_validos: return None
@@ -79,30 +83,30 @@ def processar_licitacao(lic, session):
         return {
             "id": lic_id,
             "data_pub": lic.get('data_publicacao_pncp'),
-            "data_encerramento": lic.get('data_encerramento_proposta'),
-            "uf": lic.get('unidade_orgao',{}).get('uf_sigla'),
-            "cidade": lic.get('unidade_orgao',{}).get('municipio_nome'),
+            "data_enc": lic.get('data_encerramento_proposta'),
+            "uf": lic.get('unidade_orgao', {}).get('uf_sigla'),
+            "cidade": lic.get('unidade_orgao', {}).get('municipio_nome'),
             "orgao": lic.get('orgao_nome_fantasia') or lic.get('orgao_razao_social'),
             "objeto": lic.get('objeto_compra'),
-            "link": f"https://pncp.gov.br/app/editais/{cnpj}/{lic['ano_compra']}/{lic['sequencial_compra']}",
+            "link": f"https://pncp.gov.br/app/editais/{cnpj_limpo}/{lic['ano_compra']}/{lic['sequencial_compra']}",
             "itens": itens_validos
         }
     except: return None
 
 if __name__ == "__main__":
-    KEYWORDS_GLOBAL = carregar_csv()
+    print("🚀 Sniper PNCP - Iniciando Captura Bruta")
+    KEYWORDS_GLOBAL = carregar_inteligencia_csv()
     
-    # Gerenciar Checkpoint (Início em 01/12/2025 se não existir)
+    # Checkpoint de data
     data_alvo = datetime(2025, 12, 1)
     if os.path.exists(ARQ_CHECKPOINT):
         with open(ARQ_CHECKPOINT, 'r') as f:
             try: data_alvo = datetime.strptime(f.read().strip(), '%Y%m%d')
             except: pass
 
-    session = requests.Session()
-    session.mount("https://", HTTPAdapter(max_retries=3))
+    session = criar_sessao()
     
-    # Carregar Banco de Dados Compactado
+    # Carregar base atual
     banco = {}
     if os.path.exists(ARQ_DADOS):
         try:
@@ -110,48 +114,45 @@ if __name__ == "__main__":
                 for i in json.load(f): banco[i['id']] = i
         except: pass
 
-    hoje = datetime.now()
     d_str = data_alvo.strftime('%Y%m%d')
-    print(f"🚀 Sniper PNCP - Varrendo Dia: {data_alvo.strftime('%d/%m/%Y')}")
+    print(f"🔍 Minerando dia: {data_alvo.strftime('%d/%m/%Y')}...")
     
-    novos_no_dia = 0
     pag = 1
+    novos = 0
     while True:
         url = f"https://pncp.gov.br/api/pncp/v1/compras?data_inicial={d_str}&data_final={d_str}&modalidade_contratacao_id=6&pagina={pag}&tamanho_pagina=50"
-        r = session.get(url, timeout=20, verify=False)
-        if r.status_code != 200: break
-        resp = r.json()
-        lics = resp.get('data', [])
-        if not lics: break
-        
-        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as exe:
-            futuros = {exe.submit(processar_licitacao, l, session): l for l in lics}
-            for f in concurrent.futures.as_completed(futuros):
-                res = f.result()
-                if res:
-                    banco[res['id']] = res
-                    novos_no_dia += 1
-                    print(".", end="", flush=True)
-        
-        if pag >= resp.get('total_paginas', 0): break
-        pag += 1
+        try:
+            r = session.get(url, timeout=20, verify=False)
+            if r.status_code != 200: break
+            resp = r.json()
+            lics = resp.get('data', [])
+            if not lics: break
 
-    # Salvar Banco Compactado
-    lista_final = sorted(banco.values(), key=lambda x: x.get('data_pub', ''), reverse=True)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as exe:
+                futuros = {exe.submit(processar_licitacao, l, session): l for l in lics}
+                for f in concurrent.futures.as_completed(futuros):
+                    res = f.result()
+                    if res:
+                        banco[res['id']] = res
+                        novos += 1
+                        print(".", end="", flush=True)
+
+            if pag >= resp.get('total_paginas', 0): break
+            pag += 1
+        except: break
+
+    # Salva o "Minério Bruto" para o Faxineiro limpar
     os.makedirs('dados', exist_ok=True)
     with gzip.open(ARQ_DADOS, 'wt', encoding='utf-8') as f:
-        json.dump(lista_final, f, ensure_ascii=False, separators=(',', ':'))
+        json.dump(list(banco.values()), f, ensure_ascii=False, separators=(',', ':'))
 
-    # Atualizar Checkpoint
+    # Prepara reinício automático
     proximo = data_alvo + timedelta(days=1)
     with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo.strftime('%Y%m%d'))
     
-    # === LÓGICA DE REINÍCIO AUTOMÁTICO (EFEITO DOMINÓ) ===
-    # Se o próximo dia ainda for no passado ou hoje, avisa o GitHub para rodar novamente
-    trigger_next = "true" if (hoje - proximo).days >= 0 else "false"
-    
+    trigger = "true" if (datetime.now() - proximo).days >= 0 else "false"
     if "GITHUB_OUTPUT" in os.environ:
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-            print(f"trigger_next={trigger_next}", file=f)
-    
-    print(f"\n✅ Dia concluído. Capturas: {novos_no_dia} | Reiniciar: {trigger_next}")
+            print(f"trigger_next={trigger}", file=f)
+            
+    print(f"\n✅ Captura finalizada. {novos} licitações enviadas para limpeza.")
