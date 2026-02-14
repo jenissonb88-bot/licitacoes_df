@@ -11,7 +11,7 @@ ARQ_DADOS = 'dados/oportunidades.js'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_MANUAIS = 'urls.txt'
 ARQ_FINISH = 'finish.txt'
-MAX_WORKERS = 10  # Número de conexões simultâneas (Robô 10x mais rápido)
+MAX_WORKERS = 20  # AUMENTADO PARA 20 (Turbo Máximo)
 
 # === PALAVRAS-CHAVE ===
 KEYWORDS_GERAIS = [
@@ -48,8 +48,7 @@ BLACKLIST = [
     "DIDATICO", "PEDAGOGICO", "FERRAGEM", "FERRAMENTA", "PINTURA", "TINTA", 
     "MARCENARIA", "MADEIRA", "AGRICOLA", "JARDINAGEM", "ILUMINACAO", "DECORACAO", 
     "AUDIOVISUAL", "FOTOGRAFICO", "MUSICAL", "INSTRUMENTO MUSICAL", "BRINDE", 
-    "TROFEU", "MEDALHA", "ELETROPORTATIL", "CAMA MESA E BANHO", "EPI",
-    "GENEROS ALIMENTICIOS", "MATERIAL PERMANENTE"
+    "TROFEU", "MEDALHA", "ELETROPORTATIL", "CAMA MESA E BANHO", "EPI"
 ]
 
 UFS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "RO", "GO", "MT", "MS", "DF"]
@@ -75,7 +74,6 @@ def contem_palavra_relevante(texto, uf):
 
 def criar_sessao():
     s = requests.Session()
-    # Aumentei o pool de conexões para suportar o paralelismo
     adapter = HTTPAdapter(pool_connections=MAX_WORKERS, pool_maxsize=MAX_WORKERS, max_retries=Retry(total=3, backoff_factor=0.5, status_forcelist=[500,502,503,504]))
     s.mount("https://", adapter)
     return s
@@ -84,6 +82,7 @@ def buscar_todos_itens(session, cnpj, ano, seq):
     url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
     itens = []
     pag = 1
+    # Limite seguro de 200 páginas
     while pag <= 200: 
         try:
             r = session.get(url, params={"pagina": pag, "tamanhoPagina": 50}, timeout=15)
@@ -104,6 +103,7 @@ def buscar_todos_resultados(session, cnpj, ano, seq, itens_raw):
         f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/resultados"
     ]
     
+    # 1. Busca Geral
     for url in urls:
         pag = 1
         while pag <= 200:
@@ -121,7 +121,7 @@ def buscar_todos_resultados(session, cnpj, ano, seq, itens_raw):
             except: break
         if resultados: break 
 
-    # Gatilho Individual (Lógica Preservada)
+    # 2. Gatilho Individual (Infalível)
     for i in itens_raw:
         num = i.get('numeroItem') or i.get('sequencialItem')
         if num is None: continue
@@ -207,12 +207,54 @@ def capturar_detalhes_completos(itens_raw, resultados_raw):
 
     return sorted(list(itens_map.values()), key=lambda x: x['item'])
 
-# === NOVA FUNÇÃO: PROCESSAR UMA ÚNICA LICITAÇÃO (PARA USAR EM PARALELO) ===
+# === FUNÇÃO: ATUALIZAR LICITAÇÃO EXISTENTE (PARA USO EM PARALELO) ===
+def atualizar_licitacao_existente(session, lic, hoje):
+    # Retorna: (id_lic, lic_atualizada) ou None se nada mudou
+    # Também retorna (id_lic, None) se deve ser excluída (lixo)
+    
+    id_lic = lic.get('id')
+    uf = lic.get('uf', '')
+    obj_norm = normalize(lic.get('objeto', ''))
+    
+    # 1. Filtro de Lixo (Blacklist Retroativa)
+    eh_rel = False
+    if contem_palavra_relevante(obj_norm, uf):
+        eh_rel = True
+    else:
+        for it in lic.get('itens', []):
+            if contem_palavra_relevante(normalize(it.get('desc', '')), uf):
+                eh_rel = True
+                break
+    
+    if not eh_rel:
+        return (id_lic, None) # Marca para deletar
+
+    # 2. Atualização de Resultados (Se já venceu e está pendente)
+    atualizou = False
+    try:
+        data_enc_str = lic.get('data_encerramento')
+        if data_enc_str:
+            data_enc = datetime.strptime(data_enc_str[:10], '%Y-%m-%d')
+            # Se a data já passou
+            if data_enc.date() <= hoje.date():
+                tem_pendente = any(i.get('situacao') == 'EM ANDAMENTO' for i in lic.get('itens', []))
+                # Se ainda tem item pendente, vai na API buscar atualização
+                if tem_pendente:
+                    cnpj, ano, seq = id_lic[:14], id_lic[14:18], id_lic[18:]
+                    itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
+                    resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq, itens_raw)
+                    if itens_raw:
+                        lic['itens'] = capturar_detalhes_completos(itens_raw, resultados_raw)
+                        atualizou = True
+    except: pass
+    
+    return (id_lic, lic) if atualizou else (id_lic, "mantem")
+
+# === FUNÇÃO: PROCESSAR NOVA LICITAÇÃO ===
 def processar_licitacao_individual(session, lic):
     try:
         unid = lic.get('unidadeOrgao', {})
         uf = unid.get('ufSigla') or lic.get('unidadeFederativaId')
-        
         if uf not in UFS_ALVO: return None
 
         cnpj, ano, seq = lic['orgaoEntidade']['cnpj'], lic['anoCompra'], lic['sequencialCompra']
@@ -225,7 +267,6 @@ def processar_licitacao_individual(session, lic):
         itens_raw = []
         resultados_raw = []
 
-        # Se não achou no objeto, busca nos itens
         if not eh_rel:
             itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
             for it in itens_raw:
@@ -236,7 +277,6 @@ def processar_licitacao_individual(session, lic):
         if eh_rel:
             if not itens_raw: itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
             resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq, itens_raw)
-            
             detalhes = capturar_detalhes_completos(itens_raw, resultados_raw)
             
             if detalhes:
@@ -264,7 +304,6 @@ def processar_urls_manuais(session, banco):
         urls = [line.strip() for line in f.readlines() if 'editais/' in line]
     if not urls: return 0
     
-    # Processamento sequencial rápido para manuais (são poucos)
     count = 0
     for url in urls:
         try:
@@ -277,10 +316,7 @@ def processar_urls_manuais(session, banco):
             if resp.status_code == 200:
                 lic = resp.json()
                 if str(lic.get('modalidadeId')) != "6": continue
-                
-                # Reutiliza a função individual criando um objeto fake
                 res = processar_licitacao_individual(session, lic)
-                # Força o link correto vindo da URL manual
                 if res:
                     res['link'] = url 
                     banco[id_lic] = res
@@ -303,44 +339,30 @@ def run():
                 if raw: banco = {i['id']: i for i in json.loads(raw)}
         except: pass
 
-    # LIMPEZA E ATUALIZAÇÃO (SEQUENCIAL RÁPIDA)
     hoje = datetime.now()
+
+    # === FASE 1: LIMPEZA E ATUALIZAÇÃO DA BASE (AGORA EM PARALELO!) ===
     if banco:
-        print("🔄 Revisando base antiga (Limpeza e Atualização)...")
-        ids_remover = []
-        for id_lic, lic in banco.items():
-            uf = lic.get('uf', '')
-            obj_norm = normalize(lic.get('objeto', ''))
+        print(f"🔄 Revisando {len(banco)} itens da base antiga (TURBO ATIVADO)...")
+        ids_para_remover = []
+        
+        # Usamos ThreadPool para atualizar as antigas também!
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futuros = {executor.submit(atualizar_licitacao_existente, session, lic, hoje): id_lic for id_lic, lic in banco.items()}
             
-            eh_rel = False
-            if contem_palavra_relevante(obj_norm, uf):
-                eh_rel = True
-            else:
-                for it in lic.get('itens', []):
-                    if contem_palavra_relevante(normalize(it.get('desc', '')), uf):
-                        eh_rel = True
-                        break
+            for futuro in concurrent.futures.as_completed(futuros):
+                try:
+                    id_lic, resultado = futuro.result()
+                    if resultado is None: # Marca para deletar (Lixo)
+                        ids_para_remover.append(id_lic)
+                    elif resultado != "mantem": # Se houve atualização de dados
+                        banco[id_lic] = resultado
+                except: pass
+
+        for id_lic in ids_para_remover:
+            if id_lic in banco: del banco[id_lic]
             
-            if not eh_rel:
-                ids_remover.append(id_lic)
-                continue
-                
-            try:
-                data_enc_str = lic.get('data_encerramento')
-                if data_enc_str:
-                    data_enc = datetime.strptime(data_enc_str[:10], '%Y-%m-%d')
-                    if data_enc.date() <= hoje.date():
-                        tem_pendente = any(i.get('situacao') == 'EM ANDAMENTO' for i in lic.get('itens', []))
-                        if tem_pendente:
-                            cnpj, ano, seq = id_lic[:14], id_lic[14:18], id_lic[18:]
-                            itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
-                            resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq, itens_raw)
-                            if itens_raw:
-                                lic['itens'] = capturar_detalhes_completos(itens_raw, resultados_raw)
-            except: pass
-            
-        for id_lic in ids_remover:
-            del banco[id_lic]
+        print("✅ Base antiga revisada e atualizada.")
 
     processar_urls_manuais(session, banco)
 
@@ -373,10 +395,8 @@ def run():
             
             print(f"   Lendo página {pagina_pub} do dia (Processamento Paralelo)...")
 
-            # === AQUI ESTÁ A MÁGICA DO PARALELISMO ===
-            # Usamos um Executor para processar as 50 licitações da página AO MESMO TEMPO
+            # === FASE 2: COLETA DE NOVAS (PARALELO) ===
             with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                # Cria uma tarefa para cada licitação da lista
                 futuros = {executor.submit(processar_licitacao_individual, session, lic): lic for lic in lics}
                 
                 for futuro in concurrent.futures.as_completed(futuros):
@@ -394,8 +414,7 @@ def run():
     lista = sorted(list(banco.values()), key=lambda x: x.get('data_encerramento') or '', reverse=True)
     os.makedirs('dados', exist_ok=True)
     
-    # === OTIMIZAÇÃO DE ARMAZENAMENTO ===
-    # separators=(',', ':') remove os espaços em branco, reduzindo o tamanho em ~40%
+    # SALVAMENTO COMPACTADO
     with open(ARQ_DADOS, 'w', encoding='utf-8') as f:
         json_minificado = json.dumps(lista, separators=(',', ':'), ensure_ascii=False)
         f.write(f"const dadosLicitacoes = {json_minificado};")
