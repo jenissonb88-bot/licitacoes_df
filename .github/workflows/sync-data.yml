@@ -1,49 +1,60 @@
-name: Sniper PNCP - Coleta Diária
+name: Sniper PNCP - Sincronização
 
 on:
+  # Executa a cada 30 minutos para processar o backlog dia-a-dia
   schedule:
-    - cron: '0 8,12,18 * * *' # Roda às 08h, 12h e 18h (UTC)
-  workflow_dispatch: # Permite rodar manualmente clicando no botão
+    - cron: '*/30 * * * *'
+  # Permite execução manual pelo botão no GitHub
+  workflow_dispatch:
 
 jobs:
-  build:
+  sincronizacao:
     runs-on: ubuntu-latest
-
+    
+    # Permissão CRÍTICA para o robô salvar os dados no repositório
     permissions:
-      contents: write # Permissão CRÍTICA para salvar os dados
+      contents: write
 
     steps:
-    - name: Baixar Repositório
-      uses: actions/checkout@v3
+      - name: 📥 Baixar Repositório
+        uses: actions/checkout@v3
 
-    - name: Configurar Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
+      - name: 🐍 Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
 
-    - name: Instalar Dependências
-      run: |
-        python -m pip install --upgrade pip
-        pip install requests pandas
+      - name: 📦 Instalar Dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pandas
 
-    - name: Executar Robô Sniper
-      run: python app.py
+      - name: 🚀 Executar Robô Sniper
+        run: python app.py
 
-    - name: Salvar Dados (Commit & Push)
-      run: |
-        git config --global user.name 'Sniper Bot'
-        git config --global user.email 'bot@noreply.github.com'
-        
-        # Adiciona o novo arquivo compactado e o checkpoint
-        git add dados/oportunidades.json.gz
-        git add checkpoint.txt
-        
-        # Tenta remover o arquivo antigo pesado se ele ainda existir
-        if [ -f "dados/oportunidades.js" ]; then
-          git rm --cached dados/oportunidades.js || true
-          rm dados/oportunidades.js || true
-        fi
-        
-        # Commit e Push
-        git commit -m "Autalização Diária: $(date +'%Y-%m-%d')" || exit 0
-        git push
+      - name: 💾 Salvar Alterações (Git)
+        run: |
+          # Configuração da Identidade do Robô
+          git config --global user.name 'Sniper Bot'
+          git config --global user.email 'bot@noreply.github.com'
+          
+          # Adiciona os arquivos essenciais
+          git add dados/oportunidades.json.gz
+          git add checkpoint.txt
+          
+          # (Segurança) Remove o arquivo antigo pesado se ele ainda existir
+          if [ -f "dados/oportunidades.js" ]; then
+            git rm --cached dados/oportunidades.js || true
+            rm dados/oportunidades.js || true
+            echo "🗑️ Arquivo legado .js removido."
+          fi
+          
+          # Verifica se houve mudanças antes de fazer o commit
+          # Isso evita erros se o robô rodar e não encontrar nada novo
+          if [[ -n $(git status -s) ]]; then
+            git commit -m "🤖 Sync: $(date +'%d/%m/%Y %H:%M')"
+            git push
+            echo "✅ Dados salvos com sucesso!"
+          else
+            echo "💤 Nenhuma alteração nova para salvar nesta execução."
+          fi
