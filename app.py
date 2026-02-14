@@ -5,9 +5,8 @@ import gzip
 import pandas as pd
 import unicodedata
 import concurrent.futures
+import re
 from datetime import datetime, timedelta
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 # ==========================================
 # CONFIGURAÇÕES
@@ -16,16 +15,17 @@ ARQ_DADOS = 'dados/oportunidades.json.gz'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_CSV = 'Exportar Dados.csv'
 ARQ_EXCLUIDOS = 'excluidos.txt'
+ARQ_INCLUIR = 'incluir.txt'
 MAX_WORKERS = 10 
 
 # Data base para o início da varredura (Divulgação)
 DATA_INICIO_DIVULGACAO = datetime(2026, 1, 1)
 
-# Simulação do Hoje (Ajuste conforme sua necessidade)
+# Simulação do Hoje (Ajuste para datetime.now() em produção real)
 HOJE = datetime(2026, 2, 14) 
 
 # ==========================================
-# REGRAS DE FILTRAGEM (Mantidas conforme sua última lista)
+# FILTROS E REGRAS
 # ==========================================
 UFS_NORDESTE = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
 KEYWORDS_NORDESTE = ["DIETA", "ENTERAL", "SUPLEMENT", "FORMULA", "CALORIC", "PROTEIC", "LEITE", "NUTRI"]
@@ -60,140 +60,117 @@ def normalizar(texto):
 def carregar_keywords_csv():
     if not os.path.exists(ARQ_CSV): return []
     try:
-        try: df = pd.read_csv(ARQ_CSV, encoding='utf-8')
-        except: df = pd.read_csv(ARQ_CSV, encoding='latin1')
-        raw = df['Fármaco'].dropna().unique().tolist()
-        return [normalizar(k) for k in raw if len(str(k)) > 2]
+        df = pd.read_csv(ARQ_CSV, encoding='utf-8') if 'utf-8' else pd.read_csv(ARQ_CSV, encoding='latin1')
+        return [normalizar(k) for k in df['Fármaco'].dropna().unique().tolist() if len(str(k)) > 2]
     except: return []
 
 def carregar_ids_excluidos():
     ids = set()
     if os.path.exists(ARQ_EXCLUIDOS):
         with open(ARQ_EXCLUIDOS, 'r') as f:
-            for linha in f:
-                if linha.strip(): ids.add(linha.strip())
+            for l in f: 
+                if l.strip(): ids.add(l.strip())
     return ids
 
 def validar_item(descricao, uf):
-    desc_norm = normalizar(descricao)
-    for bad in BLACKLIST:
-        if bad in desc_norm: return False
+    desc = normalizar(descricao)
+    for b in BLACKLIST: 
+        if b in desc: return False
     for k in KEYWORDS_NORDESTE:
-        if k in desc_norm: return uf in UFS_NORDESTE
+        if k in desc: return uf in UFS_NORDESTE
     for k in KEYWORDS_GLOBAL:
-        if k in desc_norm: return True
+        if k in desc: return True
     return False
 
-def processar_licitacao(lic, session, ids_banidos):
+def processar_licitacao(lic, session, ids_banidos, ignorar_filtros=False):
     lic_id = f"{lic['orgao_cnpj']}{lic['ano_compra']}{lic['sequencial_compra']}"
     if lic_id in ids_banidos: return None
 
-    # Agora não filtramos mais a data de encerramento agressivamente aqui, 
-    # pois o filtro principal é na data de DIVULGAÇÃO (na chamada da API)
-    
-    url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{lic['orgao_cnpj']}/compras/{lic['ano_compra']}/{lic['sequencial_compra']}/itens"
+    base_url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{lic['orgao_cnpj']}/compras/{lic['ano_compra']}/{lic['sequencial_compra']}"
     try:
-        r = session.get(url_itens, timeout=15)
-        if r.status_code != 200: return None
+        ri = session.get(f"{base_url}/itens", timeout=15)
+        if ri.status_code != 200: return None
         
         itens_validos = []
         uf = lic.get('unidade_orgao', {}).get('uf_sigla', 'XX')
-        for it in r.json():
-            if validar_item(it.get('descricao', ''), uf):
+        for it in ri.json():
+            if ignorar_filtros or validar_item(it.get('descricao', ''), uf):
                 val = it.get('valor_unitario_estimado') or 0.0
                 qtd = it.get('quantidade') or 0
                 itens_validos.append({
-                    "item": it.get('numero_item'),
-                    "desc": it.get('descricao'),
-                    "qtd": qtd,
-                    "unitario_est": float(val),
-                    "total_est": float(val) * float(qtd),
+                    "item": it.get('numero_item'), "desc": it.get('descricao'),
+                    "qtd": qtd, "unitario_est": float(val), "total_est": float(val) * float(qtd),
                     "situacao": it.get('situacao_compra_item_nome', 'Desconhecido')
                 })
         
         if not itens_validos: return None
 
         return {
-            "id": lic_id,
-            "data_pub": lic.get('data_publicacao_pncp', ''),
-            "data_encerramento": lic.get('data_encerramento_proposta', ''),
-            "uf": uf,
-            "cidade": lic.get('unidade_orgao', {}).get('municipio_nome', ''),
-            "orgao": lic.get('orgao_nome_fantasia', '') or lic.get('orgao_razao_social', ''),
-            "objeto": lic.get('objeto_compra', ''),
-            "link": f"https://pncp.gov.br/app/editais/{lic['orgao_cnpj']}/{lic['ano_compra']}/{lic['sequencial_compra']}",
-            "itens": itens_validos
+            "id": lic_id, "data_pub": lic.get('data_publicacao_pncp', ''),
+            "data_enc": lic.get('data_encerramento_proposta', ''), "uf": uf,
+            "orgao": lic.get('orgao_nome_fantasia') or lic.get('orgao_razao_social'),
+            "objeto": lic.get('objeto_compra'), "itens": itens_validos,
+            "link": f"https://pncp.gov.br/app/editais/{lic['orgao_cnpj']}/{lic['ano_compra']}/{lic['sequencial_compra']}"
         }
     except: return None
+
+def processar_inclusoes_manuais(session, banco, ids_banidos):
+    if not os.path.exists(ARQ_INCLUIR): return
+    with open(ARQ_INCLUIR, 'r') as f: urls = f.readlines()
+    for url in urls:
+        m = re.search(r"editais/(\d+)/(\d+)/(\d+)", url.strip())
+        if m:
+            cnpj, ano, seq = m.groups()
+            rb = session.get(f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}")
+            if rb.status_code == 200:
+                res = processar_licitacao(rb.json(), session, ids_banidos, ignorar_filtros=True)
+                if res: banco[res['id']] = res
+    with open(ARQ_INCLUIR, 'w') as f: f.write("")
 
 if __name__ == "__main__":
     KEYWORDS_GLOBAL = carregar_keywords_csv()
     IDS_EXCLUIDOS = carregar_ids_excluidos()
+    session = requests.Session()
+    session.headers.update({"User-Agent": "SniperBot/1.0"})
 
     data_alvo = DATA_INICIO_DIVULGACAO
     if os.path.exists(ARQ_CHECKPOINT):
-        try:
-            with open(ARQ_CHECKPOINT, 'r') as f:
-                data_alvo = datetime.strptime(f.read().strip(), '%Y%m%d')
-        except: pass
+        with open(ARQ_CHECKPOINT, 'r') as f: data_alvo = datetime.strptime(f.read().strip(), '%Y%m%d')
 
-    session = requests.Session()
-    session.headers.update({"User-Agent": "SniperBot/1.0"})
-    
     banco = {}
     if os.path.exists(ARQ_DADOS):
-        try:
-            with gzip.open(ARQ_DADOS, 'rt', encoding='utf-8') as f:
-                lista = json.load(f)
-                banco = {i['id']: i for i in lista if i['id'] not in IDS_EXCLUIDOS}
-        except: pass
+        with gzip.open(ARQ_DADOS, 'rt', encoding='utf-8') as f:
+            for i in json.load(f): 
+                if i['id'] not in IDS_EXCLUIDOS: banco[i['id']] = i
 
-    # --- LÓGICA DE BACKLOG ATÔMICO ---
-    dias_atraso = (HOJE - data_alvo).days
+    processar_inclusoes_manuais(session, banco, IDS_EXCLUIDOS)
+
     trigger_next = "false"
-
-    if dias_atraso >= 0:
-        # Se houver atraso ou for o dia de hoje, processa o dia do checkpoint
-        print(f"📂 Varrendo Divulgações de: {data_alvo.strftime('%d/%m/%Y')}")
+    if (HOJE - data_alvo).days >= 0:
         d_str = data_alvo.strftime('%Y%m%d')
-        
         pag = 1
-        novos = 0
         while True:
-            # Filtro por Data Inicial/Final de DIVULGAÇÃO (conforme padrão API)
             url = f"https://pncp.gov.br/api/pncp/v1/compras?data_inicial={d_str}&data_final={d_str}&modalidade_contratacao_id=6&pagina={pag}&tamanho_pagina=50"
             r = session.get(url, timeout=20)
             if r.status_code != 200: break
             resp = r.json()
-            data = resp.get('data', [])
-            if not data: break
-
+            if not resp.get('data'): break
             with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as exe:
-                futures = {exe.submit(processar_licitacao, l, session, IDS_EXCLUIDOS): l for l in data}
-                for f in concurrent.futures.as_completed(futures):
-                    res = f.result()
-                    if res:
-                        banco[res['id']] = res
-                        novos += 1
-                        print(".", end="", flush=True)
-
+                futuros = {exe.submit(processar_licitacao, l, session, IDS_EXCLUIDOS): l for l in resp['data']}
+                for f in concurrent.futures.as_completed(futuros):
+                    res = f.result(); 
+                    if res: banco[res['id']] = res
             if pag >= resp.get('total_paginas', 0): break
             pag += 1
         
-        # Avança o checkpoint
-        proximo_checkpoint = data_alvo + timedelta(days=1)
-        with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo_checkpoint.strftime('%Y%m%d'))
-        
-        # Se ainda estiver no passado, ativa o gatilho para o próximo job
-        if (HOJE - proximo_checkpoint).days >= 0:
-            trigger_next = "true"
+        proximo = data_alvo + timedelta(days=1)
+        with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo.strftime('%Y%m%d'))
+        if (HOJE - proximo).days >= 0: trigger_next = "true"
 
-    # Salva o banco
+    lista_final = sorted(banco.values(), key=lambda x: x['data_pub'], reverse=True)
     os.makedirs('dados', exist_ok=True)
-    lista_final = sorted(list(banco.values()), key=lambda x: x.get('data_pub', ''), reverse=True)
     with gzip.open(ARQ_DADOS, 'wt', encoding='utf-8') as f:
         json.dump(lista_final, f, ensure_ascii=False, separators=(',', ':'))
 
     if "GITHUB_OUTPUT" in os.environ:
-        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-            print(f"trigger_next={trigger_next}", file=f)
+        with open(os.environ["GITHUB_OUTPUT"], "a") as f: print(f"trigger_next={trigger_next}", file=f)
