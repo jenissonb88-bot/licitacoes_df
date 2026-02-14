@@ -3,373 +3,265 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sniper PNCP - Monitor de Licitações</title>
+    <title>Sniper PNCP - Monitor de Saúde</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
-        :root { --primary-dark: #2c3e50; --accent-blue: #3498db; --danger-red: #e74c3c; }
-        body { background-color: #f4f7f6; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 0.85rem; }
-        
-        .header-bar { background: var(--primary-dark); color: white; padding: 12px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .app-logo { font-size: 1.2rem; font-weight: 700; letter-spacing: 1px; }
-
-        .card-table { border: none; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden; }
-        .table-pncp thead { background-color: #34495e; color: white; text-transform: uppercase; font-size: 0.75rem; }
-        .table-pncp th { padding: 15px 10px; border: none; }
-        .table-pncp td { vertical-align: middle; padding: 12px 10px; border-bottom: 1px solid #eee; }
-        
-        .org-uasg { font-weight: 700; color: #333; display: block; }
-        .unit-name { color: #7f8c8d; font-size: 0.8rem; display: block; }
-
-        .text-truncate-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal; }
-
-        .val-global { font-family: 'Consolas', monospace; font-weight: 700; color: var(--accent-blue); }
-        .date-badge { font-weight: 600; color: var(--danger-red); }
-
-        .modal-header { background: var(--primary-dark); color: white; }
-        .group-card { border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 15px; }
-        .group-header { padding: 10px 15px; font-weight: 600; display: flex; align-items: center; }
-        
-        /* CORES DOS GRUPOS */
-        .status-winner { background: #d1e7dd; color: #0f5132; border-left: 5px solid #198754; }
-        .status-open { background: #fff3cd; color: #664d03; border-left: 5px solid #ffc107; }
-        .status-canceled { background: #f8d7da; color: #842029; border-left: 5px solid #dc3545; }
-
-        .pagination-container { background: white; padding: 15px; border-top: 1px solid #eee; display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap; }
-        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        input[type=number] { -moz-appearance: textfield; }
-        
-        /* Estilo do Resumo */
-        .resumo-licitacao { border-left: 4px solid var(--accent-blue); background: #fff; padding: 15px; border-radius: 0 6px 6px 0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        .resumo-licitacao h6 { font-weight: 700; color: var(--primary-dark); margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
-        .resumo-dado { font-size: 0.85rem; margin-bottom: 5px; }
-        .resumo-label { font-weight: 600; color: #555; }
-        .resumo-objeto { background: #f8f9fa; padding: 10px; border-radius: 4px; border: 1px solid #e9ecef; margin-top: 10px; font-size: 0.85rem; color: #444; }
+        :root { --primary: #0d6efd; --bg: #f8f9fa; }
+        body { background: var(--bg); font-size: 0.9rem; }
+        .card-licitacao { transition: transform 0.2s; border: none; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 1rem; }
+        .card-licitacao:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        .badge-uf { width: 40px; text-align: center; }
+        .item-row { font-size: 0.85rem; border-bottom: 1px solid #eee; padding: 8px 0; }
+        .item-row:last-child { border-bottom: none; }
+        .price-tag { font-weight: bold; color: #198754; }
+        .loading-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(255,255,255,0.9); z-index: 9999; display: flex; align-items: center; justify-content: center; flex-direction: column; }
     </style>
 </head>
 <body>
 
-<div class="header-bar d-flex justify-content-between align-items-center sticky-top">
-    <div class="app-logo"><i class="fas fa-crosshairs me-2"></i>SNIPER PNCP</div>
-    <div class="d-flex gap-2">
-        <button class="btn btn-sm btn-success" onclick="abrirModalManual()"><i class="fas fa-plus-circle me-1"></i> Adicionar URL</button>
-        <button class="btn btn-sm btn-outline-light" onclick="location.reload()"><i class="fas fa-sync-alt"></i></button>
-    </div>
-</div>
-
-<div class="container-fluid py-3">
-    <div class="card card-table p-3 mb-3">
-        <div class="row g-2">
-            <div class="col-md-1"><input id="fUf" class="form-control form-control-sm" placeholder="UF" onkeyup="render()"></div>
-            <div class="col-md-3"><input id="fOrgao" class="form-control form-control-sm" placeholder="Órgão, UASG ou Unidade" onkeyup="render()"></div>
-            <div class="col-md-3"><input id="fObjeto" class="form-control form-control-sm" placeholder="Palavra no Objeto" onkeyup="render()"></div>
-            <div class="col-md-2"><input id="fEdital" class="form-control form-control-sm" placeholder="Nº Edital" onkeyup="render()"></div>
-            <div class="col-md-2"><input type="date" id="fDataEnc" class="form-control form-control-sm" title="Filtrar por Data de Encerramento" onchange="render()"></div>
-            <div class="col-md-1"><button class="btn btn-sm btn-secondary w-100" onclick="limparFiltros()">Limpar</button></div>
-        </div>
+    <div id="loading" class="loading-overlay">
+        <div class="spinner-border text-primary" role="status"></div>
+        <h5 class="mt-3">Carregando e Descompactando Base de Dados...</h5>
+        <p class="text-muted" id="loading-msg">Isso pode levar alguns segundos.</p>
     </div>
 
-    <div class="card card-table">
-        <div class="table-responsive">
-            <table class="table table-hover table-pncp mb-0">
-                <thead>
-                    <tr>
-                        <th style="width: 100px;">Encerramento</th>
-                        <th style="width: 40px;">UF</th>
-                        <th>Código - Órgão / Unidade Compradora</th>
-                        <th style="width: 110px;" class="text-center">Edital</th>
-                        <th>Objeto da Licitação</th>
-                        <th class="text-center" style="width: 60px;">Itens</th>
-                        <th class="text-end" style="width: 130px;">Valor Global</th>
-                        <th class="text-center" style="width: 120px;">Ações</th>
-                    </tr>
-                </thead>
-                <tbody id="tbody"></tbody>
-            </table>
+    <nav class="navbar navbar-dark bg-primary mb-4 shadow-sm">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1"><i class="fas fa-crosshairs me-2"></i>SNIPER PNCP <small class="opacity-75">| Saúde & Medicamentos</small></span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-light btn-sm" onclick="exportarExcluidos()"><i class="fas fa-download"></i> Backup Exclusões</button>
+                <button class="btn btn-outline-light btn-sm" onclick="document.getElementById('fileExcluidos').click()"><i class="fas fa-upload"></i> Restaurar Exclusões</button>
+                <input type="file" id="fileExcluidos" hidden onchange="importarExcluidos(this)">
+            </div>
         </div>
+    </nav>
 
-        <div class="pagination-container">
-            <button class="btn btn-sm btn-outline-secondary" onclick="mudarPagina(-1)" id="btnAnt">Anterior</button>
-            <span class="text-muted">Página <span id="pagAtual" class="fw-bold">1</span> de <span id="pagTotal">1</span></span>
-            <button class="btn btn-sm btn-outline-secondary" onclick="mudarPagina(1)" id="btnProx">Próximo</button>
-            
-            <div class="d-flex align-items-center ms-md-3 border-start ps-md-3">
-                <label for="inputIrPara" class="text-muted small me-2 mb-0">Ir para:</label>
-                <input type="number" id="inputIrPara" class="form-control form-control-sm text-center" style="width: 60px;" min="1" value="1" onkeypress="if(event.key === 'Enter') irParaPaginaDireta()">
-                <button class="btn btn-sm btn-secondary ms-2" onclick="irParaPaginaDireta()">Ir</button>
+    <div class="container mb-4">
+        <div class="card p-3 shadow-sm">
+            <div class="row g-2">
+                <div class="col-md-2">
+                    <label class="form-label">UF</label>
+                    <select id="fUF" class="form-select form-select-sm">
+                        <option value="">Todas</option>
+                        <option value="SP">SP</option><option value="MG">MG</option><option value="RJ">RJ</option>
+                        <option value="BA">BA</option><option value="PE">PE</option><option value="PR">PR</option>
+                        </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Palavra-chave (Objeto/Item)</label>
+                    <input type="text" id="fBusca" class="form-control form-control-sm" placeholder="Ex: Dipirona, Seringa...">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Órgão</label>
+                    <input type="text" id="fOrgao" class="form-control form-control-sm" placeholder="Prefeitura de...">
+                </div>
+                <div class="col-md-3 d-flex align-items-end gap-2">
+                    <button class="btn btn-primary btn-sm w-100" onclick="aplicarFiltros()"><i class="fas fa-search"></i> Buscar</button>
+                    <button class="btn btn-secondary btn-sm" onclick="limparFiltros()"><i class="fas fa-eraser"></i></button>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
-<div class="modal fade" id="modalDetalhes" tabindex="-1">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header py-2">
-                <h6 class="modal-title"><i class="fas fa-list-alt me-2"></i> Detalhamento da Licitação</h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div id="modalBody" class="modal-body bg-light"></div>
+    <div class="container">
+        <div id="status-bar" class="alert alert-info py-2 d-none">
+            Encontrados <strong id="total-regs">0</strong> processos. Exibindo página <strong id="curr-page">1</strong>.
         </div>
-    </div>
-</div>
-
-<div class="modal fade" id="modalManual" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-success text-white py-2">
-                <h6 class="modal-title">Solicitar Captura via URL</h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <p class="small text-muted">Cole o link do PNCP. O robô irá processar esta URL em sua próxima execução.</p>
-                <input type="text" id="urlManual" class="form-control form-control-sm mb-3" placeholder="https://pncp.gov.br/app/editais/...">
-            </div>
-            <div class="modal-footer py-1">
-                <button class="btn btn-primary btn-sm" onclick="salvarUrlManual()">Enviar para Fila</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<script src="dados/oportunidades.js"></script>
-<script>
-    const ITENS_POR_PAG = 20;
-    let pagina = 1;
-    let dadosOriginais = [];
-    let dadosFiltrados = [];
-    let totalPaginas = 1;
-
-    const fmtBrl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-    const fmtUnit = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 4 });
-    const fmtData = d => d ? new Date(d).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '--/--/----';
-    // Nova formatação para mostrar a hora no resumo
-    const fmtDataHora = d => d ? new Date(d).toLocaleString('pt-BR', {timeZone: 'UTC'}) : '--/--/----';
-
-    window.onload = () => {
-        const excluidos = JSON.parse(localStorage.getItem('sniper_excluidos') || '[]');
-        const raw = (typeof dadosLicitacoes !== 'undefined') ? dadosLicitacoes : [];
-        dadosOriginais = raw.filter(d => !excluidos.includes(d.id));
-        dadosFiltrados = [...dadosOriginais];
-        render();
-    };
-
-    function render() {
-        const uf = document.getElementById('fUf').value.toUpperCase();
-        const org = document.getElementById('fOrgao').value.toUpperCase();
-        const obj = document.getElementById('fObjeto').value.toUpperCase();
-        const edt = document.getElementById('fEdital').value.toUpperCase();
-        const dataEnc = document.getElementById('fDataEnc').value; 
-
-        const filtrados = dadosOriginais.filter(d => 
-            (d.uf || '').includes(uf) &&
-            ((d.orgao || '').toUpperCase().includes(org) || (d.uasg || '').includes(org) || (d.unidade_compradora || '').toUpperCase().includes(org)) &&
-            (d.objeto || '').toUpperCase().includes(obj) &&
-            (d.edital || '').includes(edt) &&
-            (!dataEnc || (d.data_encerramento && d.data_encerramento.startsWith(dataEnc)))
-        );
-
-        totalPaginas = Math.ceil(filtrados.length / ITENS_POR_PAG) || 1;
-        if (pagina > totalPaginas) pagina = totalPaginas;
-        if (pagina < 1) pagina = 1;
         
-        const inicio = (pagina - 1) * ITENS_POR_PAG;
-        const fim = inicio + ITENS_POR_PAG;
-        const lote = filtrados.slice(inicio, fim);
+        <div id="lista-licitacoes"></div>
+        
+        <nav class="d-flex justify-content-center mt-4">
+            <ul class="pagination" id="pagination"></ul>
+        </nav>
+    </div>
 
-        const tbody = document.getElementById('tbody');
-        tbody.innerHTML = '';
+    <div class="modal fade" id="modalDetalhes" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Itens do Processo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="modal-body-content"></div>
+            </div>
+        </div>
+    </div>
 
-        lote.forEach(d => {
-            const valor = (d.is_sigiloso || !d.valor_global) ? '<span class="text-muted">Sigiloso</span>' : fmtBrl.format(d.valor_global);
-            
-            let totalItens = d.itens ? d.itens.length : 0;
-            let qtdSim = d.itens ? d.itens.filter(i => i.me_epp === "Sim").length : 0;
-            let tarjaMeEpp = "";
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let DADOS = [];
+        let EXCLUIDOS = new Set(JSON.parse(localStorage.getItem('sniper_excluidos') || '[]'));
+        let PAGINA_ATUAL = 1;
+        const ITENS_POR_PAG = 20;
 
-            if (totalItens > 0) {
-                if (qtdSim === totalItens) {
-                    tarjaMeEpp = '<span class="badge bg-danger mt-1 d-block w-100" style="font-size: 0.7rem;">EXCLUSIVO</span>';
-                } else if (qtdSim > 0) {
-                    tarjaMeEpp = '<span class="badge bg-warning text-dark mt-1 d-block w-100" style="font-size: 0.7rem;">PARCIAL</span>';
-                } else {
-                    tarjaMeEpp = '<span class="badge bg-success mt-1 d-block w-100" style="font-size: 0.7rem;">AMPLO</span>';
+        // --- CARREGAMENTO GZIP ---
+        async function carregarDados() {
+            try {
+                const response = await fetch('dados/oportunidades.json.gz');
+                if (!response.ok) throw new Error("Arquivo de dados não encontrado");
+                
+                // Descompressão via Stream (Nativo do Browser)
+                const ds = new DecompressionStream("gzip");
+                const blob = await response.blob();
+                const decompressedStream = blob.stream().pipeThrough(ds);
+                const jsonText = await new Response(decompressedStream).text();
+                
+                DADOS = JSON.parse(jsonText);
+                
+                document.getElementById('loading').classList.add('d-none');
+                aplicarFiltros();
+            } catch (error) {
+                document.getElementById('loading-msg').innerText = "Erro: " + error.message;
+                document.getElementById('loading-msg').classList.add('text-danger');
+            }
+        }
+
+        // --- FILTROS E RENDERIZAÇÃO ---
+        function aplicarFiltros() {
+            PAGINA_ATUAL = 1;
+            renderizar();
+        }
+
+        function renderizar() {
+            const termo = document.getElementById('fBusca').value.toLowerCase();
+            const uf = document.getElementById('fUF').value;
+            const orgao = document.getElementById('fOrgao').value.toLowerCase();
+
+            const filtrados = DADOS.filter(lic => {
+                if (EXCLUIDOS.has(lic.id)) return false;
+                if (uf && lic.uf !== uf) return false;
+                if (orgao && !lic.orgao.toLowerCase().includes(orgao)) return false;
+                
+                if (termo) {
+                    const matchObjeto = lic.objeto && lic.objeto.toLowerCase().includes(termo);
+                    const matchItem = lic.itens.some(it => it.desc.toLowerCase().includes(termo));
+                    if (!matchObjeto && !matchItem) return false;
                 }
-            }
-
-            tbody.innerHTML += `
-                <tr>
-                    <td class="date-badge">${fmtData(d.data_encerramento)}</td>
-                    <td class="text-center fw-bold">${d.uf}</td>
-                    <td>
-                        <span class="org-uasg">${d.uasg} - ${d.orgao}</span>
-                        <span class="unit-name">${d.unidade_compradora}</span>
-                    </td>
-                    <td class="text-center align-middle">
-                        <span class="badge bg-light text-dark border d-block w-100">${d.edital}</span>
-                        ${tarjaMeEpp}
-                    </td>
-                    <td><div class="text-truncate-3" style="max-width: 350px;" title="${d.objeto}">${d.objeto}</div></td>
-                    <td class="text-center fw-bold">${d.qtd_itens || 0}</td>
-                    <td class="text-end val-global">${valor}</td>
-                    <td class="text-center">
-                        <button class="btn btn-sm btn-outline-primary border-0" onclick="verDetalhes('${d.id}')" title="Ver Itens"><i class="fas fa-eye"></i></button>
-                        <a href="${d.link}" target="_blank" class="btn btn-sm btn-outline-dark border-0" title="Link PNCP"><i class="fas fa-external-link-alt"></i></a>
-                        <button class="btn btn-sm btn-outline-danger border-0" onclick="excluirLicitacao('${d.id}')" title="Ocultar"><i class="fas fa-trash"></i></button>
-                    </td>
-                </tr>
-            `;
-        });
-
-        document.getElementById('pagAtual').innerText = pagina;
-        document.getElementById('pagTotal').innerText = totalPaginas;
-        document.getElementById('btnAnt').disabled = (pagina === 1);
-        document.getElementById('btnProx').disabled = (pagina === totalPaginas);
-        
-        const inputIr = document.getElementById('inputIrPara');
-        inputIr.value = pagina;
-        inputIr.max = totalPaginas;
-    }
-
-    function irParaPaginaDireta() {
-        const input = document.getElementById('inputIrPara');
-        let novaPag = parseInt(input.value);
-        if (isNaN(novaPag) || novaPag < 1) novaPag = 1;
-        else if (novaPag > totalPaginas) novaPag = totalPaginas;
-        pagina = novaPag;
-        render();
-        window.scrollTo(0,0);
-    }
-
-    function verDetalhes(id) {
-        const lic = dadosOriginais.find(d => d.id === id);
-        if (!lic) return;
-
-        const body = document.getElementById('modalBody');
-        
-        // --- 1. CONSTRUÇÃO DO RESUMO (CABEÇALHO) ---
-        const valorGlobal = (lic.is_sigiloso || !lic.valor_global) ? '<span class="text-muted">Sigiloso</span>' : `<span class="text-success fw-bold">${fmtBrl.format(lic.valor_global)}</span>`;
-        
-        let htmlBase = `
-            <div class="resumo-licitacao">
-                <h6>Resumo do Edital ${lic.edital}</h6>
-                <div class="row">
-                    <div class="col-md-7">
-                        <div class="resumo-dado"><span class="resumo-label">Órgão:</span> ${lic.orgao}</div>
-                        <div class="resumo-dado"><span class="resumo-label">Unidade (UASG):</span> ${lic.unidade_compradora} (${lic.uasg}) - ${lic.cidade}/${lic.uf}</div>
-                        <div class="resumo-dado mt-2"><span class="resumo-label">Valor Global:</span> ${valorGlobal}</div>
-                    </div>
-                    <div class="col-md-5">
-                        <div class="resumo-dado"><span class="resumo-label"><i class="far fa-calendar-alt text-primary"></i> Publicação:</span> ${fmtDataHora(lic.data_pub)}</div>
-                        <div class="resumo-dado"><span class="resumo-label"><i class="far fa-clock text-danger"></i> Encerramento:</span> <strong class="text-danger">${fmtDataHora(lic.data_encerramento)}</strong></div>
-                        <div class="mt-2">
-                            <a href="${lic.link}" target="_blank" class="btn btn-sm btn-outline-primary"><i class="fas fa-external-link-alt me-1"></i> Abrir no Portal PNCP</a>
-                        </div>
-                    </div>
-                </div>
-                <div class="resumo-objeto">
-                    <span class="resumo-label">Objeto Completo:</span><br>
-                    ${lic.objeto}
-                </div>
-            </div>
-        `;
-
-        // --- 2. CONSTRUÇÃO DAS TABELAS DE ITENS ---
-        const grupos = {};
-        lic.itens.forEach(i => {
-            const k = i.fornecedor || 'EM ANDAMENTO';
-            if (!grupos[k]) grupos[k] = { itens: [], totalGanho: 0 };
-            grupos[k].itens.push(i);
-            grupos[k].totalGanho += (i.total_hom || 0);
-        });
-
-        const chaves = Object.keys(grupos).sort();
-
-        chaves.forEach(k => {
-            const dadosGrupo = grupos[k];
-            const lista = dadosGrupo.itens;
-            
-            const isPendente = k === 'EM ANDAMENTO';
-            const isCancelado = ['CANCELAD', 'FRACASSAD', 'DESERT', 'ANULAD', 'REVOGAD'].some(palavra => k.toUpperCase().includes(palavra));
-            const isVencedor = !isPendente && !isCancelado;
-
-            let classe = 'status-open';
-            let icone = 'fa-clock';
-            let badgeTotal = '';
-
-            if (isCancelado) {
-                classe = 'status-canceled';
-                icone = 'fa-ban';
-            } else if (isVencedor) {
-                classe = 'status-winner';
-                icone = 'fa-trophy';
-                badgeTotal = `<span class="badge bg-success ms-auto fs-6">Total Ganho: ${fmtBrl.format(dadosGrupo.totalGanho)}</span>`;
-            }
-
-            let tabela = `
-                <div class="group-card shadow-sm mb-3">
-                    <div class="group-header ${classe}">
-                        <div class="d-flex align-items-center w-100">
-                            <span><i class="fas ${icone} me-2"></i> ${k}</span>
-                            ${badgeTotal}
-                            <span class="badge bg-white text-dark border ms-2">${lista.length} Itens</span>
-                        </div>
-                    </div>
-                    <div class="table-responsive">
-                        <table class="table table-sm table-bordered mb-0 align-middle">
-                            <thead class="table-light">
-                                <tr>
-                                    <th style="width: 40px">Item</th>
-                                    <th>Descrição</th>
-                                    <th class="text-center" style="width: 60px">Qtd</th>
-                                    <th class="text-end" style="width: 100px">Unit. Est.</th>
-                                    <th class="text-end" style="width: 100px">Total Est.</th>
-                                    <th class="text-center" style="width: 80px">ME/EPP</th>
-                                    ${!isPendente ? '<th class="text-end text-success" style="width: 100px">Unit. Hom.</th>' : ''}
-                                    ${!isPendente ? '<th class="text-end text-success" style="width: 100px">Total Hom.</th>' : ''}
-                                </tr>
-                            </thead>
-                            <tbody>`;
-            
-            lista.forEach(it => {
-                const badge_meepp = it.me_epp || "Não"; 
-                const cor_badge = badge_meepp === "Sim" ? "bg-primary" : "bg-secondary";
-
-                tabela += `
-                    <tr>
-                        <td class="text-center fw-bold">${it.item}</td>
-                        <td style="font-size: 0.8rem;">${it.desc}</td>
-                        <td class="text-center">${it.qtd}</td>
-                        <td class="text-end text-muted">${fmtUnit.format(it.unitario_est)}</td>
-                        <td class="text-end text-muted">${fmtBrl.format(it.total_est)}</td>
-                        <td class="text-center"><span class="badge ${cor_badge}">${badge_meepp}</span></td>
-                        ${!isPendente ? `<td class="text-end fw-bold ${isCancelado ? 'text-danger' : 'text-success'}">${fmtUnit.format(it.unitario_hom)}</td>` : ''}
-                        ${!isPendente ? `<td class="text-end fw-bold ${isCancelado ? 'text-danger' : 'text-success'}">${fmtBrl.format(it.total_hom)}</td>` : ''}
-                    </tr>`;
+                return true;
             });
 
-            tabela += `</tbody></table></div></div>`;
-            htmlBase += tabela;
-        });
+            document.getElementById('total-regs').innerText = filtrados.length;
+            document.getElementById('status-bar').classList.remove('d-none');
 
-        body.innerHTML = htmlBase;
-        new bootstrap.Modal(document.getElementById('modalDetalhes')).show();
-    }
+            // Paginação
+            const inicio = (PAGINA_ATUAL - 1) * ITENS_POR_PAG;
+            const fim = inicio + ITENS_POR_PAG;
+            const paginaDados = filtrados.slice(inicio, fim);
 
-    function excluirLicitacao(id) {
-        if (confirm('Deseja ocultar esta licitação permanentemente?')) {
-            const excluidos = JSON.parse(localStorage.getItem('sniper_excluidos') || '[]');
-            excluidos.push(id);
-            localStorage.setItem('sniper_excluidos', JSON.stringify(excluidos));
-            window.location.reload();
+            const container = document.getElementById('lista-licitacoes');
+            container.innerHTML = '';
+
+            paginaDados.forEach(lic => {
+                const dataFmt = new Date(lic.data_encerramento).toLocaleDateString('pt-BR');
+                const totalEstimado = lic.itens.reduce((acc, it) => acc + (it.total_est || 0), 0);
+                
+                const html = `
+                    <div class="card card-licitacao p-3">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="d-flex gap-3 align-items-center">
+                                <span class="badge bg-secondary badge-uf">${lic.uf}</span>
+                                <div>
+                                    <h6 class="mb-1 text-primary fw-bold">${lic.orgao}</h6>
+                                    <small class="text-muted"><i class="far fa-calendar-alt"></i> Encerramento: <strong>${dataFmt}</strong></small>
+                                </div>
+                            </div>
+                            <div class="text-end">
+                                <h6 class="text-success mb-0">R$ ${totalEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</h6>
+                                <small class="text-muted">${lic.itens.length} itens</small>
+                            </div>
+                        </div>
+                        <p class="mt-2 mb-2 small text-muted text-truncate">${lic.objeto}</p>
+                        <div class="d-flex gap-2 mt-2">
+                            <button class="btn btn-sm btn-outline-primary" onclick='verItens("${lic.id}")'>Ver Itens</button>
+                            <a href="${lic.link}" target="_blank" class="btn btn-sm btn-primary">Ver no PNCP <i class="fas fa-external-link-alt"></i></a>
+                            <button class="btn btn-sm btn-outline-danger ms-auto" onclick="excluir('${lic.id}')" title="Ocultar"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += html;
+            });
+
+            atualizarPaginacao(Math.ceil(filtrados.length / ITENS_POR_PAG));
         }
-    }
 
-    function abrirModalManual() { new bootstrap.Modal(document.getElementById('modalManual')).show(); }
-    function salvarUrlManual() { alert('Copie a URL e cole no arquivo urls.txt no GitHub.'); }
-    function mudarPagina(dir) { pagina += dir; render(); window.scrollTo(0,0); }
-    function limparFiltros() { document.querySelectorAll('input:not([type="date"])').forEach(i => i.value = ''); document.getElementById('fDataEnc').value = ''; render(); }
-</script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+        function verItens(id) {
+            const lic = DADOS.find(d => d.id === id);
+            if (!lic) return;
+
+            let html = `<div class="table-responsive"><table class="table table-sm table-striped">
+                <thead><tr><th>Item</th><th>Descrição</th><th class="text-end">Qtd</th><th class="text-end">Unit. Est.</th></tr></thead><tbody>`;
+            
+            lic.itens.forEach(it => {
+                html += `<tr>
+                    <td>${it.item}</td>
+                    <td>${it.desc}</td>
+                    <td class="text-end">${it.qtd}</td>
+                    <td class="text-end text-success fw-bold">R$ ${it.unitario_est.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                </tr>`;
+            });
+
+            html += `</tbody></table></div>`;
+            document.getElementById('modal-body-content').innerHTML = html;
+            new bootstrap.Modal(document.getElementById('modalDetalhes')).show();
+        }
+
+        // --- CONTROLE DE EXCLUSÃO ---
+        function excluir(id) {
+            if(confirm("Deseja ocultar esta licitação?")) {
+                EXCLUIDOS.add(id);
+                localStorage.setItem('sniper_excluidos', JSON.stringify([...EXCLUIDOS]));
+                renderizar();
+            }
+        }
+
+        function exportarExcluidos() {
+            const blob = new Blob([JSON.stringify([...EXCLUIDOS])], {type: 'application/json'});
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'backup_exclusoes.json';
+            link.click();
+        }
+
+        function importarExcluidos(input) {
+            const file = input.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                const lista = JSON.parse(e.target.result);
+                lista.forEach(id => EXCLUIDOS.add(id));
+                localStorage.setItem('sniper_excluidos', JSON.stringify([...EXCLUIDOS]));
+                alert('Importado com sucesso!');
+                location.reload();
+            };
+            reader.readAsText(file);
+        }
+
+        function atualizarPaginacao(total) {
+            const pag = document.getElementById('pagination');
+            pag.innerHTML = '';
+            if (total <= 1) return;
+
+            // Botão Anterior
+            pag.innerHTML += `<li class="page-item ${PAGINA_ATUAL==1?'disabled':''}"><button class="page-link" onclick="mudarPag(PAGINA_ATUAL-1)">Anterior</button></li>`;
+            
+            // Info Pagina
+            pag.innerHTML += `<li class="page-item disabled"><span class="page-link">${PAGINA_ATUAL} / ${total}</span></li>`;
+
+            // Botão Próximo
+            pag.innerHTML += `<li class="page-item ${PAGINA_ATUAL==total?'disabled':''}"><button class="page-link" onclick="mudarPag(PAGINA_ATUAL+1)">Próximo</button></li>`;
+        }
+
+        function mudarPag(p) { PAGINA_ATUAL = p; renderizar(); window.scrollTo(0,0); }
+        function limparFiltros() {
+            document.getElementById('fUF').value = '';
+            document.getElementById('fBusca').value = '';
+            document.getElementById('fOrgao').value = '';
+            aplicarFiltros();
+        }
+
+        // Iniciar
+        carregarDados();
+    </script>
 </body>
 </html>
