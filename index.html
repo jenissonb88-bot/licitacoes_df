@@ -10,6 +10,7 @@
         :root { --primary-dark: #2c3e50; --accent-blue: #3498db; --danger-red: #e74c3c; --success-green: #27ae60; }
         body { background-color: #f4f7f6; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 0.85rem; }
         
+        /* Estilos do Cabeçalho e Layout */
         .header-bar { background: var(--primary-dark); color: white; padding: 12px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .app-logo { font-size: 1.2rem; font-weight: 700; letter-spacing: 1px; }
 
@@ -20,6 +21,7 @@
         
         .badge-uf { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #ebf5fb; color: var(--accent-blue); font-weight: 700; border: 2px solid #d4e6f1; }
         
+        /* Tarjas de Exclusividade */
         .tarja { display: inline-block; padding: 3px 12px; border-radius: 4px; font-weight: 800; font-size: 0.65rem; color: white; text-transform: uppercase; margin-top: 8px; }
         .bg-exclusivo { background-color: var(--danger-red); }
         .bg-parcial { background-color: #e67e22; }
@@ -47,8 +49,8 @@
         <div class="filter-section">
             <div class="row g-2">
                 <div class="col-md-3">
-                    <label class="form-label small fw-bold mb-1">Busca por Fármaco/Objeto</label>
-                    <input type="text" id="fBusca" class="form-control form-control-sm shadow-none" placeholder="Ex: Dipirona, Seringa..." onkeyup="pagina=1; render()">
+                    <label class="form-label small fw-bold mb-1">Busca Geral / Fármaco</label>
+                    <input type="text" id="fBusca" class="form-control form-control-sm shadow-none" placeholder="Ex: Dipirona..." onkeyup="pagina=1; render()">
                 </div>
                 <div class="col-md-1">
                     <label class="form-label small fw-bold mb-1">UF</label>
@@ -56,14 +58,14 @@
                 </div>
                 <div class="col-md-3">
                     <label class="form-label small fw-bold mb-1">Órgão / UASG</label>
-                    <input type="text" id="fLocal" class="form-control form-control-sm shadow-none" placeholder="Nome ou código UASG..." onkeyup="pagina=1; render()">
+                    <input type="text" id="fLocal" class="form-control form-control-sm shadow-none" placeholder="Nome ou UASG..." onkeyup="pagina=1; render()">
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small fw-bold mb-1">Encerramento</label>
                     <input type="date" id="fDataEnc" class="form-control form-control-sm shadow-none" onchange="pagina=1; render()">
                 </div>
                 <div class="col-md-3 d-flex align-items-end gap-1">
-                    <button class="btn btn-primary btn-sm w-100 fw-bold" onclick="pagina=1; render()"><i class="fa-solid fa-filter me-1"></i> FILTRAR</button>
+                    <button class="btn btn-primary btn-sm w-100 fw-bold" onclick="render()"><i class="fa-solid fa-filter me-1"></i> FILTRAR</button>
                     <button class="btn btn-outline-secondary btn-sm" onclick="limparFiltros()"><i class="fa-solid fa-eraser"></i></button>
                 </div>
             </div>
@@ -91,7 +93,7 @@
         <div class="modal-dialog modal-xl modal-dialog-scrollable">
             <div class="modal-content shadow-lg border-0">
                 <div class="modal-header bg-dark text-white py-2">
-                    <h6 class="modal-title"><i class="fa-solid fa-list-check me-2"></i>Detalhamento dos Itens</h6>
+                    <h6 class="modal-title"><i class="fa-solid fa-award me-2"></i>Detalhamento por Fornecedor</h6>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body p-0" id="modalCorpo"></div>
@@ -113,7 +115,7 @@
                 dadosLicitacoes = JSON.parse(texto);
                 document.getElementById('loader').style.display = 'none';
                 render();
-            } catch (e) { document.getElementById('loader').innerHTML = "Erro ao carregar dados."; }
+            } catch (e) { document.getElementById('loader').innerHTML = "Erro ao carregar ficheiro de dados."; }
         }
 
         function render() {
@@ -133,17 +135,17 @@
                 return matchBusca && matchUF && matchLocal && matchData;
             });
 
-            // ORDENAÇÃO POR DATA DE ENCERRAMENTO (Dos mais próximos aos mais distantes)
+            // ORDENAÇÃO: DATA MAIS RECENTE PARA MAIS ANTIGA (Descendente)
             filtrados.sort((a, b) => {
                 if (!a.data_enc) return 1;
                 if (!b.data_enc) return -1;
-                return new Date(a.data_enc) - new Date(b.data_enc);
+                return new Date(b.data_enc) - new Date(a.data_enc);
             });
 
             const totalPaginas = Math.ceil(filtrados.length / itensPorPagina);
             const exibidos = filtrados.slice((pagina - 1) * itensPorPagina, pagina * itensPorPagina);
 
-            document.getElementById('stats').innerText = `${filtrados.length} PREGÕES ENCONTRADOS`;
+            document.getElementById('stats').innerText = `${filtrados.length} PREGÕES FILTRADOS`;
             document.getElementById('infoPagina').innerText = `Página ${pagina} de ${totalPaginas || 1}`;
             
             container.innerHTML = '';
@@ -161,8 +163,8 @@
                                 <span class="tarja ${tarjaClass}">${tarjaTexto}</span>
                             </div>
                             <div class="col-md-4 ps-4">
-                                <div class="fw-bold text-dark fs-6 text-truncate">${l.orgao}</div>
-                                <div class="text-muted small mb-1"><b>Unidade:</b> ${l.unidade_compradora || 'Não Informada'}</div>
+                                <div class="fw-bold text-dark fs-6 text-truncate mb-1">${l.orgao}</div>
+                                <div class="text-muted small mb-1" style="font-size: 0.75rem;"><b>Unidade:</b> ${l.unidade_compradora || 'N/I'}</div>
                                 <div class="small text-muted d-flex align-items-center">
                                     <span class="badge-uf me-2">${l.uf}</span>
                                     <span>${l.cidade || ''} / UASG: ${l.uasg}</span>
@@ -171,14 +173,14 @@
                             <div class="col-md-3 border-start ps-4">
                                 <div class="small text-muted fw-bold"><i class="fa-regular fa-clock me-1"></i>Encerramento</div>
                                 <div class="fw-bold text-dark">${l.data_enc ? new Date(l.data_enc).toLocaleString('pt-BR') : 'SIGILOSO'}</div>
-                                <div class="small text-truncate text-secondary mt-1">${l.objeto.substring(0, 60)}...</div>
+                                <div class="small text-truncate text-secondary mt-1">${l.objeto.substring(0, 65)}...</div>
                             </div>
                             <div class="col-md-3 text-end border-start">
                                 <div class="small text-muted">Total Estimado</div>
                                 <div class="fw-bold fs-5 ${totalLicitacao <= 0 ? 'text-danger' : 'text-success'}">
                                     ${totalLicitacao <= 0 ? 'SIGILOSO' : 'R$ ' + totalLicitacao.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                                 </div>
-                                <div class="text-muted small mb-2"><b>${l.itens.length} itens</b> no pregão</div>
+                                <div class="text-muted small mb-2"><b>${l.itens.length} itens</b> identificados</div>
                                 <button class="btn btn-sm btn-dark px-3 fw-bold" onclick="verDetalhes('${l.id}')">DETALHES</button>
                             </div>
                         </div>
@@ -200,16 +202,16 @@
 
             let html = `<div class="p-4 bg-light border-bottom">
                 <h5 class="text-primary fw-bold">${l.orgao}</h5>
-                <p class="text-muted small">${l.objeto}</p>
-                <a href="${l.link}" target="_blank" class="btn btn-sm btn-success text-white px-3 fw-bold">VER NO PNCP</a>
+                <p class="text-muted small mb-0">${l.objeto}</p>
+                <div class="mt-3"><a href="${l.link}" target="_blank" class="btn btn-sm btn-success text-white px-3 fw-bold">LINK OFICIAL PNCP</a></div>
             </div>`;
 
             Object.keys(grupos).forEach(forn => {
                 html += `<div class="fornecedor-header">FORNECEDOR: ${forn}</div>
                 <div class="table-responsive"><table class="table table-sm table-hover mb-0" style="font-size: 0.75rem;">
-                <thead class="table-dark"><tr><th class="ps-3">Item</th><th>Descrição</th><th>Qtd</th><th>Total Est.</th><th>ME/EPP</th></tr></thead>
+                <thead class="table-dark"><tr><th class="ps-3">Item</th><th>Descrição do Fármaco/Insumo</th><th class="text-center">Qtd</th><th class="text-end">Total Est.</th><th class="text-center">ME/EPP</th></tr></thead>
                 <tbody>${grupos[forn].map(it => `
-                    <tr><td class="ps-3">${it.item}</td><td class="fw-bold">${it.desc}</td><td>${it.qtd}</td><td class="text-primary fw-bold">${fmt.format(it.total_est)}</td><td>${it.me_epp}</td></tr>`).join('')}
+                    <tr><td class="ps-3">${it.item}</td><td class="fw-bold">${it.desc}</td><td class="text-center">${it.qtd}</td><td class="text-primary fw-bold text-end">${fmt.format(it.total_est)}</td><td class="text-center">${it.me_epp}</td></tr>`).join('')}
                 </tbody></table></div>`;
             });
             corpo.innerHTML = html;
