@@ -1,54 +1,49 @@
-name: Monitoramento PNCP Iterativo
+name: Sniper PNCP - Coleta Diária
 
 on:
   schedule:
-    - cron: '0 11 * * *' # Executa todo dia às 08:00 (BRT)
-  workflow_dispatch:     # Permite o robô se auto-chamar
-
-permissions:
-  contents: write
-  actions: write
+    - cron: '0 8,12,18 * * *' # Roda às 08h, 12h e 18h (UTC)
+  workflow_dispatch: # Permite rodar manualmente clicando no botão
 
 jobs:
-  run-robot:
+  build:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write # Permissão CRÍTICA para salvar os dados
+
     steps:
-      - name: Checkout do Código
-        uses: actions/checkout@v3
+    - name: Baixar Repositório
+      uses: actions/checkout@v3
 
-      - name: Lógica de Reinício Quinzenal (Dias 01 e 16)
-        run: |
-          # Verifica se foi um acionamento automático (cron)
-          if [ "${{ github.event_name }}" == "schedule" ]; then
-            DIA=$(date +%d)
-            # Se for dia 01 ou 16, força o robô a voltar para o começo do ano!
-            if [ "$DIA" == "01" ] || [ "$DIA" == "16" ]; then
-              echo "📆 Dia $DIA: Iniciando varredura profunda de atualização!"
-              echo "20260101" > checkpoint.txt
-            fi
-          fi
+    - name: Configurar Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
+    - name: Instalar Dependências
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests pandas
 
-      - name: Executar Coleta Diária
-        run: |
-          pip install requests urllib3
-          python app.py
+    - name: Executar Robô Sniper
+      run: python app.py
 
-      - name: Salvar Dados no Repositório
-        run: |
-          git config --global user.name "Bot PNCP"
-          git config --global user.email "bot@pncp.com"
-          git add .
-          git commit -m "Dia processado: $(cat checkpoint.txt)" || exit 0
-          git push
-
-      - name: Auto-Acionamento (Loop Inteligente)
-        if: hashFiles('finish.txt') == ''
-        run: |
-          echo "Ainda há dias pendentes. Disparando próxima tarefa imediatamente..."
-          # Usa o CLI oficial do GitHub para chamar a si mesmo com segurança
-          env GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} gh workflow run "${{ github.workflow }}"
+    - name: Salvar Dados (Commit & Push)
+      run: |
+        git config --global user.name 'Sniper Bot'
+        git config --global user.email 'bot@noreply.github.com'
+        
+        # Adiciona o novo arquivo compactado e o checkpoint
+        git add dados/oportunidades.json.gz
+        git add checkpoint.txt
+        
+        # Tenta remover o arquivo antigo pesado se ele ainda existir
+        if [ -f "dados/oportunidades.js" ]; then
+          git rm --cached dados/oportunidades.js || true
+          rm dados/oportunidades.js || true
+        fi
+        
+        # Commit e Push
+        git commit -m "Autalização Diária: $(date +'%Y-%m-%d')" || exit 0
+        git push
