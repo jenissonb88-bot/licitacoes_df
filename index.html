@@ -2,137 +2,87 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Sniper PNCP - Monitor de Licitações</title>
+    <title>Sniper PNCP - Monitor</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
-        :root { --primary-dark: #2c3e50; --accent-blue: #3498db; --danger-red: #e74c3c; }
+        :root { --primary-dark: #2c3e50; --accent-blue: #3498db; --danger-red: #e74c3c; --success-green: #27ae60; }
         body { background-color: #f4f7f6; font-family: 'Segoe UI', sans-serif; font-size: 0.85rem; }
         .header-bar { background: var(--primary-dark); color: white; padding: 12px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .card-table { border: none; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); background: white; margin-bottom: 12px; padding: 15px; }
         .badge-uf { width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #ebf5fb; color: var(--accent-blue); font-weight: 700; border: 2px solid #d4e6f1; }
-        .tarja-beneficio { display: inline-block; padding: 3px 10px; border-radius: 4px; font-weight: 800; font-size: 0.7rem; color: white; text-transform: uppercase; margin-top: 5px; }
+        .tarja { display: inline-block; padding: 2px 10px; border-radius: 4px; font-weight: 800; font-size: 0.65rem; color: white; margin-top: 5px; text-transform: uppercase; }
+        .bg-exclusivo { background-color: var(--danger-red); }
+        .bg-parcial { background-color: #e67e22; }
+        .bg-amplo { background-color: var(--success-green); }
         #loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; }
     </style>
 </head>
 <body>
-
     <div id="loader"><div class="spinner-border text-primary"></div><div class="mt-2 fw-bold">Sincronizando Sniper Intelligence...</div></div>
-
     <div class="header-bar d-flex justify-content-between align-items-center">
-        <div class="app-logo"><i class="fa-solid fa-crosshairs me-2"></i>SNIPER PNCP</div>
+        <div class="fw-bold"><i class="fa-solid fa-crosshairs me-2"></i>SNIPER PNCP</div>
         <div id="stats" class="small text-white-50 fw-bold">14/02/2026</div>
     </div>
-
     <div class="container-fluid py-4">
-        <div class="bg-white p-3 rounded shadow-sm mb-4 border-start border-4 border-primary">
-            <div class="row g-2">
-                <div class="col-md-3">
-                    <label class="form-label small fw-bold mb-1">Busca / Fármaco</label>
-                    <input type="text" id="fBusca" class="form-control form-control-sm" placeholder="Ex: Dipirona..." onkeyup="pagina=1; render()">
-                </div>
-                <div class="col-md-1">
-                    <label class="form-label small fw-bold mb-1">UF</label>
-                    <input type="text" id="fUF" class="form-control form-control-sm" placeholder="DF" onkeyup="pagina=1; render()">
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label small fw-bold mb-1">Órgão / UASG</label>
-                    <input type="text" id="fLocal" class="form-control form-control-sm" placeholder="Nome ou UASG..." onkeyup="pagina=1; render()">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label small fw-bold mb-1">Data Enc.</label>
-                    <input type="date" id="fDataEnc" class="form-control form-control-sm" onchange="pagina=1; render()">
-                </div>
-                <div class="col-md-3 d-flex align-items-end gap-1">
-                    <button class="btn btn-primary btn-sm w-100 fw-bold" onclick="render()">FILTRAR</button>
-                    <button class="btn btn-outline-secondary btn-sm" onclick="limparFiltros()"><i class="fa-solid fa-eraser"></i></button>
-                </div>
-            </div>
-        </div>
-
         <div id="containerLicitacoes"></div>
-
-        <div class="d-flex flex-wrap justify-content-between align-items-center mt-4 bg-white p-3 rounded">
-            <div id="infoPagina" class="small fw-bold"></div>
-            <div class="d-flex align-items-center gap-2">
+        <div class="d-flex justify-content-between align-items-center bg-white p-3 rounded shadow-sm">
+            <div id="infoPagina" class="fw-bold small"></div>
+            <div class="d-flex gap-2">
                 <button class="btn btn-sm btn-outline-dark" onclick="mudarPagina(-1)">Anterior</button>
-                <input type="number" id="inputPulo" class="form-control form-control-sm text-center" style="width: 70px;" placeholder="Ir...">
-                <button class="btn btn-sm btn-dark" onclick="pularPagina()">OK</button>
+                <input type="number" id="inputPulo" class="form-control form-control-sm text-center" style="width: 60px;" placeholder="Pág">
+                <button class="btn btn-sm btn-dark" onclick="pagina = parseInt(document.getElementById('inputPulo').value) || 1; render()">IR</button>
                 <button class="btn btn-sm btn-outline-dark" onclick="mudarPagina(1)">Próximo</button>
             </div>
         </div>
     </div>
-
     <script>
         let dadosLicitacoes = [], pagina = 1, itensPorPagina = 20;
-
-        async function carregarDados() {
-            try {
-                const resp = await fetch(`dados/oportunidades.json.gz?t=${Date.now()}`);
-                const ds = new DecompressionStream("gzip");
-                const texto = await new Response(resp.body.pipeThrough(ds)).text();
-                dadosLicitacoes = JSON.parse(texto);
-                document.getElementById('loader').style.display = 'none';
-                render();
-            } catch (e) { document.getElementById('loader').innerHTML = "Aguardando geração da base..."; }
+        async function carregar() {
+            const resp = await fetch(`dados/oportunidades.json.gz?t=${Date.now()}`);
+            const ds = new DecompressionStream("gzip");
+            const texto = await new Response(resp.body.pipeThrough(ds)).text();
+            dadosLicitacoes = JSON.parse(texto);
+            document.getElementById('loader').style.display = 'none';
+            render();
         }
-
         function render() {
             const container = document.getElementById('containerLicitacoes');
-            const busca = document.getElementById('fBusca').value.toLowerCase();
-            const uf = document.getElementById('fUF').value.toUpperCase();
-            const local = document.getElementById('fLocal').value.toLowerCase();
-            const dataEnc = document.getElementById('fDataEnc').value;
-
-            let filtrados = dadosLicitacoes.filter(l => {
-                const matchBusca = !busca || l.objeto.toLowerCase().includes(busca) || l.itens.some(i => i.desc.toLowerCase().includes(busca));
-                const matchUF = !uf || l.uf === uf;
-                const matchLocal = !local || l.orgao.toLowerCase().includes(local) || (l.uasg && l.uasg.toString().includes(local));
-                const matchData = !dataEnc || (l.data_enc && l.data_enc.startsWith(dataEnc));
-                return matchBusca && matchUF && matchLocal && matchData;
-            });
-
-            const exibidos = filtrados.slice((pagina-1)*itensPorPagina, pagina*itensPorPagina);
-            document.getElementById('infoPagina').innerText = `Pág ${pagina} de ${Math.ceil(filtrados.length/itensPorPagina) || 1}`;
-            
+            const exibidos = dadosLicitacoes.slice((pagina-1)*itensPorPagina, pagina*itensPorPagina);
             container.innerHTML = '';
             exibidos.forEach(l => {
                 const total = l.itens.reduce((acc, i) => acc + (i.total_est || 0), 0);
-                const dataEncFormatada = l.data_enc ? new Date(l.data_enc).toLocaleString('pt-BR') : 'SIGILOSO';
-                
                 container.innerHTML += `
-                    <div class="card-table">
+                    <div class="card card-table">
                         <div class="row align-items-center">
                             <div class="col-md-2 text-center border-end">
                                 <div class="small text-muted fw-bold">Edital Nº</div>
-                                <div class="text-primary fw-bold fs-6">${l.edital_n}</div>
-                                <div class="small text-muted mt-1">UASG: ${l.uasg || '---'}</div>
+                                <div class="text-primary fw-bold">${l.edital_n}</div>
+                                <span class="tarja ${l.tarja=='EXCLUSIVO'?'bg-exclusivo':(l.tarja=='PARCIAL'?'bg-parcial':'bg-amplo')}">${l.tarja}</span>
                             </div>
                             <div class="col-md-4 ps-3">
                                 <div class="fw-bold text-dark">${l.orgao}</div>
-                                <div class="small text-muted mt-1"><span class="badge-uf d-inline-flex me-2">${l.uf}</span> ${l.cidade}</div>
+                                <div class="small text-muted mt-1"><span class="badge-uf d-inline-flex me-2">${l.uf}</span> ${l.cidade} / UASG: ${l.uasg}</div>
                             </div>
                             <div class="col-md-3 border-start ps-3">
-                                <div class="small text-muted fw-bold">Data Encerramento</div>
-                                <div class="fw-bold"><i class="fa-regular fa-clock me-1"></i>${dataEncFormatada}</div>
+                                <div class="small text-muted fw-bold">Encerramento</div>
+                                <div class="fw-bold">${l.data_enc ? new Date(l.data_enc).toLocaleString('pt-BR') : 'SIGILOSO'}</div>
                                 <div class="small text-truncate text-secondary mt-1">${l.objeto}</div>
                             </div>
                             <div class="col-md-3 text-end border-start">
                                 <div class="small text-muted">Total Estimado</div>
                                 <div class="fw-bold fs-6 ${total<=0 ? 'text-danger':'text-success'}">
-                                    ${total<=0 ? 'VALOR SIGILOSO' : 'R$ '+total.toLocaleString('pt-BR')}
+                                    ${total<=0 ? 'SIGILOSO' : 'R$ '+total.toLocaleString('pt-BR')}
                                 </div>
-                                <button class="btn btn-sm btn-dark mt-2" onclick="window.open('${l.link}')">VER PNCP</button>
+                                <button class="btn btn-sm btn-dark mt-2" onclick="window.open('${l.link}')">DETALHES</button>
                             </div>
                         </div>
                     </div>`;
             });
+            document.getElementById('infoPagina').innerText = `Página ${pagina} de ${Math.ceil(dadosLicitacoes.length/itensPorPagina)}`;
         }
-
-        function pularPagina() { pagina = parseInt(document.getElementById('inputPulo').value) || 1; render(); }
         function mudarPagina(dir) { pagina += dir; render(); window.scrollTo(0,0); }
-        function limparFiltros() { document.querySelectorAll('input').forEach(i => i.value = ''); render(); }
-        window.onload = carregarDados;
+        window.onload = carregar;
     </script>
 </body>
 </html>
