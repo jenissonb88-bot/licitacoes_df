@@ -1,40 +1,11 @@
-name: Sniper PNCP - Chain Reaction
-
-on:
-  schedule:
-    - cron: '0 8 * * *' # Roda 1x ao dia (start inicial)
-  workflow_dispatch: # Permite start manual
-
-jobs:
-  chain-reaction:
-    runs-on: ubuntu-latest
-    
-    permissions:
-      contents: write # Para salvar arquivos
-      actions: write  # NECESSÁRIO para auto-disparo (trigger)
-
-    steps:
-      - name: 📥 Baixar Repositório
-        uses: actions/checkout@v3
-
-      - name: 🐍 Configurar Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-
-      - name: 📦 Instalar Dependências
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests pandas
-
-      - name: 🚀 Executar Robô Sniper
-        id: sniper # ID necessário para ler o output
-        run: python app.py
-
-      - name: 💾 Salvar Alterações (Git)
+- name: 💾 Salvar Alterações (Git)
         run: |
           git config --global user.name 'Sniper Bot'
           git config --global user.email 'bot@noreply.github.com'
+          
+          # Tenta puxar as mudanças do servidor antes de enviar as novas
+          git pull --rebase origin main
+          
           git add dados/oportunidades.json.gz
           git add checkpoint.txt
           
@@ -45,15 +16,8 @@ jobs:
           
           if [[ -n $(git status -s) ]]; then
             git commit -m "🤖 Sync: $(date +'%d/%m/%Y %H:%M')"
-            git push
+            # Tenta o push com o rebase automático
+            git push origin main
           else
             echo "💤 Nada novo para salvar."
           fi
-
-      - name: 🔄 Efeito Dominó (Auto-Disparo)
-        if: steps.sniper.outputs.trigger_next == 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "⚡ Atraso detectado. Iniciando próxima execução imediatamente..."
-          gh workflow run sync-data.yml
