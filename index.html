@@ -1,36 +1,115 @@
-// ... (dentro da função verDetalhes no index.html)
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Sniper PNCP - Monitor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root { --primary-dark: #2c3e50; --accent-blue: #3498db; --danger-red: #e74c3c; --success-green: #27ae60; }
+        body { background-color: #f4f7f6; font-family: 'Segoe UI', sans-serif; font-size: 0.85rem; }
+        .header-bar { background: var(--primary-dark); color: white; padding: 12px 20px; }
+        .card-table { background: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 12px; padding: 18px; }
+        .badge-uf { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #ebf5fb; color: var(--accent-blue); font-weight: 700; border: 2px solid #d4e6f1; }
+        .tarja { display: inline-block; padding: 3px 12px; border-radius: 4px; font-weight: 800; font-size: 0.65rem; color: white; text-transform: uppercase; margin-top: 8px; }
+        .bg-exclusivo { background-color: var(--danger-red); }
+        .bg-amplo { background-color: var(--success-green); }
+        .bg-parcial { background-color: #e67e22; }
+        #loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 9999; display: flex; align-items: center; justify-content: center; }
+    </style>
+</head>
+<body>
+    <div id="loader"><div class="spinner-border text-primary"></div></div>
+    <div class="header-bar d-flex justify-content-between">
+        <div class="fw-bold"><i class="fa-solid fa-crosshairs me-2"></i>SNIPER PNCP</div>
+        <div id="stats" class="small fw-bold">14/02/2026</div>
+    </div>
+    <div class="container-fluid py-4">
+        <div id="containerLicitacoes"></div>
+    </div>
 
-Object.keys(grupos).forEach(forn => {
-    html += `
-    <div class="fornecedor-header">FORNECEDOR: ${forn}</div>
-    <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0" style="font-size: 0.75rem;">
-            <thead class="table-dark">
-                <tr>
-                    <th class="ps-3">Item</th>
-                    <th>Descrição Técnica</th>
-                    <th class="text-center">Qtd</th>
-                    <th class="text-end">Total Est.</th>
-                    <th class="text-center">ME/EPP</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${grupos[forn].map(it => {
-                    // Lógica de destaque verde
+    <div class="modal fade" id="modalDetalhes" tabindex="-1">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content"><div class="modal-body p-0" id="modalCorpo"></div></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let dadosLicitacoes = [];
+        async function carregar() {
+            const resp = await fetch(`dados/oportunidades.json.gz?t=${Date.now()}`);
+            const ds = new DecompressionStream("gzip");
+            const texto = await new Response(resp.body.pipeThrough(ds)).text();
+            dadosLicitacoes = JSON.parse(texto);
+            document.getElementById('loader').style.display = 'none';
+            render();
+        }
+        function render() {
+            const container = document.getElementById('containerLicitacoes');
+            // ORDENAÇÃO: MAIS RECENTE PARA MAIS ANTIGA
+            dadosLicitacoes.sort((a, b) => new Date(b.data_enc || 0) - new Date(a.data_enc || 0));
+            
+            container.innerHTML = '';
+            dadosLicitacoes.forEach(l => {
+                const tarjaClass = l.tarja === "TODO EXCLUSIVO" ? "bg-exclusivo" : (l.tarja === "TODO AMPLO" ? "bg-amplo" : "bg-parcial");
+                container.innerHTML += `
+                    <div class="card card-table">
+                        <div class="row align-items-center">
+                            <div class="col-md-2 text-center border-end">
+                                <div class="small text-muted fw-bold">Edital Nº</div>
+                                <div class="text-primary fw-bold fs-6">${l.edital_n}</div>
+                                <span class="tarja ${tarjaClass}">${l.tarja}</span>
+                            </div>
+                            <div class="col-md-4 ps-4">
+                                <div class="fw-bold text-dark fs-6 text-truncate mb-1">${l.orgao}</div>
+                                <div class="text-muted small mb-1"><b>Unidade:</b> ${l.unidade_compradora}</div>
+                                <div class="small text-muted d-flex align-items-center">
+                                    <span class="badge-uf me-2">${l.uf}</span>
+                                    <span>${l.cidade} / UASG: ${l.uasg}</span>
+                                </div>
+                            </div>
+                            <div class="col-md-3 border-start ps-4">
+                                <div class="small text-muted">Encerramento</div>
+                                <div class="fw-bold text-dark">${l.data_enc ? new Date(l.data_enc).toLocaleString('pt-BR') : 'SIGILOSO'}</div>
+                                <div class="small text-truncate mt-1 text-secondary">${l.objeto.substring(0, 60)}...</div>
+                            </div>
+                            <div class="col-md-3 text-end border-start">
+                                <div class="fw-bold fs-5 text-success">R$ ${l.valor_total_final.toLocaleString('pt-BR')}</div>
+                                <div class="text-muted small"><b>${l.itens.length} itens</b> identificados</div>
+                                <button class="btn btn-sm btn-dark mt-2 fw-bold" onclick="verDetalhes('${l.id}')">DETALHES</button>
+                            </div>
+                        </div>
+                    </div>`;
+            });
+        }
+        function verDetalhes(id) {
+            const l = dadosLicitacoes.find(x => x.id === id);
+            const corpo = document.getElementById('modalCorpo');
+            const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+            
+            const grupos = {};
+            l.itens.forEach(it => {
+                const key = it.fornecedor || "EM ANDAMENTO";
+                if (!grupos[key]) grupos[key] = [];
+                grupos[key].push(it);
+            });
+
+            let html = `<div class="p-4 bg-light border-bottom"><h5 class="text-primary fw-bold">${l.orgao}</h5><p class="text-muted small">${l.objeto}</p></div>`;
+            Object.keys(grupos).forEach(forn => {
+                html += `<div class="bg-secondary text-white p-2 fw-bold small">FORNECEDOR: ${forn}</div>
+                <div class="table-responsive"><table class="table table-sm table-hover mb-0" style="font-size: 0.75rem;">
+                <thead><tr class="table-dark"><th>Item</th><th>Descrição</th><th class="text-center">Qtd</th><th class="text-end">Total Est.</th><th class="text-center">ME/EPP</th></tr></thead>
+                <tbody>${grupos[forn].map(it => {
                     const rowStyle = it.match ? 'style="background-color: #d4edda !important;"' : '';
-                    // Lógica do NÃO vermelho e negrito
-                    const meEppDisplay = it.me_epp === 'Não' ? '<b class="text-danger" style="font-size: 0.9rem;">NÃO</b>' : it.me_epp;
-                    
-                    return `
-                    <tr ${rowStyle}>
-                        <td class="ps-3">${it.item}</td>
-                        <td class="fw-bold">${it.desc}</td>
-                        <td class="text-center">${it.qtd}</td>
-                        <td class="text-end fw-bold text-primary">${fmt.format(it.total_est)}</td>
-                        <td class="text-center">${meEppDisplay}</td>
-                    </tr>`;
-                }).join('')}
-            </tbody>
-        </table>
-    </div>`;
-});
+                    const meEpp = it.me_epp === 'Não' ? '<b class="text-danger">NÃO</b>' : it.me_epp;
+                    return `<tr ${rowStyle}><td>${it.item}</td><td class="fw-bold">${it.desc}</td><td class="text-center">${it.qtd}</td><td class="text-end text-primary fw-bold">${fmt.format(it.total_est)}</td><td class="text-center">${meEpp}</td></tr>`
+                }).join('')}</tbody></table></div>`;
+            });
+            corpo.innerHTML = html;
+            new bootstrap.Modal(document.getElementById('modalDetalhes')).show();
+        }
+        window.onload = carregar;
+    </script>
+</body>
+</html>
