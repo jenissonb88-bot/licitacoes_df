@@ -6,7 +6,6 @@ import concurrent.futures
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# === CONFIGURAÇÕES ===
 ARQ_DADOS = 'dados/oportunidades.json.gz'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 MAX_WORKERS = 8 
@@ -19,7 +18,7 @@ def criar_sessao():
 def buscar_todos_itens(session, cnpj, ano, seq):
     itens = []
     pag = 1
-    while pag <= 200: # Até 10.000 itens
+    while pag <= 200:
         url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
         try:
             r = session.get(url, params={"pagina": pag, "tamanhoPagina": 50}, timeout=20)
@@ -70,7 +69,6 @@ def processar_licitacao(lic, session):
             "objeto": lic.get('objetoCompra'),
             "edital_n": f"{lic.get('numeroCompra').zfill(5)}/{ano}",
             "uasg": unid.get('codigoUnidade') or "---",
-            "valor_global": float(lic.get('valorTotalEstimado') or 0),
             "link": f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
             "itens_raw": buscar_todos_itens(session, cnpj, ano, seq),
             "resultados_raw": buscar_todos_resultados(session, cnpj, ano, seq)
@@ -78,10 +76,9 @@ def processar_licitacao(lic, session):
     except: return None
 
 if __name__ == "__main__":
-    hoje = datetime.now() # 14/02/2026
+    hoje = datetime.now()
     data_alvo = hoje - timedelta(days=2)
     
-    # Validação de Checkpoint para 2026
     if os.path.exists(ARQ_CHECKPOINT):
         with open(ARQ_CHECKPOINT, 'r') as f:
             try:
@@ -94,7 +91,8 @@ if __name__ == "__main__":
     if os.path.exists(ARQ_DADOS):
         try:
             with gzip.open(ARQ_DADOS, 'rt', encoding='utf-8') as f:
-                for i in json.load(f): banco[i['id']] = i
+                raw_data = json.load(f)
+                banco = {i['id']: i for i in raw_data}
         except: pass
 
     d_str = data_alvo.strftime('%Y%m%d')
@@ -130,4 +128,3 @@ if __name__ == "__main__":
     if "GITHUB_OUTPUT" in os.environ:
         trigger = "true" if (hoje - proximo).days >= 0 else "false"
         with open(os.environ["GITHUB_OUTPUT"], "a") as f: print(f"trigger_next={trigger}", file=f)
-    print(f"✅ Finalizado. Novos: {novos}")
