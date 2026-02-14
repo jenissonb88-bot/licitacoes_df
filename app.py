@@ -5,303 +5,270 @@ import gzip
 import pandas as pd
 import unicodedata
 import concurrent.futures
-from datetime import datetime, timedelta
+import sys
+from datetime import datetime, timedelta, date
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 # ==========================================
-# CONFIGURAÇÕES GERAIS
+# CONFIGURAÇÕES & DATES
 # ==========================================
-ARQ_DADOS = 'dados/oportunidades.json.gz'  # Arquivo comprimido
+ARQ_DADOS = 'dados/oportunidades.json.gz'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_CSV = 'Exportar Dados.csv'
-MAX_WORKERS = 10  # Equilíbrio entre velocidade e segurança
+MAX_WORKERS = 10 
 
-# Data de corte para ENCERRAMENTO das propostas
-# O robô ignorará licitações que fecharam antes desta data
+# Data base inicial do backlog (fixa)
+DATA_INICIO_VARREDURA = datetime(2025, 12, 1)
+
+# Filtro: Só aceita licitações que encerram a partir de:
 DATA_CORTE_ENCERRAMENTO = datetime(2026, 1, 1)
 
-# ==========================================
-# REGRAS DE NEGÓCIO E FILTROS
-# ==========================================
+# Simulação do "Hoje" (Para seu teste: 14/02/2026)
+# Em produção real, você usaria: HOJE = datetime.now()
+HOJE = datetime(2026, 2, 14) 
 
-# 1. REGRA DO NORDESTE (Dieta/Nutrição)
-# Estas palavras só serão aceitas se a UF da licitação estiver nesta lista.
+# ==========================================
+# LISTAS DE FILTRAGEM (MANTIDAS)
+# ==========================================
 UFS_NORDESTE = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
-KEYWORDS_NORDESTE = [
-    "DIETA", "ENTERAL", "SUPLEMENT", "FORMULA", 
-    "CALORIC", "PROTEIC", "LEITE", "NUTRI"
-]
+KEYWORDS_NORDESTE = ["DIETA", "ENTERAL", "SUPLEMENT", "FORMULA", "CALORIC", "PROTEIC", "LEITE", "NUTRI"]
 
-# 2. BLACKLIST (Lista Negativa)
-# Termos que, se encontrados, descartam o item imediatamente.
 BLACKLIST = [
-    # Construção, Obras e Predial
-    "CONSTRUCAO", "OBRA", "PAVIMENTACAO", "CIMENTO", "ASFALTO", "TIJOLO",
-    "PINTURA", "TINTA", "MARCENARIA", "MADEIRA", "FERRAGEM", "FERRAMENTA",
-    "HIDRAULIC", "ELETRIC", "MANUTENCAO PREDIAL", "ALVENARIA", "VIDRO",
-    "ILUMINACAO", "LAMPADA", "AR CONDICIONADO", "CLIMATIZACAO", "PISCINA",
-    
-    # Veículos, Transportes e Mecânica
-    "AUTOMOTIVO", "VEICULO", "PNEU", "RODOVIARIO", "MECANICA", "PECA", 
-    "RODA", "MOTOR", "COMBUSTIVEL", "OLEO LUBRIFICANTE", "OFICINA", 
-    "PASSAGEM", "LOCACAO DE VEICULO", "TRANSPORTE", "AERONAVE",
-    
-    # Alimentação (Exceto Dieta Enteral tratada na regra NE)
-    "REFEICAO", "LANCHE", "ALIMENTICIO", "MERENDA", "COZINHA", "COPA", 
-    "BUFFET", "COFFEE", "AÇUCAR", "CAFE", "CESTAS BASICAS", "HORTIFRUTI",
-    "PERECIVEIS", "AGUA MINERAL", "GENERO ALIMENTICIO",
-    
-    # Escritório, Escola e Papelaria
-    "ESCOLAR", "DIDATICO", "PEDAGOGICO", "EXPEDIENTE", "PAPELARIA", 
-    "LIVRO", "APOSTILA", "BRINQUEDO", "JOGOS",
-    "COMPUTADOR", "IMPRESSORA", "TONER", "CARTUCHO", "INFORMATICA", 
-    "NOTEBOOK", "TECLADO", "MOUSE", "ESTABILIZADOR", "NOBREAK", "SOFTWARE", "SAAS",
-    "LINK DE DADOS", "TELEFONIA", "INTERNET",
-    
-    # Mobiliário e Eletro
-    "MOBILIARIO", "ESTANTE", "CADEIRA", "MESA", "ARMARIO", "ELETRODOMESTICO", 
-    "ELETROPORTATIL", "GELADEIRA", "FOGAO", "VENTILADOR", "CAMA MESA",
-    
-    # Limpeza e Higiene Predial (Cuidado para não remover higiene pessoal)
-    "LIMPEZA PREDIAL", "HIGIENIZACAO", "VASSOURA", "RODO", "LIXEIRA", 
-    "SACO DE LIXO", "DETERGENTE", "SABAO EM PO", "COPO DESCARTAVEL",
-    
-    # Serviços e Pessoas
-    "TERCEIRIZACAO", "LOCACAO DE MAO DE OBRA", "ASSISTENCIA MEDICA", 
-    "PLANO DE SAUDE", "ODONTOLOGICA", "SEGURO", "VIGILANCIA", "PORTARIA", 
-    "RECEPCIONISTA", "CONSULTORIA", "TREINAMENTO", "EVENTO", "SHOW", 
-    "FESTA", "PALCO", "HOSPEDAGEM", "PUBLICIDADE", "MARKETING", "GRAFICA", "BANNER",
-    
-    # Outros não pertinentes
-    "VETERINARI", "ANIMAL", "BANHO E TOSA", "RAÇÃO", "AGRO", "AGRICOLA", 
-    "SEMENTE", "MUDA", "ADUBO", "JARDINAGEM", "ROÇADEIRA",
-    "BELICO", "MILITAR", "ARMAMENTO", "MUNICAO", "FARDA", "UNIFORME", 
-    "TECIDO", "CONFECÇÃO", "VESTUARIO", 
-    "ESPORTE", "MATERIAL ESPORTIVO", "BOLA", "TROFEU", "MEDALHA", 
+    "CONSTRUCAO", "OBRA", "PAVIMENTACAO", "CIMENTO", "ASFALTO", "TIJOLO", "PINTURA", "TINTA", 
+    "MARCENARIA", "MADEIRA", "FERRAGEM", "FERRAMENTA", "HIDRAULIC", "ELETRIC", "MANUTENCAO PREDIAL", 
+    "ALVENARIA", "VIDRO", "ILUMINACAO", "LAMPADA", "AR CONDICIONADO", "CLIMATIZACAO", "PISCINA",
+    "AUTOMOTIVO", "VEICULO", "PNEU", "RODOVIARIO", "MECANICA", "PECA", "RODA", "MOTOR", "COMBUSTIVEL", 
+    "OLEO LUBRIFICANTE", "OFICINA", "PASSAGEM", "LOCACAO DE VEICULO", "TRANSPORTE", "AERONAVE",
+    "REFEICAO", "LANCHE", "ALIMENTICIO", "MERENDA", "COZINHA", "COPA", "BUFFET", "COFFEE", "AÇUCAR", 
+    "CAFE", "CESTAS BASICAS", "HORTIFRUTI", "PERECIVEIS", "AGUA MINERAL", "GENERO ALIMENTICIO",
+    "ESCOLAR", "DIDATICO", "PEDAGOGICO", "EXPEDIENTE", "PAPELARIA", "LIVRO", "APOSTILA", "BRINQUEDO", 
+    "JOGOS", "COMPUTADOR", "IMPRESSORA", "TONER", "CARTUCHO", "INFORMATICA", "NOTEBOOK", "TECLADO", 
+    "MOUSE", "ESTABILIZADOR", "NOBREAK", "SOFTWARE", "SAAS", "LINK DE DADOS", "TELEFONIA", "INTERNET",
+    "MOBILIARIO", "ESTANTE", "CADEIRA", "MESA", "ARMARIO", "ELETRODOMESTICO", "ELETROPORTATIL", 
+    "GELADEIRA", "FOGAO", "VENTILADOR", "CAMA MESA", "LIMPEZA PREDIAL", "HIGIENIZACAO", "VASSOURA", 
+    "RODO", "LIXEIRA", "SACO DE LIXO", "DETERGENTE", "SABAO EM PO", "COPO DESCARTAVEL",
+    "TERCEIRIZACAO", "LOCACAO DE MAO DE OBRA", "ASSISTENCIA MEDICA", "PLANO DE SAUDE", "ODONTOLOGICA", 
+    "SEGURO", "VIGILANCIA", "PORTARIA", "RECEPCIONISTA", "CONSULTORIA", "TREINAMENTO", "EVENTO", 
+    "SHOW", "FESTA", "PALCO", "HOSPEDAGEM", "PUBLICIDADE", "MARKETING", "GRAFICA", "BANNER",
+    "VETERINARI", "ANIMAL", "BANHO E TOSA", "RAÇÃO", "AGRO", "AGRICOLA", "SEMENTE", "MUDA", "ADUBO", 
+    "JARDINAGEM", "ROÇADEIRA", "BELICO", "MILITAR", "ARMAMENTO", "MUNICAO", "FARDA", "UNIFORME", 
+    "TECIDO", "CONFECÇÃO", "VESTUARIO", "ESPORTE", "MATERIAL ESPORTIVO", "BOLA", "TROFEU", "MEDALHA", 
     "MUSICAL", "INSTRUMENTO", "AUDIOVISUAL", "FOTOGRAFI", "BRINDE"
 ]
 
 # ==========================================
-# FUNÇÕES AUXILIARES
+# FUNÇÕES DE APOIO
 # ==========================================
-
 def normalizar(texto):
-    """Remove acentos, caracteres especiais e converte para maiúsculas."""
     if not isinstance(texto, str): return ""
     return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').upper()
 
 def carregar_keywords_csv():
-    """Lê o arquivo CSV e extrai a coluna 'Fármaco'."""
-    if not os.path.exists(ARQ_CSV):
-        print(f"⚠️ AVISO: Arquivo {ARQ_CSV} não encontrado. O robô usará apenas regras do NE.")
-        return []
-
+    if not os.path.exists(ARQ_CSV): return []
     try:
-        try:
-            df = pd.read_csv(ARQ_CSV, encoding='utf-8')
-        except:
-            df = pd.read_csv(ARQ_CSV, encoding='latin1')
-
-        if 'Fármaco' not in df.columns:
-            print("❌ ERRO CRÍTICO: Coluna 'Fármaco' não encontrada no CSV.")
-            return []
+        try: df = pd.read_csv(ARQ_CSV, encoding='utf-8')
+        except: df = pd.read_csv(ARQ_CSV, encoding='latin1')
         
-        raw_keywords = df['Fármaco'].dropna().unique().tolist()
-        keywords = [normalizar(k) for k in raw_keywords if len(str(k)) > 2]
-        
-        print(f"✅ CSV Carregado: {len(keywords)} fármacos importados para inteligência de busca.")
-        return keywords
-    except Exception as e:
-        print(f"⚠️ Erro ao processar CSV: {e}")
-        return []
+        if 'Fármaco' not in df.columns: return []
+        raw = df['Fármaco'].dropna().unique().tolist()
+        return [normalizar(k) for k in raw if len(str(k)) > 2]
+    except: return []
 
 def validar_item(descricao, uf):
-    """
-    O CÉREBRO DA TRIAGEM:
-    1. Verifica Blacklist (Rejeição Imediata)
-    2. Verifica Regra Regional (Nordeste)
-    3. Verifica Banco de Dados de Fármacos (CSV)
-    """
     desc_norm = normalizar(descricao)
-    
-    # 1. VERIFICAÇÃO DE BLACKLIST (Exclusão)
     for bad in BLACKLIST:
-        if bad in desc_norm:
-            return False
-
-    # 2. VERIFICAÇÃO REGIONAL (Regra Nordeste)
+        if bad in desc_norm: return False
     for k in KEYWORDS_NORDESTE:
         if k in desc_norm:
-            if uf in UFS_NORDESTE:
-                return True
-            else:
-                return False 
-
-    # 3. VERIFICAÇÃO DE FÁRMACOS (Inclusão via CSV)
+            return True if uf in UFS_NORDESTE else False
     for k in KEYWORDS_GLOBAL:
-        if k in desc_norm:
-            return True
-
+        if k in desc_norm: return True
     return False
 
 def criar_sessao():
-    """Cria uma sessão HTTP resiliente com retries."""
-    session = requests.Session()
-    session.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    })
-    retry = Retry(total=3, backoff_factor=2, status_forcelist=[429, 500, 502, 503, 504])
-    adapter = HTTPAdapter(max_retries=retry)
-    session.mount("https://", adapter)
-    return session
+    s = requests.Session()
+    s.headers.update({"User-Agent": "SniperBot/1.0"})
+    retry = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
+    s.mount("https://", HTTPAdapter(max_retries=retry))
+    return s
 
-def processar_licitacao(licitacao, session):
+def processar_licitacao(lic, session):
     try:
-        # --- FILTRO 1: DATA DE ENCERRAMENTO ---
-        data_enc_str = licitacao.get('data_encerramento_proposta')
+        # Filtro Data Encerramento
+        data_enc_str = lic.get('data_encerramento_proposta')
         if not data_enc_str: return None
-        
-        try:
-            data_enc = datetime.fromisoformat(data_enc_str)
-        except ValueError:
-            return None
+        data_enc = datetime.fromisoformat(data_enc_str)
+        if data_enc < DATA_CORTE_ENCERRAMENTO: return None
 
-        # REGRA: Só aceita licitações que encerram a partir de 2026
-        if data_enc < DATA_CORTE_ENCERRAMENTO:
-            return None 
-
-        # --- FILTRO 2: BUSCA DE ITENS ---
-        url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{licitacao['orgao_cnpj']}/compras/{licitacao['ano_compra']}/{licitacao['sequencial_compra']}/itens"
-        
+        # Busca Itens
+        url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{lic['orgao_cnpj']}/compras/{lic['ano_compra']}/{lic['sequencial_compra']}/itens"
         r = session.get(url_itens, timeout=15)
         if r.status_code != 200: return None
         
-        itens_raw = r.json()
         itens_validos = []
-        uf_licitacao = licitacao.get('unidade_orgao', {}).get('uf_sigla', 'XX')
-
-        for it in itens_raw:
-            desc = it.get('descricao', '')
-            
-            # --- FILTRO 3: VALIDAÇÃO DO ITEM ---
-            if validar_item(desc, uf_licitacao):
-                val_est = it.get('valor_unitario_estimado', 0.0) or 0.0
-                qtd = it.get('quantidade', 0) or 0
-
+        uf = lic.get('unidade_orgao', {}).get('uf_sigla', 'XX')
+        
+        for it in r.json():
+            if validar_item(it.get('descricao', ''), uf):
+                val = it.get('valor_unitario_estimado') or 0.0
+                qtd = it.get('quantidade') or 0
                 itens_validos.append({
                     "item": it.get('numero_item'),
-                    "desc": desc,
+                    "desc": it.get('descricao'),
                     "qtd": qtd,
-                    "unitario_est": float(val_est),
-                    "total_est": float(val_est) * float(qtd),
+                    "unitario_est": float(val),
+                    "total_est": float(val) * float(qtd),
                     "situacao": it.get('situacao_compra_item_nome', 'Desconhecido')
                 })
         
         if not itens_validos: return None
 
         return {
-            "id": f"{licitacao['orgao_cnpj']}{licitacao['ano_compra']}{licitacao['sequencial_compra']}",
-            "data_pub": licitacao.get('data_publicacao_pncp', ''),
+            "id": f"{lic['orgao_cnpj']}{lic['ano_compra']}{lic['sequencial_compra']}",
+            "data_pub": lic.get('data_publicacao_pncp', ''),
             "data_encerramento": data_enc_str,
-            "uf": uf_licitacao,
-            "cidade": licitacao.get('unidade_orgao', {}).get('municipio_nome', ''),
-            "orgao": licitacao.get('orgao_nome_fantasia', '') or licitacao.get('orgao_razao_social', ''),
-            "objeto": licitacao.get('objeto_compra', ''),
-            "link": f"https://pncp.gov.br/app/editais/{licitacao['orgao_cnpj']}/{licitacao['ano_compra']}/{licitacao['sequencial_compra']}",
+            "uf": uf,
+            "cidade": lic.get('unidade_orgao', {}).get('municipio_nome', ''),
+            "orgao": lic.get('orgao_nome_fantasia', '') or lic.get('orgao_razao_social', ''),
+            "objeto": lic.get('objeto_compra', ''),
+            "link": f"https://pncp.gov.br/app/editais/{lic['orgao_cnpj']}/{lic['ano_compra']}/{lic['sequencial_compra']}",
             "itens": itens_validos
         }
-    except Exception as e:
-        return None
+    except: return None
+
+def atualizar_resultados(banco, session):
+    """
+    VARREDURA QUINZENAL:
+    Verifica se itens 'EM ANDAMENTO' já têm resultado.
+    """
+    print("🔍 Iniciando Varredura Quinzenal de Resultados...")
+    atualizados = 0
+    for lic_id, lic in banco.items():
+        # Se a licitação já encerrou há mais de 2 dias, vale checar
+        try:
+            dt_enc = datetime.fromisoformat(lic['data_encerramento'])
+            if dt_enc > datetime.now(): continue # Ainda não encerrou
+        except: continue
+
+        url_resultados = f"https://pncp.gov.br/api/pncp/v1/orgaos/{lic['id'][:14]}/compras/{lic['id'][14:18]}/{lic['id'][18:]}/itens"
+        
+        try:
+            r = session.get(url_resultados, timeout=10)
+            if r.status_code == 200:
+                itens_novos = {it['numero_item']: it for it in r.json()}
+                
+                for item_salvo in lic['itens']:
+                    novo_dado = itens_novos.get(item_salvo['item'])
+                    if novo_dado:
+                        # Atualiza status
+                        if item_salvo['situacao'] != novo_dado.get('situacao_compra_item_nome'):
+                            item_salvo['situacao'] = novo_dado.get('situacao_compra_item_nome')
+                            atualizados += 1
+                        
+                        # Se tiver resultado homologado, pega vencedor (Lógica simplificada)
+                        if 'HOMOLOGADO' in str(item_salvo['situacao']).upper():
+                            item_salvo['vencedor'] = novo_dado.get('tem_resultado', False)
+                            # (Aqui poderia expandir para buscar o nome do vencedor em outro endpoint se necessário)
+        except: pass
+    
+    print(f"✅ Varredura Concluída. {atualizados} itens atualizados.")
 
 # ==========================================
-# FLUXO PRINCIPAL
+# MAIN - FLUXO ATÔMICO
 # ==========================================
 if __name__ == "__main__":
-    print("🚀 INICIANDO SNIPER PNCP - HEALTHCARE EDITION")
-    print(f"📅 Filtro de Encerramento: A partir de {DATA_CORTE_ENCERRAMENTO.strftime('%d/%m/%Y')}")
-
-    KEYWORDS_GLOBAL = carregar_keywords_csv()
-    if not KEYWORDS_GLOBAL:
-        print("⚠️ ATENÇÃO: Operando apenas com Regras do Nordeste (Sem CSV).")
-
-    # Data de início da varredura (Publicação)
-    start_date = datetime(2025, 12, 1) 
+    print(f"🚀 SNIPER PNCP - DATA BASE: {HOJE.strftime('%d/%m/%Y')}")
     
-    if os.path.exists(ARQ_CHECKPOINT):
-        with open(ARQ_CHECKPOINT, 'r') as f:
-            content = f.read().strip()
-            if content:
-                try:
-                    start_date = datetime.strptime(content, '%Y%m%d')
-                    print(f"🔄 Retomando varredura a partir de: {start_date.strftime('%d/%m/%Y')}")
-                except:
-                    print("⚠️ Checkpoint inválido, iniciando do zero.")
+    # 1. Carregar Keywords
+    KEYWORDS_GLOBAL = carregar_keywords_csv()
 
-    today = datetime.now()
-    delta = today - start_date
+    # 2. Ler Checkpoint (Onde parei?)
+    data_alvo = DATA_INICIO_VARREDURA
+    if os.path.exists(ARQ_CHECKPOINT):
+        try:
+            with open(ARQ_CHECKPOINT, 'r') as f:
+                data_alvo = datetime.strptime(f.read().strip(), '%Y%m%d')
+        except: pass
+
+    # 3. Determinar o MODO DE OPERAÇÃO
     session = criar_sessao()
     
-    banco_dados = {}
+    # Carrega banco atual
+    banco = {}
     if os.path.exists(ARQ_DADOS):
         try:
             with gzip.open(ARQ_DADOS, 'rt', encoding='utf-8') as f:
-                lista_antiga = json.load(f)
-                for item in lista_antiga:
-                    banco_dados[item['id']] = item
-            print(f"📚 Base de dados carregada: {len(banco_dados)} processos já capturados.")
-        except Exception:
-            banco_dados = {}
+                lista = json.load(f)
+                banco = {i['id']: i for i in lista}
+        except: pass
 
-    novos_count = 0
+    dias_atraso = (HOJE - data_alvo).days
 
-    for i in range(delta.days + 1):
-        data_atual = start_date + timedelta(days=i)
-        data_str = data_atual.strftime('%Y%m%d')
-        print(f"\n🔍 Analisando Publicações de: {data_atual.strftime('%d/%m/%Y')}...")
+    if dias_atraso > 3:
+        # --- MODO BACKLOG (Atrasado) ---
+        # Processa APENAS 1 dia (data_alvo) e para.
+        print(f"⚠️ MODO BACKLOG: Processando apenas {data_alvo.strftime('%d/%m/%Y')} (Atraso: {dias_atraso} dias)")
+        datas_para_processar = [data_alvo]
+        proximo_checkpoint = data_alvo + timedelta(days=1)
+        salvar_checkpoint = True
 
-        pagina = 1
+    else:
+        # --- MODO ROTINA (Em dia) ---
+        # Processa os últimos 3 dias para garantir
+        print(f"✅ MODO ROTINA: Varrendo últimos 3 dias até {HOJE.strftime('%d/%m/%Y')}")
+        datas_para_processar = [HOJE - timedelta(days=i) for i in range(3)]
+        proximo_checkpoint = HOJE # Mantém checkpoint no dia atual
+        salvar_checkpoint = True # Atualiza para hoje
+        
+        # --- VARREDURA QUINZENAL (Só no modo rotina) ---
+        if HOJE.day in [1, 15]:
+            atualizar_resultados(banco, session)
+
+    # 4. Execução da Coleta
+    novos = 0
+    for data_proc in datas_para_processar:
+        d_str = data_proc.strftime('%Y%m%d')
+        print(f"📂 Coletando dia: {data_proc.strftime('%d/%m/%Y')}...")
+        
+        pag = 1
         while True:
-            url = f"https://pncp.gov.br/api/pncp/v1/compras?data_inicial={data_str}&data_final={data_str}&modalidade_contratacao_id=6&pagina={pagina}&tamanho_pagina=50"
-            
+            url = f"https://pncp.gov.br/api/pncp/v1/compras?data_inicial={d_str}&data_final={d_str}&modalidade_contratacao_id=6&pagina={pag}&tamanho_pagina=50"
             try:
                 r = session.get(url, timeout=20)
                 if r.status_code != 200: break
-                
-                resp_json = r.json()
-                total_paginas = resp_json.get('total_paginas', 0)
-                licitacoes = resp_json.get('data', [])
-                
-                if not licitacoes: break
+                resp = r.json()
+                data = resp.get('data', [])
+                if not data: break
 
-                with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                    futuros = {executor.submit(processar_licitacao, lic, session): lic for lic in licitacoes}
-                    
-                    for futuro in concurrent.futures.as_completed(futuros):
-                        res = futuro.result()
+                with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as exe:
+                    futures = {exe.submit(processar_licitacao, l, session): l for l in data}
+                    for f in concurrent.futures.as_completed(futures):
+                        res = f.result()
                         if res:
-                            banco_dados[res['id']] = res
-                            novos_count += 1
+                            banco[res['id']] = res
+                            novos += 1
                             print(".", end="", flush=True)
-                
-                print(f" [Pág {pagina}/{total_paginas}]", end="\r")
-                if pagina >= total_paginas: break
-                pagina += 1
 
+                if pag >= resp.get('total_paginas', 0): break
+                pag += 1
             except Exception as e:
-                print(f"❌ Erro na página {pagina}: {e}")
+                print(f"Erro Pág {pag}: {e}")
                 break
+        print(f" -> OK")
 
-    prox_dia = today.strftime('%Y%m%d')
-    with open(ARQ_CHECKPOINT, 'w') as f:
-        f.write(prox_dia)
-
+    # 5. Salvar Tudo
+    print(f"\n💾 Salvando... (Total no banco: {len(banco)})")
+    
+    # Salvar Dados
     os.makedirs('dados', exist_ok=True)
-    lista_final = list(banco_dados.values())
-    lista_final.sort(key=lambda x: x.get('data_encerramento', ''), reverse=True)
-
-    print(f"\n\n💾 Salvando Base de Dados Compactada...")
+    lista_final = sorted(list(banco.values()), key=lambda x: x.get('data_encerramento', ''), reverse=True)
     with gzip.open(ARQ_DADOS, 'wt', encoding='utf-8') as f:
         json.dump(lista_final, f, ensure_ascii=False, separators=(',', ':'))
-    
-    print(f"✅ CONCLUÍDO! Total: {len(lista_final)} | Novos: {novos_count}")
+
+    # Salvar Checkpoint (Só se estiver em modo Backlog ou se for dia de atualização)
+    if salvar_checkpoint:
+        with open(ARQ_CHECKPOINT, 'w') as f:
+            f.write(proximo_checkpoint.strftime('%Y%m%d'))
+            
+    print(f"🏁 Finalizado. Checkpoint movido para: {proximo_checkpoint.strftime('%d/%m/%Y')}")
