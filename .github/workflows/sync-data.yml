@@ -1,23 +1,76 @@
-- name: 💾 Salvar Alterações (Git)
+name: Sniper PNCP - Chain Reaction
+
+on:
+  schedule:
+    # Agendamento diário para iniciar o ciclo às 08:00 BRT (11:00 UTC)
+    - cron: '0 11 * * *'
+  # Permite que você inicie o primeiro "dominó" manualmente pelo botão Run Workflow
+  workflow_dispatch:
+
+jobs:
+  chain-reaction:
+    runs-on: ubuntu-latest
+    
+    # Permissões necessárias para salvar arquivos e disparar novos workflows
+    permissions:
+      contents: write
+      actions: write
+
+    steps:
+      - name: 📥 Baixar Repositório
+        uses: actions/checkout@v3
+        with:
+          # Busca todo o histórico para evitar erros de rebase
+          fetch-depth: 0
+
+      - name: 🐍 Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: 📦 Instalar Dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pandas
+
+      - name: 🚀 Executar Robô Sniper
+        id: sniper
+        run: python app.py
+
+      - name: 💾 Salvar Alterações (Git)
         run: |
           git config --global user.name 'Sniper Bot'
           git config --global user.email 'bot@noreply.github.com'
           
-          # Tenta puxar as mudanças do servidor antes de enviar as novas
+          # 1. Puxa mudanças que outros robôs possam ter feito segundos antes
           git pull --rebase origin main
           
+          # 2. Adiciona os novos dados e o checkpoint do dia processado
           git add dados/oportunidades.json.gz
           git add checkpoint.txt
           
+          # 3. Remove arquivo legado se existir
           if [ -f "dados/oportunidades.js" ]; then
             git rm --cached dados/oportunidades.js || true
             rm dados/oportunidades.js || true
           fi
           
+          # 4. Só faz o commit se houver algo novo
           if [[ -n $(git status -s) ]]; then
             git commit -m "🤖 Sync: $(date +'%d/%m/%Y %H:%M')"
-            # Tenta o push com o rebase automático
             git push origin main
+            echo "✅ Dados salvos com sucesso!"
           else
-            echo "💤 Nada novo para salvar."
+            echo "💤 Sem alterações relevantes neste dia."
           fi
+
+      - name: 🔄 Efeito Dominó (Próximo Dia)
+        # O robô só dispara o próximo se o Python detectar atraso (trigger_next=true)
+        if: steps.sniper.outputs.trigger_next == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "⚡ Atraso detectado. Disparando o próximo robô da fila..."
+          # Pequena pausa de segurança para o GitHub processar o commit anterior
+          sleep 10
+          gh workflow run sync-data.yml
