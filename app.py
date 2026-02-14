@@ -9,7 +9,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # === CONFIGURAÇÕES ===
 ARQ_DADOS = 'dados/oportunidades.json.gz'
 ARQ_CHECKPOINT = 'checkpoint.txt'
-MAX_WORKERS = 8 # Menor para evitar bloqueio da API em buscas exaustivas
+MAX_WORKERS = 8 
 
 def criar_sessao():
     s = requests.Session()
@@ -17,10 +17,9 @@ def criar_sessao():
     return s
 
 def buscar_todos_itens(session, cnpj, ano, seq):
-    """Busca exaustiva de todos os itens (até 10.000 itens)"""
     itens = []
     pag = 1
-    while pag <= 200:
+    while pag <= 200: # Até 10.000 itens
         url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
         try:
             r = session.get(url, params={"pagina": pag, "tamanhoPagina": 50}, timeout=20)
@@ -35,7 +34,6 @@ def buscar_todos_itens(session, cnpj, ano, seq):
     return itens
 
 def buscar_todos_resultados(session, cnpj, ano, seq):
-    """Busca exaustiva de todos os vencedores/resultados"""
     resultados = []
     url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/resultados"
     pag = 1
@@ -60,12 +58,7 @@ def processar_licitacao(lic, session):
         ano = lic['anoCompra']
         seq = lic['sequencialCompra']
         id_lic = f"{cnpj}{ano}{seq}"
-        
         unid = lic.get('unidadeOrgao', {})
-        
-        # Coleta exaustiva
-        itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
-        resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq)
         
         return {
             "id": id_lic,
@@ -75,24 +68,27 @@ def processar_licitacao(lic, session):
             "cidade": unid.get('municipioNome'),
             "orgao": lic['orgaoEntidade']['razaoSocial'],
             "objeto": lic.get('objetoCompra'),
-            "edital_n": f"{lic.get('numeroCompra')}/{ano}",
+            "edital_n": f"{lic.get('numeroCompra').zfill(5)}/{ano}",
             "uasg": unid.get('codigoUnidade') or "---",
             "valor_global": float(lic.get('valorTotalEstimado') or 0),
-            "is_sigiloso": lic.get('niValorTotalEstimado', False),
             "link": f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
-            "itens_raw": itens_raw,
-            "resultados_raw": resultados_raw
+            "itens_raw": buscar_todos_itens(session, cnpj, ano, seq),
+            "resultados_raw": buscar_todos_resultados(session, cnpj, ano, seq)
         }
     except: return None
 
 if __name__ == "__main__":
-    hoje = datetime.now()
-    if not os.path.exists(ARQ_CHECKPOINT):
-        with open(ARQ_CHECKPOINT, 'w') as f: f.write(hoje.strftime('%Y%m%d'))
+    hoje = datetime.now() # 14/02/2026
+    data_alvo = hoje - timedelta(days=2)
     
-    with open(ARQ_CHECKPOINT, 'r') as f: data_str = f.read().strip()
-    data_alvo = datetime.strptime(data_str, '%Y%m%d')
-    
+    # Validação de Checkpoint para 2026
+    if os.path.exists(ARQ_CHECKPOINT):
+        with open(ARQ_CHECKPOINT, 'r') as f:
+            try:
+                cp = datetime.strptime(f.read().strip(), '%Y%m%d')
+                if cp <= hoje: data_alvo = cp
+            except: pass
+
     session = criar_sessao()
     banco = {}
     if os.path.exists(ARQ_DADOS):
@@ -106,6 +102,7 @@ if __name__ == "__main__":
 
     url_pub = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
     pag_pub = 1
+    novos = 0
     while True:
         params = {"dataInicial": d_str, "dataFinal": d_str, "codigoModalidadeContratacao": "6", "pagina": pag_pub, "tamanhoPagina": 50}
         r = session.get(url_pub, params=params, timeout=25)
@@ -117,7 +114,9 @@ if __name__ == "__main__":
             futuros = {exe.submit(processar_licitacao, l, session): l for l in lics}
             for f in concurrent.futures.as_completed(futuros):
                 res = f.result()
-                if res: banco[res['id']] = res
+                if res: 
+                    banco[res['id']] = res
+                    novos += 1
 
         pag_pub += 1
 
@@ -131,3 +130,4 @@ if __name__ == "__main__":
     if "GITHUB_OUTPUT" in os.environ:
         trigger = "true" if (hoje - proximo).days >= 0 else "false"
         with open(os.environ["GITHUB_OUTPUT"], "a") as f: print(f"trigger_next={trigger}", file=f)
+    print(f"✅ Finalizado. Novos: {novos}")
