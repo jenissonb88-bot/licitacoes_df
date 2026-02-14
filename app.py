@@ -5,13 +5,12 @@ import gzip
 import pandas as pd
 import unicodedata
 import concurrent.futures
-import sys
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 # ==========================================
-# CONFIGURAÇÕES & DATES
+# CONFIGURAÇÕES
 # ==========================================
 ARQ_DADOS = 'dados/oportunidades.json.gz'
 ARQ_CHECKPOINT = 'checkpoint.txt'
@@ -19,17 +18,14 @@ ARQ_CSV = 'Exportar Dados.csv'
 ARQ_EXCLUIDOS = 'excluidos.txt'
 MAX_WORKERS = 10 
 
-# Data base inicial
-DATA_INICIO_VARREDURA = datetime(2025, 12, 1)
+# Data base para o início da varredura (Divulgação)
+DATA_INICIO_DIVULGACAO = datetime(2026, 1, 1)
 
-# Filtro: Só aceita licitações que encerram a partir de:
-DATA_CORTE_ENCERRAMENTO = datetime(2026, 1, 1)
-
-# Simulação do "Hoje"
+# Simulação do Hoje (Ajuste conforme sua necessidade)
 HOJE = datetime(2026, 2, 14) 
 
 # ==========================================
-# LISTAS DE FILTRAGEM (MANTIDAS IGUAIS)
+# REGRAS DE FILTRAGEM (Mantidas conforme sua última lista)
 # ==========================================
 UFS_NORDESTE = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
 KEYWORDS_NORDESTE = ["DIETA", "ENTERAL", "SUPLEMENT", "FORMULA", "CALORIC", "PROTEIC", "LEITE", "NUTRI"]
@@ -57,9 +53,6 @@ BLACKLIST = [
     "MUSICAL", "INSTRUMENTO", "AUDIOVISUAL", "FOTOGRAFI", "BRINDE"
 ]
 
-# ==========================================
-# FUNÇÕES DE APOIO (MANTIDAS IGUAIS)
-# ==========================================
 def normalizar(texto):
     if not isinstance(texto, str): return ""
     return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').upper()
@@ -69,8 +62,6 @@ def carregar_keywords_csv():
     try:
         try: df = pd.read_csv(ARQ_CSV, encoding='utf-8')
         except: df = pd.read_csv(ARQ_CSV, encoding='latin1')
-        
-        if 'Fármaco' not in df.columns: return []
         raw = df['Fármaco'].dropna().unique().tolist()
         return [normalizar(k) for k in raw if len(str(k)) > 2]
     except: return []
@@ -78,13 +69,9 @@ def carregar_keywords_csv():
 def carregar_ids_excluidos():
     ids = set()
     if os.path.exists(ARQ_EXCLUIDOS):
-        try:
-            with open(ARQ_EXCLUIDOS, 'r') as f:
-                for linha in f:
-                    limpo = linha.strip()
-                    if limpo: ids.add(limpo)
-            print(f"🚫 Blacklist de IDs carregada: {len(ids)} registros banidos.")
-        except: pass
+        with open(ARQ_EXCLUIDOS, 'r') as f:
+            for linha in f:
+                if linha.strip(): ids.add(linha.strip())
     return ids
 
 def validar_item(descricao, uf):
@@ -92,36 +79,25 @@ def validar_item(descricao, uf):
     for bad in BLACKLIST:
         if bad in desc_norm: return False
     for k in KEYWORDS_NORDESTE:
-        if k in desc_norm:
-            return True if uf in UFS_NORDESTE else False
+        if k in desc_norm: return uf in UFS_NORDESTE
     for k in KEYWORDS_GLOBAL:
         if k in desc_norm: return True
     return False
 
-def criar_sessao():
-    s = requests.Session()
-    s.headers.update({"User-Agent": "SniperBot/1.0"})
-    retry = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
-    s.mount("https://", HTTPAdapter(max_retries=retry))
-    return s
-
 def processar_licitacao(lic, session, ids_banidos):
+    lic_id = f"{lic['orgao_cnpj']}{lic['ano_compra']}{lic['sequencial_compra']}"
+    if lic_id in ids_banidos: return None
+
+    # Agora não filtramos mais a data de encerramento agressivamente aqui, 
+    # pois o filtro principal é na data de DIVULGAÇÃO (na chamada da API)
+    
+    url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{lic['orgao_cnpj']}/compras/{lic['ano_compra']}/{lic['sequencial_compra']}/itens"
     try:
-        lic_id = f"{lic['orgao_cnpj']}{lic['ano_compra']}{lic['sequencial_compra']}"
-        if lic_id in ids_banidos: return None
-
-        data_enc_str = lic.get('data_encerramento_proposta')
-        if not data_enc_str: return None
-        data_enc = datetime.fromisoformat(data_enc_str)
-        if data_enc < DATA_CORTE_ENCERRAMENTO: return None
-
-        url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{lic['orgao_cnpj']}/compras/{lic['ano_compra']}/{lic['sequencial_compra']}/itens"
         r = session.get(url_itens, timeout=15)
         if r.status_code != 200: return None
         
         itens_validos = []
         uf = lic.get('unidade_orgao', {}).get('uf_sigla', 'XX')
-        
         for it in r.json():
             if validar_item(it.get('descricao', ''), uf):
                 val = it.get('valor_unitario_estimado') or 0.0
@@ -140,7 +116,7 @@ def processar_licitacao(lic, session, ids_banidos):
         return {
             "id": lic_id,
             "data_pub": lic.get('data_publicacao_pncp', ''),
-            "data_encerramento": data_enc_str,
+            "data_encerramento": lic.get('data_encerramento_proposta', ''),
             "uf": uf,
             "cidade": lic.get('unidade_orgao', {}).get('municipio_nome', ''),
             "orgao": lic.get('orgao_nome_fantasia', '') or lic.get('orgao_razao_social', ''),
@@ -150,48 +126,19 @@ def processar_licitacao(lic, session, ids_banidos):
         }
     except: return None
 
-def atualizar_resultados(banco, session):
-    print("🔍 Iniciando Varredura Quinzenal de Resultados...")
-    atualizados = 0
-    for lic_id, lic in banco.items():
-        try:
-            dt_enc = datetime.fromisoformat(lic['data_encerramento'])
-            if dt_enc > datetime.now(): continue 
-        except: continue
-
-        url_resultados = f"https://pncp.gov.br/api/pncp/v1/orgaos/{lic['id'][:14]}/compras/{lic['id'][14:18]}/{lic['id'][18:]}/itens"
-        try:
-            r = session.get(url_resultados, timeout=10)
-            if r.status_code == 200:
-                itens_novos = {it['numero_item']: it for it in r.json()}
-                for item_salvo in lic['itens']:
-                    novo_dado = itens_novos.get(item_salvo['item'])
-                    if novo_dado:
-                        if item_salvo['situacao'] != novo_dado.get('situacao_compra_item_nome'):
-                            item_salvo['situacao'] = novo_dado.get('situacao_compra_item_nome')
-                            atualizados += 1
-                        if 'HOMOLOGADO' in str(item_salvo['situacao']).upper():
-                            item_salvo['vencedor'] = novo_dado.get('tem_resultado', False)
-        except: pass
-    print(f"✅ Varredura Concluída. {atualizados} itens atualizados.")
-
-# ==========================================
-# MAIN - FLUXO EM CADEIA (CHAIN REACTION)
-# ==========================================
 if __name__ == "__main__":
-    print(f"🚀 SNIPER PNCP - DATA BASE: {HOJE.strftime('%d/%m/%Y')}")
-    
     KEYWORDS_GLOBAL = carregar_keywords_csv()
     IDS_EXCLUIDOS = carregar_ids_excluidos()
 
-    data_alvo = DATA_INICIO_VARREDURA
+    data_alvo = DATA_INICIO_DIVULGACAO
     if os.path.exists(ARQ_CHECKPOINT):
         try:
             with open(ARQ_CHECKPOINT, 'r') as f:
                 data_alvo = datetime.strptime(f.read().strip(), '%Y%m%d')
         except: pass
 
-    session = criar_sessao()
+    session = requests.Session()
+    session.headers.update({"User-Agent": "SniperBot/1.0"})
     
     banco = {}
     if os.path.exists(ARQ_DADOS):
@@ -201,72 +148,52 @@ if __name__ == "__main__":
                 banco = {i['id']: i for i in lista if i['id'] not in IDS_EXCLUIDOS}
         except: pass
 
+    # --- LÓGICA DE BACKLOG ATÔMICO ---
     dias_atraso = (HOJE - data_alvo).days
+    trigger_next = "false"
 
-    # --- LÓGICA DE DECISÃO DE GATILHO ---
-    trigger_next = "false" # Padrão: não repete
-
-    if dias_atraso > 3:
-        # MODO BACKLOG (Atrasado)
-        print(f"⚠️ MODO BACKLOG: Processando apenas {data_alvo.strftime('%d/%m/%Y')} (Atraso: {dias_atraso} dias)")
-        datas_para_processar = [data_alvo]
-        proximo_checkpoint = data_alvo + timedelta(days=1)
-        salvar_checkpoint = True
-        trigger_next = "true" # <--- ATIVA O GATILHO PARA A PRÓXIMA EXECUÇÃO
-    else:
-        # MODO ROTINA (Em dia)
-        print(f"✅ MODO ROTINA: Varrendo últimos 3 dias até {HOJE.strftime('%d/%m/%Y')}")
-        datas_para_processar = [HOJE - timedelta(days=i) for i in range(3)]
-        proximo_checkpoint = HOJE
-        salvar_checkpoint = True
-        trigger_next = "false" # <--- NÃO REPETE, ESPERA A PRÓXIMA AGENDADA
+    if dias_atraso >= 0:
+        # Se houver atraso ou for o dia de hoje, processa o dia do checkpoint
+        print(f"📂 Varrendo Divulgações de: {data_alvo.strftime('%d/%m/%Y')}")
+        d_str = data_alvo.strftime('%Y%m%d')
         
-        if HOJE.day in [1, 15]:
-            atualizar_resultados(banco, session)
-
-    # --- EXECUÇÃO (MANTIDA) ---
-    novos = 0
-    for data_proc in datas_para_processar:
-        d_str = data_proc.strftime('%Y%m%d')
-        print(f"📂 Coletando dia: {data_proc.strftime('%d/%m/%Y')}...")
         pag = 1
+        novos = 0
         while True:
+            # Filtro por Data Inicial/Final de DIVULGAÇÃO (conforme padrão API)
             url = f"https://pncp.gov.br/api/pncp/v1/compras?data_inicial={d_str}&data_final={d_str}&modalidade_contratacao_id=6&pagina={pag}&tamanho_pagina=50"
-            try:
-                r = session.get(url, timeout=20)
-                if r.status_code != 200: break
-                resp = r.json()
-                data = resp.get('data', [])
-                if not data: break
-                with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as exe:
-                    futures = {exe.submit(processar_licitacao, l, session, IDS_EXCLUIDOS): l for l in data}
-                    for f in concurrent.futures.as_completed(futures):
-                        res = f.result()
-                        if res:
-                            banco[res['id']] = res
-                            novos += 1
-                            print(".", end="", flush=True)
-                if pag >= resp.get('total_paginas', 0): break
-                pag += 1
-            except Exception as e:
-                print(f"Erro Pág {pag}: {e}")
-                break
-        print(f" -> OK")
+            r = session.get(url, timeout=20)
+            if r.status_code != 200: break
+            resp = r.json()
+            data = resp.get('data', [])
+            if not data: break
 
-    print(f"\n💾 Salvando... (Total no banco: {len(banco)})")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as exe:
+                futures = {exe.submit(processar_licitacao, l, session, IDS_EXCLUIDOS): l for l in data}
+                for f in concurrent.futures.as_completed(futures):
+                    res = f.result()
+                    if res:
+                        banco[res['id']] = res
+                        novos += 1
+                        print(".", end="", flush=True)
+
+            if pag >= resp.get('total_paginas', 0): break
+            pag += 1
+        
+        # Avança o checkpoint
+        proximo_checkpoint = data_alvo + timedelta(days=1)
+        with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo_checkpoint.strftime('%Y%m%d'))
+        
+        # Se ainda estiver no passado, ativa o gatilho para o próximo job
+        if (HOJE - proximo_checkpoint).days >= 0:
+            trigger_next = "true"
+
+    # Salva o banco
     os.makedirs('dados', exist_ok=True)
-    lista_final = sorted(list(banco.values()), key=lambda x: x.get('data_encerramento', ''), reverse=True)
+    lista_final = sorted(list(banco.values()), key=lambda x: x.get('data_pub', ''), reverse=True)
     with gzip.open(ARQ_DADOS, 'wt', encoding='utf-8') as f:
         json.dump(lista_final, f, ensure_ascii=False, separators=(',', ':'))
 
-    if salvar_checkpoint:
-        with open(ARQ_CHECKPOINT, 'w') as f:
-            f.write(proximo_checkpoint.strftime('%Y%m%d'))
-    
-    # --- COMUNICAÇÃO COM GITHUB ACTIONS ---
-    # Escreve se deve disparar o próximo job
     if "GITHUB_OUTPUT" in os.environ:
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:
             print(f"trigger_next={trigger_next}", file=f)
-            
-    print(f"🏁 Finalizado. Próxima execução imediata? {trigger_next.upper()}")
