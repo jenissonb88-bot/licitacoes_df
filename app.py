@@ -4,16 +4,16 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import concurrent.futures
 
-# Desativar alertas de segurança de sites governamentais
+# Desativar avisos de SSL (comum em portais governamentais)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # === CONFIGURAÇÕES ===
 ARQ_DADOS = 'dados/oportunidades.json.gz'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_CSV = 'Exportar Dados.csv'
-MAX_WORKERS = 15 
+MAX_WORKERS = 15  # Velocidade de processamento paralelo
 
-# Palavras-chave base (Saúde)
+# Palavras-chave de Saúde (Base para captura rápida)
 KEYWORDS_SAUDE = [
     "MEDICAMENT", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGIC", 
     "SERINGA", "AGULHA", "LUVA", "GAZE", "ALGODAO", "EQUIPO", "CATETER", 
@@ -25,12 +25,11 @@ def normalizar(texto):
     return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').upper()
 
 def carregar_inteligencia_csv():
-    """Lê o seu CSV e extrai nomes de fármacos para busca."""
+    """Lê o seu CSV e extrai nomes de fármacos para ampliar a busca."""
     keywords = set(KEYWORDS_SAUDE)
     if os.path.exists(ARQ_CSV):
         try:
             df = pd.read_csv(ARQ_CSV, encoding='latin1', sep=None, engine='python')
-            # Busca colunas que possam conter nomes de remédios
             col = [c for c in df.columns if 'FARMACO' in normalizar(c) or 'DESC' in normalizar(c)]
             if col:
                 for k in df[col[0]].dropna().unique():
@@ -39,10 +38,6 @@ def carregar_inteligencia_csv():
         except: pass
     return list(keywords)
 
-def validar_item(descricao):
-    desc_norm = normalizar(descricao)
-    return any(k in desc_norm for k in KEYWORDS_GLOBAL)
-
 def criar_sessao():
     s = requests.Session()
     s.headers.update({"User-Agent": "Mozilla/5.0"})
@@ -50,8 +45,8 @@ def criar_sessao():
     s.mount("https://", HTTPAdapter(max_retries=retry))
     return s
 
-def processar_licitacao(lic, session):
-    """Extrai itens e dados técnicos de cada licitação encontrada."""
+def processar_licitacao(lic, session, keywords_global):
+    """Extrai itens e dados técnicos de cada licitação."""
     try:
         cnpj_limpo = re.sub(r'\D', '', str(lic['orgao_cnpj']))
         lic_id = f"{cnpj_limpo}{lic['ano_compra']}{lic['sequencial_compra']}"
@@ -63,7 +58,8 @@ def processar_licitacao(lic, session):
         
         itens_validos = []
         for it in r.json():
-            if validar_item(it.get('descricao', '')):
+            desc_norm = normalizar(it.get('descricao', ''))
+            if any(k in desc_norm for k in keywords_global):
                 val = float(it.get('valor_unitario_estimado') or 0)
                 qtd = float(it.get('quantidade') or 0)
                 
@@ -73,7 +69,7 @@ def processar_licitacao(lic, session):
                     "qtd": qtd,
                     "unitario_est": val,
                     "total_est": val * qtd,
-                    "me_epp_id": it.get('tipoBeneficioId'), # O Faxineiro usará isso
+                    "me_epp_id": it.get('tipoBeneficioId'), # Enviado para o limpeza.py tratar
                     "situacao": it.get('situacao_compra_item_nome', 'EM ANDAMENTO'),
                     "fornecedor": it.get('nomeFornecedor') or "EM ANDAMENTO"
                 })
@@ -94,11 +90,11 @@ def processar_licitacao(lic, session):
     except: return None
 
 if __name__ == "__main__":
-    print("🚀 Sniper PNCP - Iniciando Captura Bruta")
-    KEYWORDS_GLOBAL = carregar_inteligencia_csv()
+    print("🚀 Sniper PNCP - Iniciando Captura")
+    keywords_global = carregar_inteligencia_csv()
     
-    # Checkpoint de data
-    data_alvo = datetime(2025, 12, 1)
+    # Gerir Checkpoint
+    data_alvo = datetime(2025, 12, 1) # Data padrão de início
     if os.path.exists(ARQ_CHECKPOINT):
         with open(ARQ_CHECKPOINT, 'r') as f:
             try: data_alvo = datetime.strptime(f.read().strip(), '%Y%m%d')
@@ -106,7 +102,7 @@ if __name__ == "__main__":
 
     session = criar_sessao()
     
-    # Carregar base atual
+    # Carregar base atual comprimida
     banco = {}
     if os.path.exists(ARQ_DADOS):
         try:
@@ -114,45 +110,46 @@ if __name__ == "__main__":
                 for i in json.load(f): banco[i['id']] = i
         except: pass
 
+    hoje = datetime.now()
     d_str = data_alvo.strftime('%Y%m%d')
     print(f"🔍 Minerando dia: {data_alvo.strftime('%d/%m/%Y')}...")
     
-    pag = 1
     novos = 0
+    pag = 1
     while True:
         url = f"https://pncp.gov.br/api/pncp/v1/compras?data_inicial={d_str}&data_final={d_str}&modalidade_contratacao_id=6&pagina={pag}&tamanho_pagina=50"
-        try:
-            r = session.get(url, timeout=20, verify=False)
-            if r.status_code != 200: break
-            resp = r.json()
-            lics = resp.get('data', [])
-            if not lics: break
+        r = session.get(url, timeout=20, verify=False)
+        if r.status_code != 200: break
+        
+        resp = r.json()
+        lics = resp.get('data', [])
+        if not lics: break
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as exe:
-                futuros = {exe.submit(processar_licitacao, l, session): l for l in lics}
-                for f in concurrent.futures.as_completed(futuros):
-                    res = f.result()
-                    if res:
-                        banco[res['id']] = res
-                        novos += 1
-                        print(".", end="", flush=True)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as exe:
+            futuros = {exe.submit(processar_licitacao, l, session, keywords_global): l for l in lics}
+            for f in concurrent.futures.as_completed(futuros):
+                res = f.result()
+                if res:
+                    banco[res['id']] = res
+                    novos += 1
+                    print(".", end="", flush=True)
 
-            if pag >= resp.get('total_paginas', 0): break
-            pag += 1
-        except: break
+        if pag >= resp.get('total_paginas', 0): break
+        pag += 1
 
-    # Salva o "Minério Bruto" para o Faxineiro limpar
+    # Guardar base consolidada (ainda bruta, será limpa pelo limpeza.py)
     os.makedirs('dados', exist_ok=True)
     with gzip.open(ARQ_DADOS, 'wt', encoding='utf-8') as f:
         json.dump(list(banco.values()), f, ensure_ascii=False, separators=(',', ':'))
 
-    # Prepara reinício automático
+    # Mover checkpoint para o dia seguinte
     proximo = data_alvo + timedelta(days=1)
     with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo.strftime('%Y%m%d'))
     
-    trigger = "true" if (datetime.now() - proximo).days >= 0 else "false"
+    # Sinal de reinício (Efeito Dominó)
+    trigger_next = "true" if (hoje - proximo).days >= 0 else "false"
     if "GITHUB_OUTPUT" in os.environ:
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-            print(f"trigger_next={trigger}", file=f)
+            print(f"trigger_next={trigger_next}", file=f)
             
-    print(f"\n✅ Captura finalizada. {novos} licitações enviadas para limpeza.")
+    print(f"\n✅ Captura do dia concluída. Novos: {novos} | Reiniciar: {trigger_next}")
