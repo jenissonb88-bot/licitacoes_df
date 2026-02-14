@@ -1,4 +1,4 @@
-import requests, json, os, urllib3, unicodedata, re, gzip, pandas as pd
+import requests, json, os, urllib3, unicodedata, re, gzip
 from datetime import datetime, timedelta
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -6,121 +6,338 @@ import concurrent.futures
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# === CONFIGURAÇÕES (RESGATANDO SEU INDEX ORIGINAL) ===
-ARQ_DADOS = 'dados/oportunidades.js' # Voltamos para .js para seu index ler direto
+# === CONFIGURAÇÕES ===
+ARQ_DADOS = 'dados/oportunidades.json.gz' # ALTERADO PARA GZ
 ARQ_CHECKPOINT = 'checkpoint.txt'
-ARQ_CSV = 'Exportar Dados.csv'
-MAX_WORKERS = 15
+ARQ_MANUAIS = 'urls.txt'
+ARQ_FINISH = 'finish.txt'
+MAX_WORKERS = 10 
 
-# Palavras que garantem que o robô "pesque" a licitação
-KEYWORDS_SAUDE = [
+# === PALAVRAS-CHAVE (MANTIDAS) ===
+KEYWORDS_GERAIS = [
     "MEDICAMENT", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGIC", 
-    "SERINGA", "AGULHA", "LUVA", "GAZE", "ALGODAO", "EQUIPO", "CATETER", 
-    "SONDA", "AVENTAL", "MASCARA", "CURATIVO", "ESPARADRAPO"
+    "SERINGA", "AGULHA", r"\bLUVA", r"\bGAZE", "ALGODAO",
+    "AMOXICILIN", "AMPICILIN", "CEFALEXIN", "CEFTRIAXON", "DIPIRON", "PARACETAMOL",
+    "INSULIN", "GLICOSE", "HIDROCORTISON", "FUROSEMID", "OMEPRAZOL", "LOSARTAN",
+    "ATENOLOL", "SULFATO", "CLORETO", "EQUIPO", "CATETER", "SONDA", "AVENTAL", 
+    "MASCARA", "N95", "ALCOOL", "CURATIVO", "ESPARADRAPO", "PROPE", "TOUCA",
+    r"\bEPI\b", r"\bEPIS\b", "PROTECAO INDIVIDUAL", "INSUMO"
 ]
 
-def normalizar(texto):
-    if not isinstance(texto, str): return ""
-    return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').upper()
+KEYWORDS_NORDESTE = [
+    "DIETA", "ENTERAL", "SUPLEMENT", "FORMULA", "CALORIC", "PROTEIC"
+]
 
-def validar_item(desc):
-    d = normalizar(desc)
-    # Se achou palavra de saúde, nós queremos!
-    return any(k in d for k in KEYWORDS_SAUDE)
+# === BLACKLIST (MANTIDA) ===
+BLACKLIST = [
+    "ESCOLAR", "CONSTRUCAO", "AUTOMOTIVO", "OBRA", "VEICULO", "REFEICAO", 
+    "LANCHE", "ALIMENTICIO", "MOBILIARIO", r"\bTI\b", "INFORMATICA", "PNEU", 
+    "ESTANTE", "CADEIRA", "RODOVIARIO", "PAVIMENTACAO", "SERVICO", "LOCACAO", 
+    "COMODATO", "EXAME", "LIMPEZA", "MANUTENCAO", "ASSISTENCIA MEDICA", 
+    "PLANO DE SAUDE", "ODONTOLOGICA", "TERCEIRIZACAO", "EQUIPAMENTO",
+    "MERENDA", "COZINHA", "COPA", "HIGIENIZACAO", "EXPEDIENTE", "PAPELARIA",
+    "LIXEIRA", "LIXO", "RODO", "VASSOURA", "COMPUTADOR", "IMPRESSORA", "TONER",
+    "CARTUCHO", "ELETRODOMESTICO", "MECANICA", "PECA", "TECIDO", "FARDAMENTO",
+    "UNIFORME", "HIDRAULIC", "ELETRIC", "AGRO", "VETERINARI", "ANIMAL", "MUDA", 
+    "SEMENTE", "BELICO", "MILITAR", "ARMAMENTO", "MUNICAO", "SOFTWARE", "SAAS",
+    "PISCINA", "CIMENTO", "ASFALTO", "BRINQUEDO", "EVENTO", "SHOW", "FESTA",
+    "GRAFICA", "PUBLICIDADE", "MARKETING", "PASSAGEM", "HOSPEDAGEM",
+    "AR CONDICIONADO", "TELEFONIA", "INTERNET", "LINK DE DADOS", "SEGURO", "COPO",
+    "MATERIAL ESPORTIVO", "ESPORTE", "MATERIAL DE CONSTRUCAO", "MATERIAL ESCOLAR", 
+    "MATERIAL DE EXPEDIENTE", "MATERIAL HIDRAULICO", "MATERIAL ELETRICO",
+    "DIDATICO", "PEDAGOGICO", "FERRAGEM", "FERRAMENTA", "PINTURA", "TINTA", 
+    "MARCENARIA", "MADEIRA", "AGRICOLA", "JARDINAGEM", "ILUMINACAO", "DECORACAO", 
+    "AUDIOVISUAL", "FOTOGRAFICO", "MUSICAL", "INSTRUMENTO MUSICAL", "BRINDE", 
+    "TROFEU", "MEDALHA", "ELETROPORTATIL", "CAMA MESA e BANHO", "EPI",
+    "GENEROS ALIMENTICIOS", "MATERIAL PERMANENTE"
+]
 
-def processar_licitacao(lic, session):
+UFS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "RO", "GO", "MT", "MS", "DF"]
+UFS_NORDESTE = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE"]
+
+def normalize(t):
+    if not t: return ""
+    return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
+
+def contem_palavra_relevante(texto, uf):
+    if not texto: return False
+    for b in BLACKLIST:
+        padrao = b if r"\b" in b else r"\b" + b
+        if re.search(padrao, texto): return False
+    for k in KEYWORDS_GERAIS:
+        padrao = k if r"\b" in k else r"\b" + k
+        if re.search(padrao, texto): return True
+    if uf in UFS_NORDESTE:
+        for k in KEYWORDS_NORDESTE:
+            padrao = k if r"\b" in k else r"\b" + k
+            if re.search(padrao, texto): return True
+    return False
+
+def criar_sessao():
+    s = requests.Session()
+    adapter = HTTPAdapter(pool_connections=MAX_WORKERS, pool_maxsize=MAX_WORKERS, max_retries=Retry(total=3, backoff_factor=0.5, status_forcelist=[500,502,503,504]))
+    s.mount("https://", adapter)
+    return s
+
+def buscar_todos_itens(session, cnpj, ano, seq):
+    url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
+    itens = []
+    pag = 1
+    while pag <= 200: 
+        try:
+            r = session.get(url, params={"pagina": pag, "tamanhoPagina": 50}, timeout=15)
+            if r.status_code != 200: break
+            dados = r.json()
+            lista = dados.get('data', []) if isinstance(dados, dict) else dados
+            if not lista: break 
+            itens.extend(lista)
+            if len(lista) < 50: break 
+            pag += 1
+        except: break
+    return itens
+
+def buscar_todos_resultados(session, cnpj, ano, seq, itens_raw):
+    resultados = []
+    urls = [
+        f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{cnpj}/{ano}/{seq}/resultados",
+        f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/resultados"
+    ]
+    for url in urls:
+        pag = 1
+        while pag <= 200:
+            try:
+                r = session.get(url, params={"pagina": pag, "tamanhoPagina": 50}, timeout=10)
+                if r.status_code == 200:
+                    dados = r.json()
+                    lista = dados.get('data', []) if isinstance(dados, dict) else dados
+                    if lista:
+                        resultados.extend(lista)
+                        if len(lista) < 50: break
+                        pag += 1
+                        continue
+                break 
+            except: break
+        if resultados: break 
+
+    for i in itens_raw:
+        num = i.get('numeroItem') or i.get('sequencialItem')
+        if num is None: continue
+        ja_tem = any(str(r.get('numeroItem') or r.get('sequencialItem')) == str(num) for r in resultados)
+        tem_res = i.get('temResultado', False)
+        sit = str(i.get('situacaoCompraItemId'))
+        if (tem_res or sit in ["2", "3", "4", "5", "6"]) and not ja_tem:
+            url_item = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num}/resultados"
+            try:
+                r = session.get(url_item, timeout=5)
+                if r.status_code == 200:
+                    dados = r.json()
+                    lista = dados.get('data', []) if isinstance(dados, dict) else dados
+                    if lista:
+                        for res_item in lista:
+                            if 'numeroItem' not in res_item:
+                                res_item['numeroItem'] = num
+                            resultados.append(res_item)
+            except: pass
+    return resultados
+
+def capturar_detalhes_completos(itens_raw, resultados_raw):
+    itens_map = {}
+    mapa_beneficio = {1: "Sim", 2: "Sim", 3: "Sim", 4: "Não", 5: "Não"}
+    mapa_sit = {1: "EM ANDAMENTO", 2: "HOMOLOGADO", 3: "ANULADO", 4: "REVOGADO", 5: "FRACASSADO", 6: "DESERTO"}
+    mapa_ind = {1: "INFORMADO", 2: "FRACASSADO", 3: "DESERTO", 4: "ANULADO", 5: "REVOGADO"}
+    for i in itens_raw:
+        try:
+            num = i.get('numeroItem') or i.get('sequencialItem')
+            if num is None: continue
+            num = int(num)
+            qtd = float(i.get('quantidade') or 0)
+            unit_est = float(i.get('valorUnitarioEstimado') or 0)
+            total_est = float(i.get('valorTotalEstimado') or 0)
+            if total_est == 0 and qtd > 0 and unit_est > 0:
+                total_est = round(qtd * unit_est, 2)
+            cod_ben = i.get('tipoBeneficioId') or 5
+            cod_sit = i.get('situacaoCompraItemId') or 1
+            sit_nome = mapa_sit.get(int(cod_sit), "EM ANDAMENTO")
+            itens_map[num] = {
+                "item": num, "desc": i.get('descricao', 'Sem descrição'), "qtd": qtd,
+                "unitario_est": unit_est, "total_est": total_est, "situacao": sit_nome,
+                "tem_resultado": False, "fornecedor": sit_nome if int(cod_sit) > 2 else "EM ANDAMENTO",
+                "unitario_hom": 0.0, "total_hom": 0.0, "me_epp": mapa_beneficio.get(int(cod_ben), "Não")
+            }
+        except: continue
+    for res in resultados_raw:
+        try:
+            num = res.get('numeroItem') or res.get('sequencialItem')
+            if num is None: continue
+            num = int(num)
+            ind_res = int(res.get('indicadorResultadoId') or 1)
+            if ind_res in [2, 3, 4, 5]:
+                sit_res = mapa_ind.get(ind_res)
+                if num in itens_map:
+                    itens_map[num].update({"tem_resultado": True, "situacao": sit_res, "fornecedor": sit_res})
+            else:
+                forn = res.get('nomeRazaoSocialFornecedor') or res.get('nomeFornecedor') or 'VENCEDOR ANÔNIMO'
+                u_hom = float(res.get('valorUnitarioHomologado') or res.get('precoUnitario') or res.get('valorUnitario') or 0)
+                t_hom = float(res.get('valorTotalHomologado') or res.get('valorTotal') or 0)
+                q_hom = float(res.get('quantidadeHomologada') or 0)
+                if t_hom == 0 and u_hom > 0:
+                    q = q_hom if q_hom > 0 else (itens_map[num]['qtd'] if num in itens_map else 1)
+                    t_hom = u_hom * q
+                if num in itens_map and (u_hom > 0 or t_hom > 0 or forn != 'VENCEDOR ANÔNIMO'):
+                    itens_map[num].update({
+                        "tem_resultado": True, "situacao": "HOMOLOGADO",
+                        "fornecedor": forn, "unitario_hom": u_hom, "total_hom": t_hom
+                    })
+        except: continue
+    return sorted(list(itens_map.values()), key=lambda x: x['item'])
+
+def processar_licitacao_individual(session, lic):
     try:
-        cnpj_limpo = re.sub(r'\D', '', str(lic['orgao_cnpj']))
-        lic_id = f"{cnpj_limpo}{lic['ano_compra']}{lic['sequencial_compra']}"
-        
-        url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj_limpo}/compras/{lic['ano_compra']}/{lic['sequencial_compra']}/itens"
-        r = session.get(url_itens, timeout=15, verify=False)
-        if r.status_code != 200: return None
-        
-        itens_validos = []
-        for it in r.json():
-            if validar_item(it.get('descricao', '')):
-                itens_validos.append({
-                    "item": it.get('numero_item'),
-                    "desc": it.get('descricao'),
-                    "qtd": it.get('quantidade') or 0,
-                    "unitario_est": float(it.get('valor_unitario_estimado') or 0),
-                    "total_est": float(it.get('valor_total_estimado') or 0),
-                    "situacao": it.get('situacao_compra_item_nome', 'EM ANDAMENTO')
-                })
-        
-        if not itens_validos: return None
+        unid = lic.get('unidadeOrgao', {})
+        uf = unid.get('ufSigla') or lic.get('unidadeFederativaId')
+        if uf not in UFS_ALVO: return None
+        cnpj, ano, seq = lic['orgaoEntidade']['cnpj'], lic['anoCompra'], lic['sequencialCompra']
+        id_lic = f"{cnpj}{ano}{seq}"
+        eh_rel = False
+        obj_norm = normalize(lic.get('objetoCompra'))
+        if contem_palavra_relevante(obj_norm, uf): eh_rel = True
+        itens_raw = []
+        resultados_raw = []
+        if not eh_rel:
+            itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
+            for it in itens_raw:
+                if contem_palavra_relevante(normalize(it.get('descricao', '')), uf):
+                    eh_rel = True
+                    break
+        if eh_rel:
+            if not itens_raw: itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
+            resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq, itens_raw)
+            detalhes = capturar_detalhes_completos(itens_raw, resultados_raw)
+            if detalhes:
+                return {
+                    "id": id_lic, "data_pub": lic.get('dataPublicacaoPncp'),
+                    "data_encerramento": lic.get('dataEncerramentoProposta'),
+                    "uf": uf, "cidade": unid.get('municipioNome'),
+                    "orgao": lic['orgaoEntidade']['razaoSocial'],
+                    "unidade_compradora": unid.get('nomeUnidade'),
+                    "objeto": lic.get('objetoCompra'),
+                    "edital": f"{lic.get('numeroCompra')}/{ano}",
+                    "uasg": unid.get('codigoUnidade') or "---",
+                    "valor_global": float(lic.get('valorTotalEstimado') or 0),
+                    "is_sigiloso": lic.get('niValorTotalEstimado', False),
+                    "qtd_itens": len(detalhes), 
+                    "link": f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
+                    "itens": detalhes
+                }
+    except: pass
+    return None
 
-        return {
-            "id": lic_id,
-            "data_pub": lic.get('data_publicacao_pncp', ''),
-            "data_encerramento": lic.get('data_encerramento_proposta', ''),
-            "uf": lic.get('unidade_orgao', {}).get('uf_sigla', 'XX'),
-            "cidade": lic.get('unidade_orgao', {}).get('municipio_nome', ''),
-            "orgao": lic.get('orgao_nome_fantasia', '') or lic.get('orgao_razao_social', ''),
-            "objeto": lic.get('objeto_compra', ''),
-            "link": f"https://pncp.gov.br/app/editais/{cnpj_limpo}/{lic['ano_compra']}/{lic['sequencial_compra']}",
-            "itens": itens_validos
-        }
-    except: return None
+def processar_urls_manuais(session, banco):
+    if not os.path.exists(ARQ_MANUAIS): return 0
+    with open(ARQ_MANUAIS, 'r') as f:
+        urls = [line.strip() for line in f.readlines() if 'editais/' in line]
+    if not urls: return 0
+    count = 0
+    for url in urls:
+        try:
+            parts = url.split('editais/')[1].split('/')
+            cnpj, ano, seq = parts[0], parts[1], parts[2]
+            id_lic = f"{cnpj}{ano}{seq}"
+            api_url = f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao/{cnpj}/{ano}/{seq}"
+            resp = session.get(api_url, timeout=15)
+            if resp.status_code == 200:
+                lic = resp.json()
+                if str(lic.get('modalidadeId')) != "6": continue
+                res = processar_licitacao_individual(session, lic)
+                if res:
+                    res['link'] = url 
+                    banco[id_lic] = res
+                    count += 1
+        except: pass
+    with open(ARQ_MANUAIS, 'w') as f: f.write("")
+    return count
 
-if __name__ == "__main__":
-    # Carregar banco existente (se houver)
+def run():
+    if os.path.exists(ARQ_FINISH): os.remove(ARQ_FINISH)
+    session = criar_sessao()
     banco = {}
     if os.path.exists(ARQ_DADOS):
         try:
-            with open(ARQ_DADOS, 'r', encoding='utf-8') as f:
-                conteudo = f.read().replace('const dadosLicitacoes = ', '').rstrip(';')
-                for i in json.loads(conteudo): banco[i['id']] = i
+            with gzip.open(ARQ_DADOS, 'rt', encoding='utf-8') as f: # LEITURA GZ
+                json_str = f.read()
+                if json_str: banco = {i['id']: i for i in json.loads(json_str)}
         except: pass
-
-    # Checkpoint
-    data_alvo = datetime(2025, 12, 1)
-    if os.path.exists(ARQ_CHECKPOINT):
-        with open(ARQ_CHECKPOINT, 'r') as f:
-            data_alvo = datetime.strptime(f.read().strip(), '%Y%m%d')
-
-    session = requests.Session()
-    session.mount("https://", HTTPAdapter(max_retries=3))
-    
-    d_str = data_alvo.strftime('%Y%m%d')
-    print(f"🚀 Sniper PNCP - Varrendo Divulgações de: {data_alvo.strftime('%d/%m/%Y')}")
-    
-    pag = 1
+    hoje = datetime.now()
+    if banco:
+        print("🔄 Revisando base antiga...")
+        ids_remover = []
+        for id_lic, lic in banco.items():
+            uf = lic.get('uf', '')
+            obj_norm = normalize(lic.get('objeto', ''))
+            eh_rel = False
+            if contem_palavra_relevante(obj_norm, uf):
+                eh_rel = True
+            else:
+                for it in lic.get('itens', []):
+                    if contem_palavra_relevante(normalize(it.get('desc', '')), uf):
+                        eh_rel = True
+                        break
+            if not eh_rel:
+                ids_remover.append(id_lic)
+                continue
+            try:
+                data_enc_str = lic.get('data_encerramento')
+                if data_enc_str:
+                    data_enc = datetime.strptime(data_enc_str[:10], '%Y-%m-%d')
+                    if data_enc.date() <= hoje.date():
+                        tem_pendente = any(i.get('situacao') == 'EM ANDAMENTO' for i in lic.get('itens', []))
+                        if tem_pendente:
+                            cnpj, ano, seq = id_lic[:14], id_lic[14:18], id_lic[18:]
+                            itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
+                            resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq, itens_raw)
+                            if itens_raw:
+                                lic['itens'] = capturar_detalhes_completos(itens_raw, resultados_raw)
+            except: pass
+        for id_lic in ids_remover:
+            del banco[id_lic]
+    processar_urls_manuais(session, banco)
+    if not os.path.exists(ARQ_CHECKPOINT):
+        with open(ARQ_CHECKPOINT, 'w') as f: f.write("20260101")
+    with open(ARQ_CHECKPOINT, 'r') as f: data_str = f.read().strip()
+    data_alvo = datetime.strptime(data_str, '%Y%m%d')
+    if data_alvo.date() > hoje.date():
+        print("✅ Concluído!")
+        with open(ARQ_FINISH, 'w') as f: f.write('done')
+        return
+    str_data = data_alvo.strftime('%Y%m%d')
+    print(f"🚀 Coletando Dia: {data_alvo.strftime('%d/%m/%Y')}")
+    url_pub = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
+    pagina_pub = 1 
     novos_no_dia = 0
     while True:
-        url = f"https://pncp.gov.br/api/pncp/v1/compras?data_inicial={d_str}&data_final={d_str}&modalidade_contratacao_id=6&pagina={pag}&tamanho_pagina=50"
-        r = session.get(url, timeout=20, verify=False)
-        if r.status_code != 200: break
-        resp = r.json()
-        lics = resp.get('data', [])
-        if not lics: break
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as exe:
-            futuros = {exe.submit(processar_licitacao, l, session): l for l in lics}
-            for f in concurrent.futures.as_completed(futuros):
-                res = f.result()
-                if res:
-                    banco[res['id']] = res
-                    novos_no_dia += 1
-                    print(".", end="", flush=True)
-
-        if pag >= resp.get('total_paginas', 0): break
-        pag += 1
-
-    # Salvar no formato que seu INDEX original entende
+        params = {"dataInicial": str_data, "dataFinal": str_data, "codigoModalidadeContratacao": "6", "pagina": pagina_pub, "tamanhoPagina": 50}
+        try:
+            r = session.get(url_pub, params=params, timeout=25)
+            if r.status_code != 200: break
+            lics = r.json().get('data', [])
+            if not lics: break 
+            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                futuros = {executor.submit(processar_licitacao_individual, session, lic): lic for lic in lics}
+                for futuro in concurrent.futures.as_completed(futuros):
+                    resultado = futuro.result()
+                    if resultado:
+                        banco[resultado['id']] = resultado
+                        novos_no_dia += 1
+            pagina_pub += 1 
+        except: break
+    lista = sorted(list(banco.values()), key=lambda x: x.get('data_encerramento') or '', reverse=True)
     os.makedirs('dados', exist_ok=True)
-    lista_final = sorted(banco.values(), key=lambda x: x.get('data_pub', ''), reverse=True)
-    with open(ARQ_DADOS, 'w', encoding='utf-8') as f:
-        json_str = json.dumps(lista_final, separators=(',', ':'), ensure_ascii=False)
-        f.write(f"const dadosLicitacoes = {json_str};")
+    with gzip.open(ARQ_DADOS, 'wt', encoding='utf-8') as f: # GRAVAÇÃO GZ
+        json.dump(lista, f, separators=(',', ':'), ensure_ascii=False)
+    proximo_dia = (data_alvo + timedelta(days=1))
+    with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo_dia.strftime('%Y%m%d'))
+    if proximo_dia.date() > hoje.date():
+        with open(ARQ_FINISH, 'w') as f: f.write('done')
 
-    # Próximo dia para o Efeito Dominó
-    proximo = data_alvo + timedelta(days=1)
-    with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo.strftime('%Y%m%d'))
-    
-    trigger = "true" if (datetime.now() - proximo).days >= 0 else "false"
-    if "GITHUB_OUTPUT" in os.environ:
-        with open(os.environ["GITHUB_OUTPUT"], "a") as f: print(f"trigger_next={trigger}", file=f)
-    
-    print(f"\n✅ Concluído. Capturas: {novos_no_dia}")
+if __name__ == "__main__":
+    run()
