@@ -7,23 +7,17 @@ on:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    # Adiciona permissões explicitamente no código também
     permissions:
       contents: write
       
     steps:
       - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
       - name: Setup Python
         uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-
+        with: { python-version: '3.10' }
       - name: Install Dependencies
         run: pip install requests pandas
-
+      
       - name: 🎯 Sniper (Captura)
         id: sniper
         run: python app.py
@@ -32,23 +26,15 @@ jobs:
         run: python limpeza.py
         
       - name: 💾 Salvar Dados
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --global user.name 'Sniper Bot'
           git config --global user.email 'bot@sniper.com'
           git add .
-          # Só faz commit se houver mudanças reais
-          if git diff --staged --quiet; then
-            echo "Sem mudanças para salvar"
-          else
-            git commit -m "🤖 Dados Atualizados: $(date +'%d/%m/%Y %H:%M')"
-            git push
-          fi
+          git commit -m "🤖 Dados Atualizados" || echo "Nada para salvar"
+          git push
           
-      - name: 🔄 Efeito Dominó (Reinício)
-        # Verifica se o output do app.py foi 'true' para continuar varrendo
+      - name: 🔄 Efeito Dominó
         if: steps.sniper.outputs.trigger_next == 'true'
-        run: gh workflow run main.yml
+        run: gh workflow run sync-data.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
