@@ -16,16 +16,16 @@ from urllib3.util.retry import Retry
 ARQ_DADOS = 'dados/oportunidades.json.gz'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_CSV = 'Exportar Dados.csv'
+ARQ_EXCLUIDOS = 'excluidos.txt' # <--- NOVO ARQUIVO DE CONTROLE
 MAX_WORKERS = 10 
 
-# Data base inicial do backlog (fixa)
+# Data base inicial do backlog
 DATA_INICIO_VARREDURA = datetime(2025, 12, 1)
 
 # Filtro: Só aceita licitações que encerram a partir de:
 DATA_CORTE_ENCERRAMENTO = datetime(2026, 1, 1)
 
-# Simulação do "Hoje" (Para seu teste: 14/02/2026)
-# Em produção real, você usaria: HOJE = datetime.now()
+# Simulação do "Hoje"
 HOJE = datetime(2026, 2, 14) 
 
 # ==========================================
@@ -75,6 +75,20 @@ def carregar_keywords_csv():
         return [normalizar(k) for k in raw if len(str(k)) > 2]
     except: return []
 
+def carregar_ids_excluidos():
+    """Lê o arquivo de IDs banidos (excluidos.txt)"""
+    ids = set()
+    if os.path.exists(ARQ_EXCLUIDOS):
+        try:
+            with open(ARQ_EXCLUIDOS, 'r') as f:
+                for linha in f:
+                    limpo = linha.strip()
+                    if limpo: ids.add(limpo)
+            print(f"🚫 Blacklist de IDs carregada: {len(ids)} registros banidos.")
+        except Exception as e:
+            print(f"⚠️ Erro ao ler {ARQ_EXCLUIDOS}: {e}")
+    return ids
+
 def validar_item(descricao, uf):
     desc_norm = normalizar(descricao)
     for bad in BLACKLIST:
@@ -93,8 +107,14 @@ def criar_sessao():
     s.mount("https://", HTTPAdapter(max_retries=retry))
     return s
 
-def processar_licitacao(lic, session):
+def processar_licitacao(lic, session, ids_banidos):
     try:
+        lic_id = f"{lic['orgao_cnpj']}{lic['ano_compra']}{lic['sequencial_compra']}"
+        
+        # --- FILTRO 0: ID BANIDO ---
+        if lic_id in ids_banidos:
+            return None # Ignora silenciosamente
+
         # Filtro Data Encerramento
         data_enc_str = lic.get('data_encerramento_proposta')
         if not data_enc_str: return None
@@ -125,7 +145,7 @@ def processar_licitacao(lic, session):
         if not itens_validos: return None
 
         return {
-            "id": f"{lic['orgao_cnpj']}{lic['ano_compra']}{lic['sequencial_compra']}",
+            "id": lic_id,
             "data_pub": lic.get('data_publicacao_pncp', ''),
             "data_encerramento": data_enc_str,
             "uf": uf,
@@ -138,40 +158,28 @@ def processar_licitacao(lic, session):
     except: return None
 
 def atualizar_resultados(banco, session):
-    """
-    VARREDURA QUINZENAL:
-    Verifica se itens 'EM ANDAMENTO' já têm resultado.
-    """
     print("🔍 Iniciando Varredura Quinzenal de Resultados...")
     atualizados = 0
     for lic_id, lic in banco.items():
-        # Se a licitação já encerrou há mais de 2 dias, vale checar
         try:
             dt_enc = datetime.fromisoformat(lic['data_encerramento'])
-            if dt_enc > datetime.now(): continue # Ainda não encerrou
+            if dt_enc > datetime.now(): continue 
         except: continue
 
         url_resultados = f"https://pncp.gov.br/api/pncp/v1/orgaos/{lic['id'][:14]}/compras/{lic['id'][14:18]}/{lic['id'][18:]}/itens"
-        
         try:
             r = session.get(url_resultados, timeout=10)
             if r.status_code == 200:
                 itens_novos = {it['numero_item']: it for it in r.json()}
-                
                 for item_salvo in lic['itens']:
                     novo_dado = itens_novos.get(item_salvo['item'])
                     if novo_dado:
-                        # Atualiza status
                         if item_salvo['situacao'] != novo_dado.get('situacao_compra_item_nome'):
                             item_salvo['situacao'] = novo_dado.get('situacao_compra_item_nome')
                             atualizados += 1
-                        
-                        # Se tiver resultado homologado, pega vencedor (Lógica simplificada)
                         if 'HOMOLOGADO' in str(item_salvo['situacao']).upper():
                             item_salvo['vencedor'] = novo_dado.get('tem_resultado', False)
-                            # (Aqui poderia expandir para buscar o nome do vencedor em outro endpoint se necessário)
         except: pass
-    
     print(f"✅ Varredura Concluída. {atualizados} itens atualizados.")
 
 # ==========================================
@@ -180,10 +188,9 @@ def atualizar_resultados(banco, session):
 if __name__ == "__main__":
     print(f"🚀 SNIPER PNCP - DATA BASE: {HOJE.strftime('%d/%m/%Y')}")
     
-    # 1. Carregar Keywords
     KEYWORDS_GLOBAL = carregar_keywords_csv()
+    IDS_EXCLUIDOS = carregar_ids_excluidos() # <--- CARREGA A BLACKLIST
 
-    # 2. Ler Checkpoint (Onde parei?)
     data_alvo = DATA_INICIO_VARREDURA
     if os.path.exists(ARQ_CHECKPOINT):
         try:
@@ -191,41 +198,35 @@ if __name__ == "__main__":
                 data_alvo = datetime.strptime(f.read().strip(), '%Y%m%d')
         except: pass
 
-    # 3. Determinar o MODO DE OPERAÇÃO
     session = criar_sessao()
     
-    # Carrega banco atual
+    # --- CARREGA E LIMPA BANCO ANTIGO ---
     banco = {}
     if os.path.exists(ARQ_DADOS):
         try:
             with gzip.open(ARQ_DADOS, 'rt', encoding='utf-8') as f:
                 lista = json.load(f)
-                banco = {i['id']: i for i in lista}
+                # Filtra imediatamente os IDs que estão na blacklist
+                banco = {i['id']: i for i in lista if i['id'] not in IDS_EXCLUIDOS}
+                print(f"📚 Banco carregado: {len(banco)} registros (após filtro de exclusão).")
         except: pass
 
     dias_atraso = (HOJE - data_alvo).days
 
     if dias_atraso > 3:
-        # --- MODO BACKLOG (Atrasado) ---
-        # Processa APENAS 1 dia (data_alvo) e para.
         print(f"⚠️ MODO BACKLOG: Processando apenas {data_alvo.strftime('%d/%m/%Y')} (Atraso: {dias_atraso} dias)")
         datas_para_processar = [data_alvo]
         proximo_checkpoint = data_alvo + timedelta(days=1)
         salvar_checkpoint = True
-
     else:
-        # --- MODO ROTINA (Em dia) ---
-        # Processa os últimos 3 dias para garantir
         print(f"✅ MODO ROTINA: Varrendo últimos 3 dias até {HOJE.strftime('%d/%m/%Y')}")
         datas_para_processar = [HOJE - timedelta(days=i) for i in range(3)]
-        proximo_checkpoint = HOJE # Mantém checkpoint no dia atual
-        salvar_checkpoint = True # Atualiza para hoje
+        proximo_checkpoint = HOJE
+        salvar_checkpoint = True
         
-        # --- VARREDURA QUINZENAL (Só no modo rotina) ---
         if HOJE.day in [1, 15]:
             atualizar_resultados(banco, session)
 
-    # 4. Execução da Coleta
     novos = 0
     for data_proc in datas_para_processar:
         d_str = data_proc.strftime('%Y%m%d')
@@ -242,7 +243,8 @@ if __name__ == "__main__":
                 if not data: break
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as exe:
-                    futures = {exe.submit(processar_licitacao, l, session): l for l in data}
+                    # Passamos IDS_EXCLUIDOS para a função de processamento
+                    futures = {exe.submit(processar_licitacao, l, session, IDS_EXCLUIDOS): l for l in data}
                     for f in concurrent.futures.as_completed(futures):
                         res = f.result()
                         if res:
@@ -257,18 +259,15 @@ if __name__ == "__main__":
                 break
         print(f" -> OK")
 
-    # 5. Salvar Tudo
     print(f"\n💾 Salvando... (Total no banco: {len(banco)})")
     
-    # Salvar Dados
     os.makedirs('dados', exist_ok=True)
     lista_final = sorted(list(banco.values()), key=lambda x: x.get('data_encerramento', ''), reverse=True)
     with gzip.open(ARQ_DADOS, 'wt', encoding='utf-8') as f:
         json.dump(lista_final, f, ensure_ascii=False, separators=(',', ':'))
 
-    # Salvar Checkpoint (Só se estiver em modo Backlog ou se for dia de atualização)
     if salvar_checkpoint:
         with open(ARQ_CHECKPOINT, 'w') as f:
             f.write(proximo_checkpoint.strftime('%Y%m%d'))
             
-    print(f"🏁 Finalizado. Checkpoint movido para: {proximo_checkpoint.strftime('%d/%m/%Y')}")
+    print(f"🏁 Finalizado.")
