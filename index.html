@@ -9,27 +9,17 @@
     <style>
         :root { --primary-dark: #2c3e50; --accent-blue: #3498db; --danger-red: #e74c3c; --success-green: #27ae60; }
         body { background-color: #f4f7f6; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 0.85rem; }
-        
         .header-bar { background: var(--primary-dark); color: white; padding: 12px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .app-logo { font-size: 1.2rem; font-weight: 700; letter-spacing: 1px; }
-
-        .card-table { border: none; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); background: white; margin-bottom: 15px; transition: transform 0.2s; }
-        .card-table:hover { transform: translateY(-2px); }
-
+        .card-table { border: none; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); background: white; margin-bottom: 12px; padding: 15px; }
         .filter-section { background: white; border-radius: 8px; padding: 20px; margin-bottom: 25px; border-left: 4px solid var(--accent-blue); }
         
-        .badge-uf { width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #ebf5fb; color: var(--accent-blue); font-weight: 700; border: 2px solid #d4e6f1; }
-        
-        /* Estilização das Tarjas Solicitadas */
-        .tarja-beneficio { display: inline-block; padding: 2px 10px; border-radius: 4px; font-weight: 800; font-size: 0.7rem; color: white; text-transform: uppercase; margin-top: 5px; }
+        /* Tarjas de Exclusividade Solicitadas */
+        .tarja { display: inline-block; padding: 2px 10px; border-radius: 4px; font-weight: 800; font-size: 0.65rem; color: white; margin-top: 5px; text-transform: uppercase; }
         .bg-exclusivo { background-color: var(--danger-red); }
         .bg-parcial { background-color: #e67e22; }
         .bg-amplo { background-color: var(--success-green); }
 
-        .status-pill { padding: 2px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
-        .bg-andamento { background: #fff3cd; color: #856404; }
-        .bg-homologado { background: #d4edda; color: #155724; }
-        
         #loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; }
     </style>
 </head>
@@ -42,39 +32,39 @@
 
     <div class="header-bar d-flex justify-content-between align-items-center">
         <div class="app-logo"><i class="fa-solid fa-crosshairs me-2"></i>SNIPER PNCP</div>
-        <div id="stats" class="small text-white-50">Carregando dados...</div>
+        <div id="stats" class="small text-white-50">Sincronizando...</div>
     </div>
 
     <div class="container-fluid py-4">
         <div class="filter-section shadow-sm">
             <div class="row g-2">
                 <div class="col-md-3">
-                    <label class="form-label small fw-bold">Palavra-chave / Fármaco</label>
-                    <input type="text" id="fBusca" class="form-control form-control-sm" placeholder="Ex: Dipirona, Seringa..." onkeyup="pagina=1; render()">
+                    <label class="form-label small fw-bold">Busca / Fármaco</label>
+                    <input type="text" id="fBusca" class="form-control form-control-sm" placeholder="Ex: Dipirona..." onkeyup="pagina=1; render()">
                 </div>
                 <div class="col-md-1">
                     <label class="form-label small fw-bold">UF</label>
-                    <input type="text" id="fUF" class="form-control form-control-sm" placeholder="Ex: SP" onkeyup="pagina=1; render()">
+                    <input type="text" id="fUF" class="form-control form-control-sm" placeholder="Ex: DF" onkeyup="pagina=1; render()">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Órgão / Unidade Compradora</label>
+                    <input type="text" id="fLocal" class="form-control form-control-sm" placeholder="Ex: Secretaria de Saúde..." onkeyup="pagina=1; render()">
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label small fw-bold">Órgão / Unidade</label>
-                    <input type="text" id="fLocal" class="form-control form-control-sm" placeholder="Ex: Saúde, Fundo..." onkeyup="pagina=1; render()">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label small fw-bold">Data Encerramento</label>
+                    <label class="form-label small fw-bold">Data Enc.</label>
                     <input type="date" id="fDataEnc" class="form-control form-control-sm" onchange="pagina=1; render()">
                 </div>
-                <div class="col-md-4 d-flex align-items-end gap-1">
-                    <button class="btn btn-primary btn-sm w-100 fw-bold" onclick="render()"><i class="fa-solid fa-filter me-1"></i> FILTRAR</button>
+                <div class="col-md-3 d-flex align-items-end gap-1">
+                    <button class="btn btn-primary btn-sm w-100 fw-bold" onclick="render()">FILTRAR</button>
                     <button class="btn btn-outline-secondary btn-sm" onclick="limparFiltros()"><i class="fa-solid fa-eraser"></i></button>
-                    <button class="btn btn-dark btn-sm" onclick="abrirModalManual()"><i class="fa-solid fa-plus"></i></button>
+                    <button class="btn btn-success btn-sm" onclick="abrirModalManual()"><i class="fa-solid fa-plus"></i></button>
                 </div>
             </div>
         </div>
 
         <div id="containerLicitacoes"></div>
 
-        <div class="d-flex flex-wrap justify-content-between align-items-center mt-4 px-2 bg-white p-3 rounded shadow-sm">
+        <div class="d-flex flex-wrap justify-content-between align-items-center mt-4 bg-white p-3 rounded shadow-sm">
             <div id="infoPagina" class="small text-muted fw-bold"></div>
             <div class="d-flex align-items-center gap-2">
                 <div class="btn-group">
@@ -93,7 +83,7 @@
         <div class="modal-dialog modal-xl modal-dialog-scrollable">
             <div class="modal-content shadow-lg border-0">
                 <div class="modal-header bg-dark text-white py-2">
-                    <h6 class="modal-title">Detalhes do Edital</h6>
+                    <h6 class="modal-title">Detalhamento dos Itens</h6>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body p-0" id="modalCorpo"></div>
@@ -109,14 +99,14 @@
 
         async function carregarDados() {
             try {
-                const resp = await fetch(`dados/oportunidades.json.gz?v=${Date.now()}`);
+                const resp = await fetch(`dados/oportunidades.json.gz?t=${Date.now()}`);
                 const ds = new DecompressionStream("gzip");
                 const texto = await new Response(resp.body.pipeThrough(ds)).text();
                 dadosLicitacoes = JSON.parse(texto);
                 document.getElementById('loader').style.display = 'none';
                 render();
             } catch (e) {
-                document.getElementById('loader').innerHTML = `<div class="alert alert-danger">Erro ao carregar banco de dados.</div>`;
+                document.getElementById('loader').innerHTML = `<div class="alert alert-danger mx-4 text-center">Aguardando geração da base de dados...</div>`;
             }
         }
 
@@ -141,48 +131,37 @@
             const inicio = (pagina - 1) * itensPorPagina;
             const exibidos = filtrados.slice(inicio, inicio + itensPorPagina);
 
-            document.getElementById('stats').innerText = `${filtrados.length} oportunidades`;
+            document.getElementById('stats').innerText = `${filtrados.length} PREGÕES ENCONTRADOS`;
             document.getElementById('infoPagina').innerText = `Página ${pagina} de ${totalPaginas || 1}`;
-            document.getElementById('btnAnterior').disabled = pagina === 1;
-            document.getElementById('btnProximo').disabled = pagina >= totalPaginas;
 
             container.innerHTML = '';
             exibidos.forEach(l => {
-                const totalEstimado = l.itens.reduce((acc, i) => acc + (i.total_est || 0), 0);
-                
-                // Lógica de Tarja
-                const totalItens = l.itens.length;
-                const simME = l.itens.filter(i => i.me_epp === 'Sim').length;
-                let tarjaHtml = '';
-                if (simME === totalItens) tarjaHtml = '<span class="tarja-beneficio bg-exclusivo">EXCLUSIVO</span>';
-                else if (simME > 0) tarjaHtml = '<span class="tarja-beneficio bg-parcial">PARCIAL</span>';
-                else tarjaHtml = '<span class="tarja-beneficio bg-amplo">AMPLO</span>';
-
+                const totalLicitacao = l.itens.reduce((acc, i) => acc + (i.total_est || 0), 0);
                 container.innerHTML += `
-                    <div class="card card-table p-3">
+                    <div class="card card-table">
                         <div class="row align-items-center">
                             <div class="col-md-2 text-center">
                                 <div class="small text-muted fw-bold">Edital Nº</div>
-                                <div class="text-primary fw-bold">${l.id.substring(14)}</div>
-                                ${tarjaHtml}
+                                <div class="text-primary fw-bold" style="font-size:0.95rem;">${l.id.substring(14)}</div>
+                                <span class="tarja ${l.tarja === 'EXCLUSIVO' ? 'bg-exclusivo' : (l.tarja === 'PARCIAL' ? 'bg-parcial' : 'bg-amplo')}">${l.tarja}</span>
                             </div>
                             <div class="col-md-4 border-start ps-3">
-                                <div class="fw-bold text-dark text-truncate">${l.orgao}</div>
+                                <div class="fw-bold text-dark">${l.orgao}</div>
                                 <div class="small text-muted"><i class="fa-solid fa-location-dot me-1"></i>${l.cidade} / ${l.uf}</div>
                             </div>
                             <div class="col-md-3 border-start ps-3">
                                 <div class="small text-muted fw-bold">Encerramento</div>
-                                <div class="fw-bold">${l.data_enc ? new Date(l.data_enc).toLocaleString('pt-BR') : 'Sigiloso'}</div>
+                                <div class="fw-bold">${l.data_enc ? new Date(l.data_enc).toLocaleString('pt-BR') : 'SIGILOSO'}</div>
                                 <div class="small text-truncate text-secondary">${l.objeto}</div>
                             </div>
                             <div class="col-md-3 border-start text-end">
                                 <div class="small text-muted">Total Estimado</div>
-                                <div class="fw-bold fs-6 ${totalEstimado <= 0 ? 'text-danger' : 'text-success'}">
-                                    ${totalEstimado <= 0 ? 'SIGILOSO' : 'R$ ' + totalEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                                <div class="fw-bold fs-6 ${totalLicitacao <= 0 ? 'text-danger' : 'text-success'}">
+                                    ${totalLicitacao <= 0 ? 'SIGILOSO' : 'R$ ' + totalLicitacao.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                                 </div>
-                                <div class="mt-2">
+                                <div class="mt-2 btn-group">
                                     <button class="btn btn-sm btn-dark" onclick="verDetalhes('${l.id}')">DETALHES</button>
-                                    <button class="btn btn-sm btn-outline-danger" onclick="excluirLicitacao('${l.id}')"><i class="fa-solid fa-trash-can"></i></button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="excluirLicitacao('${l.id}')"><i class="fa-solid fa-trash"></i></button>
                                 </div>
                             </div>
                         </div>
@@ -197,9 +176,9 @@
 
             corpo.innerHTML = `
                 <div class="p-3 bg-light border-bottom">
-                    <h6 class="text-primary fw-bold mb-1">${l.orgao} | Edital: ${l.id}</h6>
+                    <h6 class="text-primary fw-bold mb-1">${l.orgao} | Unidade: ${l.id.substring(0,14)}</h6>
                     <p class="small text-muted mb-2">${l.objeto}</p>
-                    <a href="${l.link}" target="_blank" class="btn btn-xs btn-success small py-1 px-3 text-white text-decoration-none">ABRIR NO PNCP <i class="fa-solid fa-external-link ms-1"></i></a>
+                    <a href="${l.link}" target="_blank" class="btn btn-sm btn-success text-white px-3">ABRIR PNCP</a>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-sm table-hover mb-0" style="font-size: 0.75rem;">
@@ -208,8 +187,8 @@
                                 <th class="ps-3">Item</th>
                                 <th>Descrição</th>
                                 <th class="text-center">Qtd</th>
-                                <th class="text-end">Total Est.</th>
-                                <th class="text-center">ME/EPP</th>
+                                <th class="text-end">V. Total Est.</th>
+                                <th class="text-center">Benefício ME/EPP</th>
                                 <th class="ps-3">Situação</th>
                             </tr>
                         </thead>
@@ -220,8 +199,8 @@
                                     <td class="fw-bold">${it.desc}</td>
                                     <td class="text-center">${it.qtd}</td>
                                     <td class="text-end">${fmt.format(it.total_est)}</td>
-                                    <td class="text-center">${it.me_epp === 'Sim' ? '<b>SIM</b>' : 'NÃO'}</td>
-                                    <td class="ps-3"><span class="status-pill bg-andamento">${it.situacao}</span></td>
+                                    <td class="text-center"><b>${it.me_epp}</b></td>
+                                    <td class="ps-3 small">${it.situacao}</td>
                                 </tr>`).join('')}
                         </tbody>
                     </table>
@@ -235,7 +214,6 @@
                 pagina = p; render(); window.scrollTo(0,0);
             }
         }
-
         function mudarPagina(dir) { pagina += dir; render(); window.scrollTo(0,0); }
         function limparFiltros() { document.querySelectorAll('input').forEach(i => i.value = ''); render(); }
         function excluirLicitacao(id) {
@@ -244,7 +222,7 @@
                 ex.push(id); localStorage.setItem('sniper_excluidos', JSON.stringify(ex)); render();
             }
         }
-        function abrirModalManual() { alert('Cole a URL no arquivo urls.txt no GitHub.'); }
+        function abrirModalManual() { alert('Cole a URL no arquivo urls.txt no seu repositório.'); }
 
         window.onload = carregarDados;
     </script>
