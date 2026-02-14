@@ -2,38 +2,25 @@ import json, os, gzip, unicodedata, re, pandas as pd
 
 ARQ_DADOS = 'dados/oportunidades.json.gz'
 ARQ_CSV = 'Exportar Dados.csv'
-DATA_CORTE = "2026-01-01"
 
-BLACKLIST_OBJETO = [
-    "LOCACAO", "ALUGUEL", "GRAFICO", "IMPRESSAO", "EQUIPAMENTO", "MOVEIS", "MANUTENCAO", 
-    "OBRA", "INFORMATICA", "VEICULO", "PRESTACAO DE SERVICO", "REFORMA", "ESPORTIVO", 
-    "MATERIAL PERMANENTE", "MATERIAIS PERMANENTES", "MATERIAL DE PINTURA", 
-    "MATERIAIS DE CONSTRUCAO", "GENERO ALIMENTICIO", "GENEROS ALIMENTICIOS", 
-    "MERENDA", "ESCOLAR", "EXPEDIENTE", "MATERIAIS DE EXPEDIENTE", "EXAMES", 
-    "LABORATORIO", "LABORATORIAIS"
-]
-
+# BLACKLIST RIGOROSA NO OBJETO
+BLACKLIST_OBJETO = ["LOCACAO", "ALUGUEL", "GRAFICO", "IMPRESSAO", "EQUIPAMENTO", "MOVEIS", "MANUTENCAO", "OBRA", "INFORMATICA", "VEICULO", "PRESTACAO DE SERVICO", "REFORMA", "ESPORTIVO", "MATERIAL PERMANENTE", "GENERO ALIMENTICIO", "MERENDA", "ESCOLAR", "EXPEDIENTE", "EXAMES", "LABORATORIO"]
 UFS_ALVO = ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE", "ES", "MG", "RJ", "SP", "AM", "PA", "TO", "RO", "GO", "MT", "MS", "DF"]
 
 def normalize(t):
-    if not t: return ""
-    return ''.join(c for c in unicodedata.normalize('NFD', str(t).upper()) if unicodedata.category(c) != 'Mn')
+    return ''.join(c for c in unicodedata.normalize('NFD', str(t or '').upper()) if unicodedata.category(c) != 'Mn')
 
-def carregar_meus_produtos():
-    produtos = set()
+def limpar():
+    if not os.path.exists(ARQ_DADOS): return
+    
+    meus_produtos = set()
     if os.path.exists(ARQ_CSV):
         try:
             df = pd.read_csv(ARQ_CSV, encoding='latin1', sep=None, engine='python')
             for val in df.iloc[:, 0].dropna().unique():
-                norm = normalize(str(val))
-                if len(norm) > 3: produtos.add(norm)
+                meus_produtos.add(normalize(str(val)))
         except: pass
-    return produtos
 
-def limpar():
-    if not os.path.exists(ARQ_DADOS): return
-    meus_produtos = carregar_meus_produtos()
-    
     with gzip.open(ARQ_DADOS, 'rt', encoding='utf-8') as f:
         dados = json.load(f)
 
@@ -41,61 +28,61 @@ def limpar():
     mapa_sit = {1: "EM ANDAMENTO", 2: "HOMOLOGADO", 3: "ANULADO", 4: "REVOGADO", 5: "FRACASSADO", 6: "DESERTO"}
 
     for lic in dados:
-        # VETO ABSOLUTO NO OBJETO
         obj_norm = normalize(lic.get('objeto', ''))
-        if any(termo in obj_norm for termo in BLACKLIST_OBJETO): continue
+        # FILTRO DE BLACKLIST NO OBJETO
+        if any(t in obj_norm for t in BLACKLIST_OBJETO): continue
+        # FILTRO DE ESTADO
         if lic.get('uf') not in UFS_ALVO: continue
-        if lic.get('data_enc') and lic['data_enc'][:10] < DATA_CORTE: continue
+        # FILTRO DE DATA
+        if lic.get('data_enc') and lic['data_enc'][:10] < "2026-01-01": continue
 
         if 'itens_raw' not in lic:
             banco_final.append(lic); continue
 
         itens_proc = {}
-        soma_total = 0
         for it in lic['itens_raw']:
             num = int(it.get('numeroItem') or it.get('sequencialItem') or 0)
-            desc_norm = normalize(it.get('descricao', ''))
-            
-            # Checa compatibilidade com seu CSV
-            match = any(p in desc_norm for p in meus_produtos)
-            
-            v_unit = float(it.get('valorUnitarioEstimado') or 0)
-            qtd = float(it.get('quantidade') or 0)
-            v_total = float(it.get('valorTotalEstimado') or (v_unit * qtd))
-            soma_total += v_total
+            desc = it.get('descricao', '')
             
             itens_proc[num] = {
-                "item": num, "desc": it.get('descricao', ''), "qtd": qtd,
-                "total_est": v_total, "match": match,
+                "item": num,
+                "desc": desc,
+                "qtd": float(it.get('quantidade') or 0),
+                "unit_est": float(it.get('valorUnitarioEstimado') or 0),
+                "total_est": float(it.get('valorTotalEstimado') or 0),
+                "unit_hom": 0.0,
+                "total_hom": 0.0,
                 "me_epp": "Sim" if it.get('tipoBeneficioId') in [1, 2, 3] else "Não",
+                "match": any(p in normalize(desc) for p in meus_produtos),
                 "situacao": mapa_sit.get(it.get('situacaoCompraItemId'), "EM ANDAMENTO"),
                 "fornecedor": "EM ANDAMENTO"
             }
 
-        # Vincula Ganhadores
+        # VINCULANDO RESULTADOS EXAUSTIVOS
         for res in lic.get('resultados_raw', []):
             num = int(res.get('numeroItem') or res.get('sequencialItem') or 0)
             if num in itens_proc:
                 itens_proc[num].update({
                     "situacao": "HOMOLOGADO",
-                    "fornecedor": res.get('nomeRazaoSocialFornecedor') or "VENCEDOR"
+                    "fornecedor": res.get('nomeRazaoSocialFornecedor') or "VENCEDOR",
+                    "unit_hom": float(res.get('valorUnitarioHomologado') or 0),
+                    "total_hom": float(res.get('valorTotalHomologado') or 0)
                 })
 
-        # Tarjas ME/EPP
+        # TARJAS DE EXCLUSIVIDADE
         count_me = sum(1 for i in itens_proc.values() if i['me_epp'] == "Sim")
         if count_me == len(itens_proc): lic['tarja'] = "TODO EXCLUSIVO"
         elif count_me == 0: lic['tarja'] = "TODO AMPLO"
         else: lic['tarja'] = "PARCIAL"
-
-        lic['valor_total_final'] = soma_total if soma_total > 0 else lic.get('valor_global_api', 0)
-        lic['itens'] = sorted(itens_proc.values(), key=lambda x: x['item'])
         
-        for k in ['itens_raw', 'resultados_raw', 'valor_global_api', 'sigiloso_api']:
-            lic.pop(k, None)
+        lic['itens'] = sorted(itens_proc.values(), key=lambda x: x['item'])
+        lic['valor_final'] = sum(i['total_est'] for i in itens_proc.values())
+        
+        # PRESERVAÇÃO DOS CAMPOS MESTRE
+        for k in ['itens_raw', 'resultados_raw', 'valor_global_api']: lic.pop(k, None)
         banco_final.append(lic)
 
     with gzip.open(ARQ_DADOS, 'wt', encoding='utf-8') as f:
         json.dump(banco_final, f, ensure_ascii=False, separators=(',', ':'))
 
-if __name__ == "__main__":
-    limpar()
+if __name__ == "__main__": limpar()
