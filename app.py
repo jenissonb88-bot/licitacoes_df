@@ -6,13 +6,13 @@ import concurrent.futures
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# === CONFIGURAÇÕES ===
 ARQ_DADOS = 'dados/oportunidades.json.gz'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_CSV = 'Exportar Dados.csv'
-MAX_WORKERS = 15 
+MAX_WORKERS = 10 
 
-KEYWORDS_SAUDE = ["MEDICAMENT", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGIC", "SERINGA", "AGULHA", "LUVA", "GAZE", "EQUIPO", "CATETER"]
+# Ampliei a lista para garantir captura
+KEYWORDS_SAUDE = ["MEDICAMENT", "FARMACO", "SORO", "VACINA", "HOSPITALAR", "CIRURGIC", "DISEASE", "SAUDE", "UBS", "HOSPITAL", "CLINIC"]
 
 def normalizar(texto):
     if not isinstance(texto, str): return ""
@@ -36,12 +36,15 @@ def processar_licitacao(lic, session, keywords_global):
         cnpj = re.sub(r'\D', '', str(lic['orgao_cnpj']))
         lic_id = f"{cnpj}{lic['ano_compra']}{lic['sequencial_compra']}"
         url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{lic['ano_compra']}/{lic['sequencial_compra']}/itens"
-        r = session.get(url_itens, timeout=15, verify=False)
+        
+        r = session.get(url_itens, timeout=20, verify=False)
         if r.status_code != 200: return None
         
         itens = []
         for it in r.json():
-            if any(k in normalizar(it.get('descricao', '')) for k in keywords_global):
+            desc_completa = normalizar(it.get('descricao', ''))
+            # Verifica se o termo está na descrição do item
+            if any(k in desc_completa for k in keywords_global):
                 itens.append({
                     "item": it.get('numero_item'),
                     "desc": it.get('descricao'),
@@ -64,12 +67,18 @@ def processar_licitacao(lic, session, keywords_global):
 
 if __name__ == "__main__":
     keywords_global = carregar_csv()
-    data_alvo = datetime(2025, 12, 1)
+    
+    # MUDE AQUI: Coloquei para buscar de hoje caso não haja checkpoint
+    hoje_dt = datetime.now()
+    data_alvo = hoje_dt - timedelta(days=1) 
+    
     if os.path.exists(ARQ_CHECKPOINT):
-        with open(ARQ_CHECKPOINT, 'r') as f: data_alvo = datetime.strptime(f.read().strip(), '%Y%m%d')
+        with open(ARQ_CHECKPOINT, 'r') as f:
+            content = f.read().strip()
+            if content: data_alvo = datetime.strptime(content, '%Y%m%d')
 
     session = requests.Session()
-    session.mount("https://", HTTPAdapter(max_retries=3))
+    session.mount("https://", HTTPAdapter(max_retries=5))
     
     banco = {}
     if os.path.exists(ARQ_DADOS):
@@ -78,28 +87,35 @@ if __name__ == "__main__":
                 for i in json.load(f): banco[i['id']] = i
         except: pass
 
-    hoje = datetime.now()
     d_str = data_alvo.strftime('%Y%m%d')
-    r = session.get(f"https://pncp.gov.br/api/pncp/v1/compras?data_inicial={d_str}&data_final={d_str}&modalidade_contratacao_id=6&pagina=1&tamanho_pagina=50", verify=False)
+    print(f"Buscando licitacoes para o dia: {d_str}")
     
-    novos = 0
-    if r.status_code == 200:
-        lics = r.json().get('data', [])
-        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as exe:
-            futuros = {exe.submit(processar_licitacao, l, session, keywords_global): l for l in lics}
-            for f in concurrent.futures.as_completed(futuros):
-                res = f.result()
-                if res: 
-                    banco[res['id']] = res
-                    novos += 1
+    # BUSCA EM DUAS MODALIDADES: 6 (Pregão) e 10 (Dispensa)
+    novos_total = 0
+    for mod em [6, 10]:
+        url = f"https://pncp.gov.br/api/pncp/v1/compras?data_inicial={d_str}&data_final={d_str}&modalidade_contratacao_id={mod}&pagina=1&tamanho_pagina=100"
+        r = session.get(url, verify=False)
+        if r.status_code == 200:
+            lics = r.json().get('data', [])
+            print(f"Modalidade {mod}: {len(lics)} editais encontrados. Processando...")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as exe:
+                futuros = {exe.submit(processar_licitacao, l, session, keywords_global): l for l in lics}
+                for f in concurrent.futures.as_completed(futuros):
+                    res = f.result()
+                    if res: 
+                        banco[res['id']] = res
+                        novos_total += 1
 
     os.makedirs('dados', exist_ok=True)
     with gzip.open(ARQ_DADOS, 'wt', encoding='utf-8') as f:
         json.dump(list(banco.values()), f, ensure_ascii=False, separators=(',', ':'))
 
+    # Salva o próximo dia para o efeito dominó
     proximo = data_alvo + timedelta(days=1)
     with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo.strftime('%Y%m%d'))
     
-    trigger = "true" if (hoje - proximo).days >= 0 else "false"
+    trigger = "true" if (hoje_dt - proximo).days >= 0 else "false"
     if "GITHUB_OUTPUT" in os.environ:
         with open(os.environ["GITHUB_OUTPUT"], "a") as f: print(f"trigger_next={trigger}", file=f)
+    
+    print(f"Fim da rodada. Capturados: {novos_total}")
