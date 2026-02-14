@@ -1,54 +1,36 @@
-name: Sniper PNCP - Chain Reaction
-
+name: Sniper Inteligente
 on:
-  schedule:
-    - cron: '0 11 * * *'
   workflow_dispatch:
+  schedule:
+    - cron: '0 */3 * * *'
 
 jobs:
-  chain-reaction:
+  run-bot:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      actions: write
-
     steps:
-      - name: 📥 Baixar Repositório
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
-      - name: 🐍 Configurar Python
+      - uses: actions/checkout@v3
+      - name: Setup Python
         uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-
-      - name: 📦 Instalar Dependências
+        with: { python-version: '3.10' }
+      - name: Install Dependencies
         run: pip install requests pandas
-
-      - name: 🔄 Sincronizar Antes
-        run: |
-          git config --global user.name 'Sniper Bot'
-          git config --global user.email 'bot@noreply.github.com'
-          git pull --rebase origin main
-
-      - name: 🚀 Executar Robô Sniper
+      
+      - name: 🎯 Sniper (Captura)
         id: sniper
         run: python app.py
-
-      - name: 💾 Salvar Alterações
+        
+      - name: 🧹 Faxineiro (Limpeza)
+        run: python limpeza.py
+        
+      - name: 💾 Salvar Dados
         run: |
-          git add dados/oportunidades.json.gz checkpoint.txt incluir.txt
-          if [[ -n $(git status -s) ]]; then
-            git commit -m "🤖 Sync: $(date +'%d/%m/%Y %H:%M')"
-            git pull --rebase origin main
-            git push origin main
-          fi
-
+          git config --global user.name 'Sniper Bot'
+          git add .
+          git commit -m "🤖 Dados Atualizados" || echo "Sem mudanças"
+          git push
+          
       - name: 🔄 Efeito Dominó
         if: steps.sniper.outputs.trigger_next == 'true'
+        run: gh workflow run main.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          sleep 10
-          gh workflow run sync-data.yml
