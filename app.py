@@ -16,10 +16,10 @@ from urllib3.util.retry import Retry
 ARQ_DADOS = 'dados/oportunidades.json.gz'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_CSV = 'Exportar Dados.csv'
-ARQ_EXCLUIDOS = 'excluidos.txt' # <--- NOVO ARQUIVO DE CONTROLE
+ARQ_EXCLUIDOS = 'excluidos.txt'
 MAX_WORKERS = 10 
 
-# Data base inicial do backlog
+# Data base inicial
 DATA_INICIO_VARREDURA = datetime(2025, 12, 1)
 
 # Filtro: Só aceita licitações que encerram a partir de:
@@ -29,7 +29,7 @@ DATA_CORTE_ENCERRAMENTO = datetime(2026, 1, 1)
 HOJE = datetime(2026, 2, 14) 
 
 # ==========================================
-# LISTAS DE FILTRAGEM (MANTIDAS)
+# LISTAS DE FILTRAGEM (MANTIDAS IGUAIS)
 # ==========================================
 UFS_NORDESTE = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
 KEYWORDS_NORDESTE = ["DIETA", "ENTERAL", "SUPLEMENT", "FORMULA", "CALORIC", "PROTEIC", "LEITE", "NUTRI"]
@@ -58,7 +58,7 @@ BLACKLIST = [
 ]
 
 # ==========================================
-# FUNÇÕES DE APOIO
+# FUNÇÕES DE APOIO (MANTIDAS IGUAIS)
 # ==========================================
 def normalizar(texto):
     if not isinstance(texto, str): return ""
@@ -76,7 +76,6 @@ def carregar_keywords_csv():
     except: return []
 
 def carregar_ids_excluidos():
-    """Lê o arquivo de IDs banidos (excluidos.txt)"""
     ids = set()
     if os.path.exists(ARQ_EXCLUIDOS):
         try:
@@ -85,8 +84,7 @@ def carregar_ids_excluidos():
                     limpo = linha.strip()
                     if limpo: ids.add(limpo)
             print(f"🚫 Blacklist de IDs carregada: {len(ids)} registros banidos.")
-        except Exception as e:
-            print(f"⚠️ Erro ao ler {ARQ_EXCLUIDOS}: {e}")
+        except: pass
     return ids
 
 def validar_item(descricao, uf):
@@ -110,18 +108,13 @@ def criar_sessao():
 def processar_licitacao(lic, session, ids_banidos):
     try:
         lic_id = f"{lic['orgao_cnpj']}{lic['ano_compra']}{lic['sequencial_compra']}"
-        
-        # --- FILTRO 0: ID BANIDO ---
-        if lic_id in ids_banidos:
-            return None # Ignora silenciosamente
+        if lic_id in ids_banidos: return None
 
-        # Filtro Data Encerramento
         data_enc_str = lic.get('data_encerramento_proposta')
         if not data_enc_str: return None
         data_enc = datetime.fromisoformat(data_enc_str)
         if data_enc < DATA_CORTE_ENCERRAMENTO: return None
 
-        # Busca Itens
         url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{lic['orgao_cnpj']}/compras/{lic['ano_compra']}/{lic['sequencial_compra']}/itens"
         r = session.get(url_itens, timeout=15)
         if r.status_code != 200: return None
@@ -183,13 +176,13 @@ def atualizar_resultados(banco, session):
     print(f"✅ Varredura Concluída. {atualizados} itens atualizados.")
 
 # ==========================================
-# MAIN - FLUXO ATÔMICO
+# MAIN - FLUXO EM CADEIA (CHAIN REACTION)
 # ==========================================
 if __name__ == "__main__":
     print(f"🚀 SNIPER PNCP - DATA BASE: {HOJE.strftime('%d/%m/%Y')}")
     
     KEYWORDS_GLOBAL = carregar_keywords_csv()
-    IDS_EXCLUIDOS = carregar_ids_excluidos() # <--- CARREGA A BLACKLIST
+    IDS_EXCLUIDOS = carregar_ids_excluidos()
 
     data_alvo = DATA_INICIO_VARREDURA
     if os.path.exists(ARQ_CHECKPOINT):
@@ -200,38 +193,42 @@ if __name__ == "__main__":
 
     session = criar_sessao()
     
-    # --- CARREGA E LIMPA BANCO ANTIGO ---
     banco = {}
     if os.path.exists(ARQ_DADOS):
         try:
             with gzip.open(ARQ_DADOS, 'rt', encoding='utf-8') as f:
                 lista = json.load(f)
-                # Filtra imediatamente os IDs que estão na blacklist
                 banco = {i['id']: i for i in lista if i['id'] not in IDS_EXCLUIDOS}
-                print(f"📚 Banco carregado: {len(banco)} registros (após filtro de exclusão).")
         except: pass
 
     dias_atraso = (HOJE - data_alvo).days
 
+    # --- LÓGICA DE DECISÃO DE GATILHO ---
+    trigger_next = "false" # Padrão: não repete
+
     if dias_atraso > 3:
+        # MODO BACKLOG (Atrasado)
         print(f"⚠️ MODO BACKLOG: Processando apenas {data_alvo.strftime('%d/%m/%Y')} (Atraso: {dias_atraso} dias)")
         datas_para_processar = [data_alvo]
         proximo_checkpoint = data_alvo + timedelta(days=1)
         salvar_checkpoint = True
+        trigger_next = "true" # <--- ATIVA O GATILHO PARA A PRÓXIMA EXECUÇÃO
     else:
+        # MODO ROTINA (Em dia)
         print(f"✅ MODO ROTINA: Varrendo últimos 3 dias até {HOJE.strftime('%d/%m/%Y')}")
         datas_para_processar = [HOJE - timedelta(days=i) for i in range(3)]
         proximo_checkpoint = HOJE
         salvar_checkpoint = True
+        trigger_next = "false" # <--- NÃO REPETE, ESPERA A PRÓXIMA AGENDADA
         
         if HOJE.day in [1, 15]:
             atualizar_resultados(banco, session)
 
+    # --- EXECUÇÃO (MANTIDA) ---
     novos = 0
     for data_proc in datas_para_processar:
         d_str = data_proc.strftime('%Y%m%d')
         print(f"📂 Coletando dia: {data_proc.strftime('%d/%m/%Y')}...")
-        
         pag = 1
         while True:
             url = f"https://pncp.gov.br/api/pncp/v1/compras?data_inicial={d_str}&data_final={d_str}&modalidade_contratacao_id=6&pagina={pag}&tamanho_pagina=50"
@@ -241,9 +238,7 @@ if __name__ == "__main__":
                 resp = r.json()
                 data = resp.get('data', [])
                 if not data: break
-
                 with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as exe:
-                    # Passamos IDS_EXCLUIDOS para a função de processamento
                     futures = {exe.submit(processar_licitacao, l, session, IDS_EXCLUIDOS): l for l in data}
                     for f in concurrent.futures.as_completed(futures):
                         res = f.result()
@@ -251,7 +246,6 @@ if __name__ == "__main__":
                             banco[res['id']] = res
                             novos += 1
                             print(".", end="", flush=True)
-
                 if pag >= resp.get('total_paginas', 0): break
                 pag += 1
             except Exception as e:
@@ -260,7 +254,6 @@ if __name__ == "__main__":
         print(f" -> OK")
 
     print(f"\n💾 Salvando... (Total no banco: {len(banco)})")
-    
     os.makedirs('dados', exist_ok=True)
     lista_final = sorted(list(banco.values()), key=lambda x: x.get('data_encerramento', ''), reverse=True)
     with gzip.open(ARQ_DADOS, 'wt', encoding='utf-8') as f:
@@ -269,5 +262,11 @@ if __name__ == "__main__":
     if salvar_checkpoint:
         with open(ARQ_CHECKPOINT, 'w') as f:
             f.write(proximo_checkpoint.strftime('%Y%m%d'))
+    
+    # --- COMUNICAÇÃO COM GITHUB ACTIONS ---
+    # Escreve se deve disparar o próximo job
+    if "GITHUB_OUTPUT" in os.environ:
+        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+            print(f"trigger_next={trigger_next}", file=f)
             
-    print(f"🏁 Finalizado.")
+    print(f"🏁 Finalizado. Próxima execução imediata? {trigger_next.upper()}")
