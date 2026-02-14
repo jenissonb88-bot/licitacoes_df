@@ -10,7 +10,6 @@
         :root { --primary-dark: #2c3e50; --accent-blue: #3498db; --danger-red: #e74c3c; --success-green: #27ae60; }
         body { background-color: #f4f7f6; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 0.85rem; }
         
-        /* Layout original do modelo anexado */
         .header-bar { background: var(--primary-dark); color: white; padding: 12px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .app-logo { font-size: 1.2rem; font-weight: 700; letter-spacing: 1px; }
 
@@ -21,7 +20,6 @@
         
         .badge-uf { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #ebf5fb; color: var(--accent-blue); font-weight: 700; border: 2px solid #d4e6f1; }
         
-        /* Tarjas coloridas solicitadas */
         .tarja { display: inline-block; padding: 3px 12px; border-radius: 4px; font-weight: 800; font-size: 0.65rem; color: white; text-transform: uppercase; margin-top: 8px; }
         .bg-exclusivo { background-color: var(--danger-red); }
         .bg-parcial { background-color: #e67e22; }
@@ -42,32 +40,31 @@
 
     <div class="header-bar d-flex justify-content-between align-items-center">
         <div class="app-logo"><i class="fa-solid fa-crosshairs me-2"></i>SNIPER PNCP</div>
-        <div id="stats" class="small text-white-50 fw-bold">CARREGANDO...</div>
+        <div id="stats" class="small text-white-50 fw-bold">14/02/2026</div>
     </div>
 
     <div class="container-fluid py-4">
         <div class="filter-section">
             <div class="row g-2">
                 <div class="col-md-3">
-                    <label class="form-label small fw-bold mb-1">Busca por Fármaco/Objeto</label>
-                    <input type="text" id="fBusca" class="form-control form-control-sm shadow-none" placeholder="Ex: Dipirona, Seringa..." onkeyup="pagina=1; render()">
+                    <label class="form-label small fw-bold mb-1">Busca Geral</label>
+                    <input type="text" id="fBusca" class="form-control form-control-sm" placeholder="Ex: Dipirona..." onkeyup="pagina=1; render()">
                 </div>
                 <div class="col-md-1">
                     <label class="form-label small fw-bold mb-1">UF</label>
-                    <input type="text" id="fUF" class="form-control form-control-sm shadow-none text-center" placeholder="UF" onkeyup="pagina=1; render()">
+                    <input type="text" id="fUF" class="form-control form-control-sm text-center" placeholder="UF" onkeyup="pagina=1; render()">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label small fw-bold mb-1">Órgão / UASG</label>
-                    <input type="text" id="fLocal" class="form-control form-control-sm shadow-none" placeholder="Nome ou código UASG..." onkeyup="pagina=1; render()">
+                    <input type="text" id="fLocal" class="form-control form-control-sm" placeholder="Nome ou UASG..." onkeyup="pagina=1; render()">
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small fw-bold mb-1">Encerramento</label>
-                    <input type="date" id="fDataEnc" class="form-control form-control-sm shadow-none" onchange="pagina=1; render()">
+                    <input type="date" id="fDataEnc" class="form-control form-control-sm" onchange="pagina=1; render()">
                 </div>
                 <div class="col-md-3 d-flex align-items-end gap-1">
-                    <button class="btn btn-primary btn-sm w-100 fw-bold" onclick="pagina=1; render()"><i class="fa-solid fa-filter me-1"></i> FILTRAR</button>
+                    <button class="btn btn-primary btn-sm w-100 fw-bold" onclick="render()">FILTRAR</button>
                     <button class="btn btn-outline-secondary btn-sm" onclick="limparFiltros()"><i class="fa-solid fa-eraser"></i></button>
-                    <button class="btn btn-success btn-sm" onclick="abrirModalManual()" title="Adicionar URL"><i class="fa-solid fa-plus"></i></button>
                 </div>
             </div>
         </div>
@@ -84,7 +81,7 @@
                 <div class="d-flex align-items-center gap-1 ms-3">
                     <span class="small">Página:</span>
                     <input type="number" id="inputPulo" class="form-control form-control-sm text-center" style="width: 70px;" min="1">
-                    <button class="btn btn-sm btn-dark fw-bold" onclick="pularPagina()">IR</button>
+                    <button class="btn btn-sm btn-dark" onclick="pularPagina()">IR</button>
                 </div>
             </div>
         </div>
@@ -94,7 +91,7 @@
         <div class="modal-dialog modal-xl modal-dialog-scrollable">
             <div class="modal-content shadow-lg border-0">
                 <div class="modal-header bg-dark text-white py-2">
-                    <h6 class="modal-title"><i class="fa-solid fa-list-check me-2"></i>Detalhamento dos Itens e Resultados</h6>
+                    <h6 class="modal-title"><i class="fa-solid fa-award me-2"></i>Detalhamento Técnico</h6>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body p-0" id="modalCorpo"></div>
@@ -110,16 +107,13 @@
 
         async function carregarDados() {
             try {
-                // Sincroniza com o arquivo GZ do robô exaustivo
                 const resp = await fetch(`dados/oportunidades.json.gz?v=${new Date().getTime()}`);
                 const ds = new DecompressionStream("gzip");
                 const texto = await new Response(resp.body.pipeThrough(ds)).text();
                 dadosLicitacoes = JSON.parse(texto);
                 document.getElementById('loader').style.display = 'none';
                 render();
-            } catch (e) {
-                document.getElementById('loader').innerHTML = `<div class="text-danger fw-bold">Erro ao carregar banco de dados. Verifique a pasta /dados.</div>`;
-            }
+            } catch (e) { document.getElementById('loader').innerHTML = "Erro ao carregar banco."; }
         }
 
         function render() {
@@ -128,64 +122,49 @@
             const uf = document.getElementById('fUF').value.toUpperCase();
             const local = document.getElementById('fLocal').value.toLowerCase();
             const dataEnc = document.getElementById('fDataEnc').value;
-            const excluidos = JSON.parse(localStorage.getItem('sniper_excluidos') || '[]');
 
             let filtrados = dadosLicitacoes.filter(l => {
-                if (excluidos.includes(l.id)) return false;
-                const matchBusca = !busca || l.objeto.toLowerCase().includes(busca) || (l.itens && l.itens.some(i => i.desc.toLowerCase().includes(busca)));
+                const matchBusca = !busca || l.objeto.toLowerCase().includes(busca) || l.itens.some(i => i.desc.toLowerCase().includes(busca));
                 const matchUF = !uf || l.uf === uf;
-                const matchLocal = !local || l.orgao.toLowerCase().includes(local) || (l.uasg && l.uasg.toString().includes(local));
+                const matchLocal = !local || l.orgao.toLowerCase().includes(local) || l.uasg.toString().includes(local);
                 const matchData = !dataEnc || (l.data_enc && l.data_enc.startsWith(dataEnc));
                 return matchBusca && matchUF && matchLocal && matchData;
             });
 
-            const totalPaginas = Math.ceil(filtrados.length / itensPorPagina);
-            const inicio = (pagina - 1) * itensPorPagina;
-            const exibidos = filtrados.slice(inicio, inicio + itensPorPagina);
-
-            document.getElementById('stats').innerText = `${filtrados.length} PREGÕES FILTRADOS`;
-            document.getElementById('infoPagina').innerText = `Página ${pagina} de ${totalPaginas || 1}`;
-            document.getElementById('btnAnterior').disabled = pagina === 1;
-            document.getElementById('btnProximo').disabled = pagina >= totalPaginas;
-
+            const exibidos = filtrados.slice((pagina-1)*itensPorPagina, pagina*itensPorPagina);
+            document.getElementById('infoPagina').innerText = `Página ${pagina} de ${Math.ceil(filtrados.length/itensPorPagina) || 1}`;
+            
             container.innerHTML = '';
             exibidos.forEach(l => {
-                const totalLicitacao = l.itens ? l.itens.reduce((acc, i) => acc + (i.total_est || 0), 0) : 0;
+                const total = l.itens.reduce((acc, i) => acc + (i.total_est || 0), 0);
+                let tarjaClass = l.tarja === 'EXCLUSIVO' ? 'bg-exclusivo' : (l.tarja === 'PARCIAL' ? 'bg-parcial' : 'bg-amplo');
                 
-                // Lógica de Tarja (Exclusivo, Parcial, Amplo)
-                let tarjaClass = 'bg-amplo', tarjaTexto = 'AMPLA PARTICIPAÇÃO';
-                if (l.tarja === 'EXCLUSIVO') { tarjaClass = 'bg-exclusivo'; tarjaTexto = 'EXCLUSIVO ME/EPP'; }
-                else if (l.tarja === 'PARCIAL') { tarjaClass = 'bg-parcial'; tarjaTexto = 'PARTICIPAÇÃO PARCIAL'; }
-
                 container.innerHTML += `
                     <div class="card-table">
                         <div class="row align-items-center">
                             <div class="col-md-2 text-center border-end">
                                 <div class="small text-muted fw-bold">Edital Nº</div>
                                 <div class="text-primary fw-bold fs-6">${l.edital_n}</div>
-                                <span class="tarja ${tarjaClass}">${tarjaTexto}</span>
+                                <span class="tarja ${tarjaClass}">${l.tarja}</span>
                             </div>
                             <div class="col-md-4 ps-4">
-                                <div class="fw-bold text-dark fs-6 text-truncate">${l.orgao}</div>
+                                <div class="fw-bold text-dark text-truncate">${l.orgao}</div>
                                 <div class="small text-muted mt-1 d-flex align-items-center">
                                     <span class="badge-uf me-2">${l.uf}</span>
                                     <span>${l.cidade || ''} / UASG: ${l.uasg}</span>
                                 </div>
                             </div>
                             <div class="col-md-3 border-start ps-4">
-                                <div class="small text-muted fw-bold"><i class="fa-regular fa-clock me-1"></i>Encerramento</div>
+                                <div class="small text-muted fw-bold">Encerramento</div>
                                 <div class="fw-bold text-dark">${l.data_enc ? new Date(l.data_enc).toLocaleString('pt-BR') : 'SIGILOSO'}</div>
-                                <div class="small text-secondary text-truncate mt-1">${l.objeto.substring(0, 70)}...</div>
+                                <div class="small text-truncate text-secondary mt-1">${l.objeto.substring(0, 60)}...</div>
                             </div>
                             <div class="col-md-3 text-end border-start">
                                 <div class="small text-muted">Total Estimado</div>
-                                <div class="fw-bold fs-5 ${totalLicitacao <= 0 ? 'text-danger' : 'text-success'}">
-                                    ${totalLicitacao <= 0 ? 'SIGILOSO' : 'R$ ' + totalLicitacao.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                                <div class="fw-bold fs-5 ${total <= 0 ? 'text-danger' : 'text-success'}">
+                                    ${total <= 0 ? 'SIGILOSO' : 'R$ ' + total.toLocaleString('pt-BR')}
                                 </div>
-                                <div class="mt-2">
-                                    <button class="btn btn-sm btn-dark px-3 fw-bold" onclick="verDetalhes('${l.id}')">DETALHES</button>
-                                    <button class="btn btn-sm btn-outline-danger" onclick="excluirLicitacao('${l.id}')"><i class="fa-solid fa-trash"></i></button>
-                                </div>
+                                <button class="btn btn-sm btn-dark mt-2 fw-bold" onclick="verDetalhes('${l.id}')">DETALHES</button>
                             </div>
                         </div>
                     </div>`;
@@ -197,7 +176,6 @@
             const corpo = document.getElementById('modalCorpo');
             const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
-            // Agrupamento Original por Fornecedor
             const grupos = {};
             l.itens.forEach(it => {
                 const key = it.fornecedor || "EM ANDAMENTO";
@@ -205,62 +183,27 @@
                 grupos[key].push(it);
             });
 
-            let html = `
-                <div class="p-4 bg-light border-bottom">
-                    <h5 class="text-primary fw-bold mb-1">${l.orgao}</h5>
-                    <p class="text-muted mb-3">${l.objeto}</p>
-                    <a href="${l.link}" target="_blank" class="btn btn-sm btn-success text-white px-4 fw-bold shadow-sm"><i class="fa-solid fa-link me-1"></i>VER NO PNCP ORIGINAL</a>
-                </div>`;
+            let html = `<div class="p-4 bg-light border-bottom">
+                <h5 class="text-primary fw-bold">${l.orgao}</h5>
+                <p class="text-muted small">${l.objeto}</p>
+                <a href="${l.link}" target="_blank" class="btn btn-sm btn-success text-white px-3 fw-bold">ABRIR NO PNCP</a>
+            </div>`;
 
             Object.keys(grupos).forEach(forn => {
-                html += `
-                <div class="fornecedor-header"><i class="fa-solid fa-award me-2"></i>FORNECEDOR: ${forn}</div>
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover mb-0" style="font-size: 0.78rem;">
-                        <thead class="table-dark">
-                            <tr>
-                                <th class="ps-3 text-center">Item</th>
-                                <th>Descrição Técnica</th>
-                                <th class="text-center">Qtd</th>
-                                <th class="text-end">V. Total Est.</th>
-                                <th class="text-center">ME/EPP</th>
-                                <th class="ps-3">Situação</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${grupos[forn].map(it => `
-                                <tr>
-                                    <td class="ps-3 text-center text-muted">${it.item}</td>
-                                    <td class="fw-bold">${it.desc}</td>
-                                    <td class="text-center">${it.qtd}</td>
-                                    <td class="text-end fw-bold text-primary">${fmt.format(it.total_est)}</td>
-                                    <td class="text-center"><span class="badge ${it.me_epp === 'Sim' ? 'bg-primary' : 'bg-secondary'}">${it.me_epp.toUpperCase()}</span></td>
-                                    <td class="ps-3"><span class="badge bg-light text-dark border">${it.situacao}</span></td>
-                                </tr>`).join('')}
-                        </tbody>
-                    </table>
-                </div>`;
+                html += `<div class="fornecedor-header">FORNECEDOR: ${forn}</div>
+                <div class="table-responsive"><table class="table table-sm table-hover mb-0" style="font-size: 0.75rem;">
+                <thead class="table-dark"><tr><th class="ps-3">Item</th><th>Descrição</th><th>Qtd</th><th>Total Est.</th><th>ME/EPP</th><th>Situação</th></tr></thead>
+                <tbody>${grupos[forn].map(it => `
+                    <tr><td class="ps-3">${it.item}</td><td class="fw-bold">${it.desc}</td><td>${it.qtd}</td><td class="text-primary fw-bold">${fmt.format(it.total_est)}</td><td>${it.me_epp}</td><td>${it.situacao}</td></tr>`).join('')}
+                </tbody></table></div>`;
             });
             corpo.innerHTML = html;
             new bootstrap.Modal(document.getElementById('modalDetalhes')).show();
         }
 
+        function pularPagina() { pagina = parseInt(document.getElementById('inputPulo').value) || 1; render(); }
         function mudarPagina(dir) { pagina += dir; render(); window.scrollTo(0,0); }
-        function pularPagina() {
-            const p = parseInt(document.getElementById('inputPulo').value);
-            if (p >= 1 && p <= Math.ceil(dadosLicitacoes.length / itensPorPagina)) {
-                pagina = p; render(); window.scrollTo(0,0);
-            }
-        }
-        function limparFiltros() { document.querySelectorAll('input').forEach(i => i.value = ''); pagina = 1; render(); }
-        function excluirLicitacao(id) {
-            if (confirm('Deseja ocultar este edital definitivamente?')) {
-                let ex = JSON.parse(localStorage.getItem('sniper_excluidos') || '[]');
-                ex.push(id); localStorage.setItem('sniper_excluidos', JSON.stringify(ex)); render();
-            }
-        }
-        function abrirModalManual() { alert('Cole a URL no arquivo urls.txt no seu repositório GitHub.'); }
-
+        function limparFiltros() { document.querySelectorAll('input').forEach(i => i.value = ''); render(); }
         window.onload = carregarDados;
     </script>
 </body>
