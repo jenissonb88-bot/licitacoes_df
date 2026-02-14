@@ -1,19 +1,17 @@
-name: Sniper PNCP - Sincronização
+name: Sniper PNCP - Chain Reaction
 
 on:
-  # Executa a cada 30 minutos para processar o backlog dia-a-dia
   schedule:
-    - cron: '*/30 * * * *'
-  # Permite execução manual pelo botão no GitHub
-  workflow_dispatch:
+    - cron: '0 8 * * *' # Roda 1x ao dia (start inicial)
+  workflow_dispatch: # Permite start manual
 
 jobs:
-  sincronizacao:
+  chain-reaction:
     runs-on: ubuntu-latest
     
-    # Permissão CRÍTICA para o robô salvar os dados no repositório
     permissions:
-      contents: write
+      contents: write # Para salvar arquivos
+      actions: write  # NECESSÁRIO para auto-disparo (trigger)
 
     steps:
       - name: 📥 Baixar Repositório
@@ -30,31 +28,32 @@ jobs:
           pip install requests pandas
 
       - name: 🚀 Executar Robô Sniper
+        id: sniper # ID necessário para ler o output
         run: python app.py
 
       - name: 💾 Salvar Alterações (Git)
         run: |
-          # Configuração da Identidade do Robô
           git config --global user.name 'Sniper Bot'
           git config --global user.email 'bot@noreply.github.com'
-          
-          # Adiciona os arquivos essenciais
           git add dados/oportunidades.json.gz
           git add checkpoint.txt
           
-          # (Segurança) Remove o arquivo antigo pesado se ele ainda existir
           if [ -f "dados/oportunidades.js" ]; then
             git rm --cached dados/oportunidades.js || true
             rm dados/oportunidades.js || true
-            echo "🗑️ Arquivo legado .js removido."
           fi
           
-          # Verifica se houve mudanças antes de fazer o commit
-          # Isso evita erros se o robô rodar e não encontrar nada novo
           if [[ -n $(git status -s) ]]; then
             git commit -m "🤖 Sync: $(date +'%d/%m/%Y %H:%M')"
             git push
-            echo "✅ Dados salvos com sucesso!"
           else
-            echo "💤 Nenhuma alteração nova para salvar nesta execução."
+            echo "💤 Nada novo para salvar."
           fi
+
+      - name: 🔄 Efeito Dominó (Auto-Disparo)
+        if: steps.sniper.outputs.trigger_next == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "⚡ Atraso detectado. Iniciando próxima execução imediatamente..."
+          gh workflow run sync-data.yml
