@@ -1,8 +1,9 @@
 name: Sniper Pharma Diário
+
 on:
   schedule:
-    - cron: '0 9 * * *'  # 9h UTC = 6h BRT
-  workflow_dispatch:  # Manual
+    - cron: '0 9 * * *' # 9h UTC = 6h BRT
+  workflow_dispatch: # Manual
 
 jobs:
   sniper:
@@ -20,14 +21,19 @@ jobs:
     
     - name: Run app.py
       run: python app.py
-      
+    
     - name: Run limpeza.py
       run: python limpeza.py
-      
+    
     - name: Commit results
       run: |
         git config user.name "Sniper Pharma Bot"
         git config user.email "sniper@pharma.bot"
-        git add -f dados/* checkpoint.txt pregacoes_pharma_limpos.json.gz
-        git commit -m "Sniper $(cat checkpoint.txt) - $(date +%Y-%m-%d)" || exit 0
-        git push
+        mkdir -p dados
+        git add dados/* checkpoint.txt pregacoes_pharma_limpos.json.gz 2>/dev/null || true
+        if git diff --staged --quiet; then
+          echo "Nenhum arquivo para commit"
+        else
+          git commit -m "Sniper $(cat checkpoint.txt 2>/dev/null || echo 'diário') - $(date +%Y-%m-%d)"
+          git push
+        fi
