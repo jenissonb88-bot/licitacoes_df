@@ -3,12 +3,15 @@ import json
 import os
 import unicodedata
 import gzip
+import argparse
+import sys
 from datetime import datetime, timedelta, date
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import concurrent.futures
 import time
 
+# Configurações
 ARQDADOS = 'dadosoportunidades.json.gz'
 ARQCHECKPOINT = 'checkpoint.txt'
 MAXWORKERS = 3
@@ -90,7 +93,9 @@ def processar_licitacao(lic, session):
         unid = lic.get('unidadeOrgao', {})
         
         itensraw = buscar_todos_itens(session, cnpj, ano, seq)
-        if not itensraw: return None
+        # Se falhar itens, tenta salvar mesmo assim se tiver objeto claro, 
+        # mas aqui mantemos logica original de retornar None
+        if not itensraw: return None 
         
         resultadosraw = buscar_todos_resultados(session, cnpj, ano, seq)
         
@@ -132,105 +137,152 @@ def buscar_dia_completo(session, data_obj, banco):
         }
         
         print(f"📄 {data_obj.strftime('%Y-%m-%d')} - Pg {pag}...")
-        r = session.get(url_pub, params=params, timeout=30)
-        
-        if r.status_code == 400:
-            print("✅ Dia completo")
-            return total_capturados
+        try:
+            r = session.get(url_pub, params=params, timeout=30)
             
-        if r.status_code != 200:
-            print(f"⚠️ Status {r.status_code}")
-            return total_capturados
+            if r.status_code == 400: # Pagina invalida geralmente é fim
+                break
+                
+            if r.status_code != 200:
+                print(f"⚠️ Status {r.status_code}")
+                # Se erro for temporario, tenta proxima pag ou encerra
+                break
+                
+            dados = r.json()
+            lics = dados.get('data', [])
+            total_paginas = dados.get('totalPaginas', pag) or 999
             
-        dados = r.json()
-        lics = dados.get('data', [])
-        total_paginas = dados.get('totalPaginas', pag) or 999
-        
-        print(f"📊 Pg {pag}/{total_paginas}: {len(lics)} pregões")
-        
-        if not lics: break
-        
-        pharma_lics = [lic for lic in lics if e_pharma(lic)]
-        print(f"💊 {len(pharma_lics)} pharma")
-        
-        with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
-            futuros = [exe.submit(processar_licitacao, l, session) for l in pharma_lics]
-            for futuro in concurrent.futures.as_completed(futuros):
-                res = futuro.result()
-                if res and precisa_atualizar(banco.get(res['id']), res):
-                    banco[res['id']] = res
-                    total_capturados += 1
-                    print(f"✅ {res['uf']}-{res['editaln']}")
+            print(f"📊 Pg {pag}/{total_paginas}: {len(lics)} pregões encontrados")
+            
+            if not lics: break
+            
+            pharma_lics = [lic for lic in lics if e_pharma(lic)]
+            if pharma_lics:
+                print(f"💊 Encontrados {len(pharma_lics)} potenciais Pharma...")
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
+                futuros = [exe.submit(processar_licitacao, l, session) for l in pharma_lics]
+                for futuro in concurrent.futures.as_completed(futuros):
+                    try:
+                        res = futuro.result()
+                        if res and precisa_atualizar(banco.get(res['id']), res):
+                            banco[res['id']] = res
+                            total_capturados += 1
+                            print(f"✅ SALVO: {res['uf']} - {res['editaln']}")
+                    except Exception as e:
+                        pass # Ignora erros individuais de processamento
 
-        if len(lics) < 50 or pag >= total_paginas: break
-        pag += 1
-        time.sleep(1)
+            if len(lics) < 50 or pag >= total_paginas: break
+            pag += 1
+            time.sleep(1)
+        except Exception as e:
+            print(f"Erro na paginação: {e}")
+            break
     
     return total_capturados
 
 if __name__ == '__main__':
-    print("🚀 SNIPER PHARMA v3.4 - 1 DIA POR EXECUÇÃO")
+    print(f"🚀 SNIPER PHARMA v4.0 (Github Actions Ready)")
     
+    # --- Configuração de Argumentos (NOVO) ---
+    parser = argparse.ArgumentParser(description='Sniper Pharma Crawler')
+    parser.add_argument('--start', type=str, help='Data inicial YYYY-MM-DD')
+    parser.add_argument('--end', type=str, help='Data final YYYY-MM-DD')
+    args = parser.parse_args()
+
     hoje = date.today()
     session = criar_sessao()
     banco = {}
     
-    # Carrega banco
+    # 1. Carrega Banco Existente
     if os.path.exists(ARQDADOS):
         try:
             with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
-                banco = {i['id']: i for i in json.load(f)}
-            print(f"📦 {len(banco)} pregões carregados")
-        except: pass
+                dados_carregados = json.load(f)
+                # Converte lista para dict se necessario
+                if isinstance(dados_carregados, list):
+                    banco = {i['id']: i for i in dados_carregados}
+                else:
+                    banco = dados_carregados
+            print(f"📦 {len(banco)} pregões carregados do disco.")
+        except Exception as e: 
+            print(f"⚠️ Erro ao abrir banco: {e}")
+            banco = {}
 
-    # Pega data do checkpoint
-    data_busca = None
-    if os.path.exists(ARQCHECKPOINT):
+    # 2. Define Período de Busca
+    datas_para_buscar = []
+
+    if args.start and args.end:
+        # Modo Argumentos (Github Actions)
         try:
-            with open(ARQCHECKPOINT, 'r') as f:
-                checkpoint_str = f.read().strip()
-                data_busca = datetime.strptime(checkpoint_str, '%Y-%m-%d').date()
-                print(f"📅 Checkpoint '{checkpoint_str}' → BUSCANDO: {data_busca}")
+            dt_ini = datetime.strptime(args.start, '%Y-%m-%d').date()
+            dt_fim = datetime.strptime(args.end, '%Y-%m-%d').date()
+            print(f"🤖 MODO ARGUMENTOS: De {dt_ini} até {dt_fim}")
+            
+            delta = dt_fim - dt_ini
+            for i in range(delta.days + 1):
+                datas_para_buscar.append(dt_ini + timedelta(days=i))
+                
+        except ValueError as e:
+            print(f"❌ Erro formato data: {e}")
+            sys.exit(1)
+    else:
+        # Modo Checkpoint (Legado / Local)
+        print("🏠 MODO CHECKPOINT LOCAL")
+        data_busca = None
+        if os.path.exists(ARQCHECKPOINT):
+            try:
+                with open(ARQCHECKPOINT, 'r') as f:
+                    checkpoint_str = f.read().strip()
+                    data_busca = datetime.strptime(checkpoint_str, '%Y-%m-%d').date()
+            except: pass
+        
+        if data_busca is None:
+            data_busca = hoje - timedelta(days=1)
+        
+        if data_busca > hoje:
+            print(f"⏭️ Checkpoint {data_busca} é futuro. Nada a fazer.")
+            sys.exit(0)
+            
+        datas_para_buscar.append(data_busca)
+
+    # 3. Executa a Busca para cada dia na lista
+    total_novos_geral = 0
+    ultima_data_processada = None
+
+    for dia_atual in datas_para_buscar:
+        print(f"\n{'='*60}")
+        print(f"🔄 PROCESSANDO: {dia_atual}")
+        print(f"{'='*60}")
+        
+        qtd = buscar_dia_completo(session, dia_atual, banco)
+        total_novos_geral += qtd
+        ultima_data_processada = dia_atual
+        
+        print(f"📈 Dia {dia_atual} finalizado. Novos itens: {qtd}")
+
+    # 4. Salva os Dados (Apenas uma vez no final para economizar I/O)
+    if ultima_data_processada:
+        print(f"\n💾 Salvando banco de dados...")
+        try:
+            # Garante que a pasta existe (caso mude o path no futuro)
+            if "/" in ARQDADOS:
+                os.makedirs(os.path.dirname(ARQDADOS), exist_ok=True)
+                
+            with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
+                json.dump(list(banco.values()), f, ensure_ascii=False)
+            print(f"✅ Banco salvo com sucesso! Total registros: {len(banco)}")
         except Exception as e:
-            print(f"⚠️ Erro checkpoint: {e}")
+            print(f"❌ Erro fatal ao salvar: {e}")
 
-    if data_busca is None:
-        data_busca = hoje - timedelta(days=1)
-        print(f"📅 Sem checkpoint → BUSCANDO: {data_busca}")
-
-    if data_busca > hoje:
-        print(f"⏭️ Checkpoint futuro {data_busca} > hoje {hoje}")
-        exit()
-
-    print(f"\n{'='*70}")
-    print(f"🔄 EXECUTANDO DIA: {data_busca}")
-    print(f"{'='*70}")
-    
-    novos_hoje = buscar_dia_completo(session, data_busca, banco)
-    
-    print(f"\n✅ DIA {data_busca}: {novos_hoje} pharma")
-    
-    # SALVA DADOS
-    try:
-        os.makedirs('dados', exist_ok=True)
-        with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
-            json.dump(list(banco.values()), f, ensure_ascii=False)
-        print(f"💾 {ARQDADOS} salvo: {len(banco)} pregões")
-    except Exception as e:
-        print(f"❌ Erro salvando dados: {e}")
-
-    # CHECKPOINT ROBUSTO
-    try:
-        proximo_dia = data_busca + timedelta(days=1)
-        with open(ARQCHECKPOINT, 'w') as f:
-            f.write(proximo_dia.strftime('%Y-%m-%d'))
-        print(f"📅 CHECKPOINT ATUALIZADO: {proximo_dia}")
-    except Exception as e:
-        print(f"❌ ERRO CHECKPOINT: {e}")
-        proximo_dia = data_busca + timedelta(days=1)
-        with open(ARQCHECKPOINT, 'w') as f:
-            f.write(proximo_dia.strftime('%Y-%m-%d'))
-        print("🔧 CHECKPOINT FORÇADO!")
-
-    print(f"🎉 DIA CONCLUÍDO!")
-    print(f"📅 PRÓXIMA EXECUÇÃO: {proximo_dia}")
+        # 5. Atualiza Checkpoint
+        # Define o checkpoint como o dia SEGUINTE ao último processado
+        try:
+            proximo_dia_checkpoint = ultima_data_processada + timedelta(days=1)
+            with open(ARQCHECKPOINT, 'w') as f:
+                f.write(proximo_dia_checkpoint.strftime('%Y-%m-%d'))
+            print(f"🏁 Checkpoint atualizado para: {proximo_dia_checkpoint}")
+        except:
+            print("⚠️ Falha ao atualizar arquivo checkpoint")
+            
+    print(f"\n🎉 EXECUÇÃO CONCLUÍDA. Total capturado nesta sessão: {total_novos_geral}")
