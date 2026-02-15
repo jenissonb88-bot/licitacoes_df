@@ -1,9 +1,9 @@
-name: Sniper Inteligente
+name: Sniper Pharma Inteligente
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 */3 * * *'  # Varredura constante
-    - cron: '0 5 1,16 * *' # Forçar atualização de resultados dias 01 e 16
+    - cron: '0 3 * * *'      # Varredura diária 3h
+    - cron: '0 5 1,16 * *'    # Revisão dias 1/16 5h
 
 jobs:
   run-bot:
@@ -11,38 +11,34 @@ jobs:
     permissions:
       contents: write
       actions: write
-      
     steps:
-      - uses: actions/checkout@v3
-        with:
-          persist-credentials: true
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with: { python-version: '3.10' }
-
-      - name: Install Dependencies
-        run: pip install requests pandas
-
-      - name: 🎯 Sniper (Captura & Revisão)
-        id: sniper
-        run: python app.py
-        # O app.py deve checar se hoje é 01 ou 16 para ativar o modo "Revisor"
+    - uses: actions/checkout@v3
+      with: persist-credentials: true
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with: python-version: 3.10
+      
+    - name: Install Dependencies
+      run: pip install requests pandas
+      
+    - name: 🚀 Sniper Captura
+      id: sniper
+      run: python app-3.py
+      
+    - name: 🧹 Faxineiro Limpeza
+      run: python limpeza.py
+      
+    - name: 💾 Salvar Dados
+      run: |
+        git config --global user.name "Sniper Bot"
+        git config --global user.email "bot@sniper.com"
+        git add .
+        git commit -m "Ciclo Completo $(date +%Y-%m-%d)" || echo "Sem alterações"
+        git push
         
-      - name: 🧹 Faxineiro (Limpeza & Exclusão)
-        run: python limpeza.py
-        # O limpeza.py deve ler o 'excluidos.txt' para garantir a exclusão definitiva
-        
-      - name: 💾 Salvar Dados e Checkpoint
-        run: |
-          git config --global user.name 'Sniper Bot'
-          git config --global user.email 'bot@sniper.com'
-          git add .
-          git commit -m "🤖 Ciclo de Captura/Revisão Completo" || echo "Sem alterações"
-          git push
-          
-      - name: 🔄 Efeito Dominó
-        if: steps.sniper.outputs.trigger_next == 'true'
-        run: gh workflow run sync-data.yml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: 🔄 Efeito Dominó
+      if: steps.sniper.outputs.triggernext == 'true'
+      run: gh workflow run sync-data.yml
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
