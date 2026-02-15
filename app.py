@@ -169,13 +169,13 @@ def buscar_dia_completo(session, data_obj, banco):
     return total_capturados
 
 if __name__ == '__main__':
-    print("🚀 SNIPER PHARMA v3.3 - 1 DIA POR EXECUÇÃO")
+    print("🚀 SNIPER PHARMA v3.4 - 1 DIA POR EXECUÇÃO")
     
     hoje = date.today()
     session = criar_sessao()
     banco = {}
     
-    # Carrega banco existente
+    # Carrega banco
     if os.path.exists(ARQDADOS):
         try:
             with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
@@ -183,46 +183,54 @@ if __name__ == '__main__':
             print(f"📦 {len(banco)} pregões carregados")
         except: pass
 
-    # ✅ PEGA DATA DO CHECKPOINT E BUSCA ESSE DIA EXATO
+    # Pega data do checkpoint
     data_busca = None
     if os.path.exists(ARQCHECKPOINT):
         try:
             with open(ARQCHECKPOINT, 'r') as f:
                 checkpoint_str = f.read().strip()
                 data_busca = datetime.strptime(checkpoint_str, '%Y-%m-%d').date()
-                print(f"📅 Checkpoint '{checkpoint_str}' → BUSCANDO HOJE: {data_busca}")
+                print(f"📅 Checkpoint '{checkpoint_str}' → BUSCANDO: {data_busca}")
         except Exception as e:
             print(f"⚠️ Erro checkpoint: {e}")
-    
-    # Se não tem checkpoint, começa ontem
+
     if data_busca is None:
         data_busca = hoje - timedelta(days=1)
         print(f"📅 Sem checkpoint → BUSCANDO: {data_busca}")
 
-    # ✅ VERIFICA SE NÃO PASSOU DE HOJE
     if data_busca > hoje:
-        print(f"⏭️ Checkpoint futuro {data_busca} > hoje {hoje} → Parando")
+        print(f"⏭️ Checkpoint futuro {data_busca} > hoje {hoje}")
         exit()
 
     print(f"\n{'='*70}")
     print(f"🔄 EXECUTANDO DIA: {data_busca}")
     print(f"{'='*70}")
     
-    # BUSCA APENAS ESSE DIA
     novos_hoje = buscar_dia_completo(session, data_busca, banco)
     
-    print(f"\n✅ DIA {data_busca}: {novos_hoje} pharma {'atualizados/novos'}")
+    print(f"\n✅ DIA {data_busca}: {novos_hoje} pharma")
     
     # SALVA DADOS
-    os.makedirs('dados', exist_ok=True)
-    with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
-        json.dump(list(banco.values()), f, ensure_ascii=False)
-    
-    # ✅ ATUALIZA CHECKPOINT PARA PRÓXIMO DIA
-    proximo_dia = data_busca + timedelta(days=1)
-    with open(ARQCHECKPOINT, 'w') as f:
-        f.write(proximo_dia.strftime('%Y-%m-%d'))
-    
-    print(f"💾 Total: {len(banco)} pregões")
+    try:
+        os.makedirs('dados', exist_ok=True)
+        with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
+            json.dump(list(banco.values()), f, ensure_ascii=False)
+        print(f"💾 {ARQDADOS} salvo: {len(banco)} pregões")
+    except Exception as e:
+        print(f"❌ Erro salvando dados: {e}")
+
+    # CHECKPOINT ROBUSTO
+    try:
+        proximo_dia = data_busca + timedelta(days=1)
+        with open(ARQCHECKPOINT, 'w') as f:
+            f.write(proximo_dia.strftime('%Y-%m-%d'))
+        print(f"📅 CHECKPOINT ATUALIZADO: {proximo_dia}")
+    except Exception as e:
+        print(f"❌ ERRO CHECKPOINT: {e}")
+        proximo_dia = data_busca + timedelta(days=1)
+        with open(ARQCHECKPOINT, 'w') as f:
+            f.write(proximo_dia.strftime('%Y-%m-%d'))
+        print("🔧 CHECKPOINT FORÇADO!")
+
+    print(f"🎉 DIA CONCLUÍDO!")
     print(f"📅 PRÓXIMA EXECUÇÃO: {proximo_dia}")
-    print(f"🎉 DIA CONCLUÍDO - PRONTO PARA NOVA TAREFA!")
