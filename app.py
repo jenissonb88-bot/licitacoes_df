@@ -10,7 +10,7 @@ ARQDADOS = 'dadosoportunidades.json.gz'
 ARQCHECKPOINT = 'checkpoint.txt'
 MAXWORKERS = 5
 
-# REGIONAL INTELIGENTE
+# CONFIG REGIONAL
 UFS_NE = 'AL,BA,CE,MA,PB,PE,PI,RN,SE'
 UFS_MEDICAMENTOS = 'AL,BA,CE,MA,PB,PE,PI,RN,SE,ES,MG,RJ,SP,GO,MT,MS,DF,TO,PA,AM,RO'
 UFS_EXCLUIDAS = 'PR,SC,RS,AP,AC'
@@ -60,16 +60,18 @@ def buscar_todos_resultados(session, cnpj, ano, seq):
 
 def processar_licitacao(lic, session):
     try:
-        # PRÉ-FILTRO RÁPIDO (70% otimização)
+        # PRÉ-FILTRO RÁPIDO (70% menos API calls)
         obj_norm = normalize(lic.get('objetoCompra') or lic.get('objeto', ''))
         uf = lic.get('unidadeOrgao', {}).get('ufSigla', '').upper()
         
-        if uf in ['PR','SC','RS','AP','AC']: return None
+        if uf in UFS_EXCLUIDAS: return None
+        
         if uf in ['AL','BA','CE','MA','PB','PE','PI','RN','SE']:
             if not any(t in obj_norm for t in ['MEDICAMENTO','MATERIAL MEDICO','DIETA','LU VAS','ALCOOL']):
                 return None
-        elif not any(t in obj_norm for t in ['MEDICAMENTO','FARMACIA']):
-            return None
+        else:
+            if not any(t in obj_norm for t in ['MEDICAMENTO','FARMACIA']):
+                return None
 
         cnpj, ano, seq = lic['orgaoEntidade']['cnpj'], lic['anoCompra'], lic['sequencialCompra']
         unid = lic.get('unidadeOrgao', {})
@@ -80,25 +82,30 @@ def processar_licitacao(lic, session):
         resultadosraw = buscar_todos_resultados(session, cnpj, ano, seq)
 
         return {
-            'id': f"{cnpj}{ano}{seq}", 'dataPub': lic.get('dataPublicacaoPncp'),
-            'dataEnc': lic.get('dataEncerramentoProposta'), 'uf': unid.get('ufSigla'),
-            'cidade': unid.get('municipioNome'), 'orgao': lic['orgaoEntidade']['razaoSocial'],
+            'id': f"{cnpj}{ano}{seq}",
+            'dataPub': lic.get('dataPublicacaoPncp'),
+            'dataEnc': lic.get('dataEncerramentoProposta'),
+            'uf': unid.get('ufSigla'),
+            'cidade': unid.get('municipioNome'),
+            'orgao': lic['orgaoEntidade']['razaoSocial'],
             'unidadeCompradora': unid.get('nomeUnidade', 'No Informada'),
             'objeto': lic.get('objetoCompra') or lic.get('objeto', ''),
             'editaln': f"{str(lic.get('numeroCompra', '')).zfill(5)}/{ano}",
             'uasg': unid.get('codigoUnidade', '---'),
             'link': f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
             'valorGlobalApi': float(lic.get('valorTotalEstimado') or 0),
-            'itensraw': itensraw, 'resultadosraw': resultadosraw
+            'itensraw': itensraw,
+            'resultadosraw': resultadosraw
         }
     except: return None
 
 if __name__ == '__main__':
     hoje = datetime.now()
-    session = criar_sessao(); banco = {}
+    session = criar_sessao()
+    banco = {}
     
     if os.path.exists(ARQDADOS):
-        try: 
+        try:
             with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
                 banco = {i['id']: i for i in json.load(f)}
         except: pass
@@ -110,22 +117,27 @@ if __name__ == '__main__':
             except: pass
 
     dstr = data_alvo.strftime('%Y-%m-%d')
-    print(f"🎯 Iniciando Sniper Pharma: {dstr}")
+    print(f"🎯 Sniper Pharma: {dstr}")
 
     url_pub = 'https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao'
 
-    # BUSCA 1/2: NORDESTE ESPECIAIS
+    # 🟢 NORDESTE ESPECIAIS
     print("=== 🟢 NORDESTE ESPECIAIS ===")
     pag = 1
     while True:
-        params = {'dataInicial': dstr, 'dataFinal': dstr, 'codigoModalidadeContratacao': 6,
-                  'palavrasChave': PALAVRAS_NE_ESPECIAIS, 'uf': UFS_NE, 'pagina': pag, 'tamanhoPagina': 50}
+        params = {
+            'dataInicial': dstr, 'dataFinal': dstr,
+            'codigoModalidadeContratacao': 6,
+            'palavrasChave': PALAVRAS_NE_ESPECIAIS,
+            'uf': UFS_NE,
+            'pagina': pag, 'tamanhoPagina': 50
+        }
         r = session.get(url_pub, params=params, timeout=30)
         if r.status_code != 200: break
         dados = r.json(); lics = dados.get('data', [])
         if not lics or len(lics) < 10: break
-        print(f"📄 Pg {pag}/{dados.get('totalPaginas',1)} ({len(lics)} itens)")
-
+        
+        print(f"📄 NE Pg {pag}: {len(lics)} pregões")
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
             futuros = [exe.submit(processar_licitacao, l, session) for l in lics]
             for f in concurrent.futures.as_completed(futuros):
@@ -135,18 +147,23 @@ if __name__ == '__main__':
         if pag >= dados.get('totalPaginas', 1): break
         pag += 1
 
-    # BUSCA 2/2: MEDICAMENTOS
+    # 🔵 MEDICAMENTOS
     print("=== 🔵 MEDICAMENTOS ===")
     pag = 1
     while True:
-        params = {'dataInicial': dstr, 'dataFinal': dstr, 'codigoModalidadeContratacao': 6,
-                  'palavrasChave': PALAVRAS_MEDICAMENTOS, 'uf': UFS_MEDICAMENTOS, 'pagina': pag, 'tamanhoPagina': 50}
+        params = {
+            'dataInicial': dstr, 'dataFinal': dstr,
+            'codigoModalidadeContratacao': 6,
+            'palavrasChave': PALAVRAS_MEDICAMENTOS,
+            'uf': UFS_MEDICAMENTOS,
+            'pagina': pag, 'tamanhoPagina': 50
+        }
         r = session.get(url_pub, params=params, timeout=30)
         if r.status_code != 200: break
         dados = r.json(); lics = dados.get('data', [])
         if not lics or len(lics) < 10: break
-        print(f"📄 Pg {pag}/{dados.get('totalPaginas',1)} ({len(lics)} itens)")
-
+        
+        print(f"📄 MED Pg {pag}: {len(lics)} pregões")
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
             futuros = [exe.submit(processar_licitacao, l, session) for l in lics]
             for f in concurrent.futures.as_completed(futuros):
@@ -163,14 +180,4 @@ if __name__ == '__main__':
     with open(ARQCHECKPOINT, 'w') as f:
         f.write((data_alvo - timedelta(days=1)).strftime('%Y-%m-%d'))
 
-    # ✅ EFEITO DOMINÓ CORRIGIDO
-    if 'GITHUB_OUTPUT' in os.environ:
-        hoje_date = hoje.date()
-        proximo_dia = (data_alvo - timedelta(days=1)).date()
-        dia_mes = proximo_dia.day
-        trigger = 'true' if dia_mes in [1, 16] else 'false'
-        with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-            print(f'triggernext={trigger}', file=f)
-        print(f"🔄 DOMINÓ: triggernext={trigger} (dia {dia_mes})")
-
-    print(f"✅ Salvo {len(banco)} pregões pharma!")
+    print(f"✅ Salvo {len(banco)} pregões pharma em {dstr}!")
