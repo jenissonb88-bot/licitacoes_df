@@ -2,7 +2,7 @@ name: Sniper Pharma Controller
 
 on:
   schedule:
-    - cron: '0 9 * * *'  # Roda todo dia às 06:00 BRT (09:00 UTC)
+    - cron: '0 9 * * *'  # Roda todo dia às 06:00 BRT
   workflow_dispatch:
     inputs:
       mode:
@@ -14,7 +14,7 @@ on:
         - manual_loop
         - single_run
       target_date:
-        description: 'Data Alvo (YYYY-MM-DD) para iniciar o loop ou rodar único'
+        description: 'Data Alvo (YYYY-MM-DD)'
         required: false
         default: '2025-12-01'
 
@@ -22,13 +22,13 @@ jobs:
   sniper:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Permite git push
-      actions: write   # Permite disparar o próximo workflow (loop)
+      contents: write
+      actions: write
 
     steps:
     - uses: actions/checkout@v4
       with:
-        fetch-depth: 0 # Importante para o git pull --rebase funcionar bem com histórico
+        fetch-depth: 0 
 
     - name: Setup Python
       uses: actions/setup-python@v5
@@ -38,106 +38,83 @@ jobs:
     - name: Install deps
       run: pip install requests
 
-    # --- 1. LÓGICA DE DECISÃO DE DATAS ---
+    # --- 1. LÓGICA DE DATAS ---
     - name: Definir Datas e Modo
       id: config
       run: |
-        # Configuração de Fuso Horário
         export TZ="America/Sao_Paulo"
         TODAY=$(date +'%Y-%m-%d')
         DAY_OF_MONTH=$(date +'%d')
 
-        # CASO 1: Agendado (CRON)
         if [ "${{ github.event_name }}" == "schedule" ]; then
-          
-          # Se for dia 01 ou dia 16 -> Varredura Completa desde 2026-01-01
           if [ "$DAY_OF_MONTH" == "01" ] || [ "$DAY_OF_MONTH" == "16" ]; then
             echo "START_DATE=2026-01-01" >> $GITHUB_ENV
             echo "END_DATE=$TODAY" >> $GITHUB_ENV
             echo "MODE=full_scan" >> $GITHUB_ENV
-            echo "📅 ROTINA QUINZENAL: Varredura Completa iniciada."
-          
-          # Outros dias -> Pega os ultimos 3 dias (segurança)
           else
             START_3DAYS=$(date -d "3 days ago" +'%Y-%m-%d')
             echo "START_DATE=$START_3DAYS" >> $GITHUB_ENV
             echo "END_DATE=$TODAY" >> $GITHUB_ENV
             echo "MODE=daily_update" >> $GITHUB_ENV
-            echo "📅 ROTINA DIÁRIA: Verificando últimos 3 dias."
           fi
-
-        # CASO 2: Manual (Workflow Dispatch)
         else
           INPUT_DATE="${{ inputs.target_date }}"
           echo "START_DATE=$INPUT_DATE" >> $GITHUB_ENV
-          # No loop manual, processamos 1 dia por vez
           echo "END_DATE=$INPUT_DATE" >> $GITHUB_ENV 
           echo "MODE=${{ inputs.mode }}" >> $GITHUB_ENV
-          echo "🔧 MODO MANUAL: ${{ inputs.mode }} para $INPUT_DATE"
         fi
 
-    # --- 2. EXECUÇÃO DOS SCRIPTS ---
-    - name: Run app.py (Coleta)
-      run: |
-        echo "🚀 Iniciando Sniper Pharma de $START_DATE até $END_DATE..."
-        python app.py --start "$START_DATE" --end "$END_DATE"
+    # --- 2. EXECUÇÃO ---
+    - name: Run app.py
+      run: python app.py --start "$START_DATE" --end "$END_DATE"
 
-    - name: Run limpeza.py (Filtros)
+    - name: Run limpeza.py
       run: python limpeza.py
 
-    # --- 3. COMMIT E PUSH BLINDADO ---
+    # --- 3. COMMIT E PUSH (ESTRATÉGIA ANTI-CONFLITO) ---
     - name: Commit results
       run: |
         git config user.name "Sniper Pharma Bot"
         git config user.email "sniper@pharma.bot"
         
-        # Garante criação do checkpoint se não existir
+        echo "🔄 Resolvendo conflitos preventivamente..."
+        
+        # 1. Baixa o histórico mais recente do servidor
+        git fetch origin main
+        
+        # 2. Reseta o histórico local para igualar ao servidor (sem apagar os arquivos gerados pelo Python)
+        # O --mixed mantém os arquivos na pasta (Work Tree) mas limpa o Stage
+        git reset --mixed origin/main
+        
+        # 3. Agora adicionamos nossos arquivos recém-gerados como a "versão final"
         if [ ! -f checkpoint.txt ]; then echo "$START_DATE" > checkpoint.txt; fi
         
-        # Adiciona pasta 'dados' SOMENTE se ela existir e tiver algo
-        if [ -d "dados" ]; then
-          git add dados/ || true
-        fi
-        
-        # Adiciona arquivos essenciais (|| true evita erro se não mudaram)
+        if [ -d "dados" ]; then git add dados/ || true; fi
         git add checkpoint.txt || true
         git add pregacoes_pharma_limpos.json.gz || true
         
-        # Verifica se há algo no stage para commitar
+        # 4. Verifica se tem mudança e commita
         if ! git diff --staged --quiet; then
           git commit -m "Sniper $START_DATE | Mode: $MODE"
-          
-          # --- CORREÇÃO DE CONFLITOS E ERROS DE PUSH ---
-          
-          # 1. Limpa arquivos 'sujos' não commitados (logs, cache) que impedem o rebase
-          git reset --hard
-          
-          # 2. Sincroniza com o remoto (baixa mudanças novas e aplica as nossas no topo)
-          echo "🔄 Sincronizando com remoto..."
-          git pull --rebase origin main || git pull --rebase origin master
-          
-          # 3. Envia
-          echo "⬆️ Enviando dados..."
-          git push
+          echo "⬆️ Enviando dados (Fast-Forward)..."
+          git push origin main
         else
-          echo "✨ Nenhuma alteração encontrada para commitar."
+          echo "✨ Nenhuma alteração nova para enviar."
         fi
 
-    # --- 4. AUTO-TRIGGER (LOOP RECURSIVO) ---
-    - name: Trigger Próximo Dia (Apenas Loop Manual)
+    # --- 4. LOOP ---
+    - name: Trigger Próximo Dia
       if: inputs.mode == 'manual_loop'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         CURRENT="${{ inputs.target_date }}"
-        # Calcula o próximo dia
         NEXT_DAY=$(date -d "$CURRENT + 1 day" +'%Y-%m-%d')
         TODAY=$(date +'%Y-%m-%d')
         
-        # Verifica se o próximo dia ainda é passado ou hoje
         if [[ "$NEXT_DAY" < "$TODAY" ]] || [[ "$NEXT_DAY" == "$TODAY" ]]; then
-          echo "🔁 Gatilho ativado para o próximo dia: $NEXT_DAY"
+          echo "🔁 Próximo dia: $NEXT_DAY"
           gh workflow run sync-data.yml -f mode=manual_loop -f target_date="$NEXT_DAY"
         else
-          echo "🏁 Chegamos na data atual ($TODAY). Fim do Loop Manual."
+          echo "🏁 Fim do Loop."
         fi
