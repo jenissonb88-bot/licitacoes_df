@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sniper Pharma - Oportunidades Ativas</title>
+    <title>Sniper Pharma - Monitor de Licitações</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" rel="stylesheet">
@@ -13,31 +13,33 @@
     <style>
         :root { --primary-color: #0d6efd; --bg-color: #f4f6f9; }
         body { background-color: var(--bg-color); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .navbar { box-shadow: 0 2px 4px rgba(0,0,0,0.1); background: linear-gradient(to right, #004e92, #000428); }
+        .navbar { background: linear-gradient(to right, #004e92, #000428); }
         .card { border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; border-radius: 10px; }
-        .table-hover tbody tr:hover { background-color: rgba(13, 110, 253, 0.05); cursor: pointer; }
         .loading-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(255,255,255,0.95); z-index: 9999;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
         .valor-monetario { font-weight: bold; color: #198754; }
-        .badge-uf { width: 40px; }
         .data-critica { color: #dc3545; font-weight: bold; }
+        
+        /* Estilo da Tabela de Itens no Modal */
+        .table-itens thead th { background-color: #e9ecef; position: sticky; top: 0; }
+        .modal-body { max-height: 70vh; overflow-y: auto; }
     </style>
 </head>
 <body>
 
     <div id="loading" class="loading-overlay">
         <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
-        <h5 class="mt-3 text-secondary">Carregando Oportunidades...</h5>
-        <p class="text-muted small" id="loading-msg">Conectando ao banco de dados...</p>
+        <h5 class="mt-3">Carregando Sniper Pharma...</h5>
+        <p class="text-muted small" id="loading-msg">Conectando...</p>
     </div>
 
     <nav class="navbar navbar-expand-lg navbar-dark sticky-top">
         <div class="container-fluid">
-            <a class="navbar-brand" href="#"><i class="fas fa-biohazard me-2"></i>Sniper Pharma <span class="badge bg-warning text-dark" style="font-size: 0.6em">V4.0</span></a>
-            <span class="navbar-text text-white small" id="last-update">Carregando...</span>
+            <a class="navbar-brand" href="#"><i class="fas fa-biohazard me-2"></i>Sniper Pharma</a>
+            <span class="navbar-text text-white small" id="last-update"></span>
         </div>
     </nav>
 
@@ -45,57 +47,75 @@
         <div class="row g-3 mb-4">
             <div class="col-md-4">
                 <div class="card p-3 border-start border-4 border-primary">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="text-muted text-uppercase small">Total Ativos</h6>
-                            <h3 id="total-count" class="mb-0">0</h3>
-                        </div>
-                        <i class="fas fa-file-contract fa-2x text-primary opacity-50"></i>
-                    </div>
+                    <h6 class="text-muted text-uppercase small">Total Ativos</h6>
+                    <h3 id="total-count">0</h3>
                 </div>
             </div>
             <div class="col-md-4">
                 <div class="card p-3 border-start border-4 border-success">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="text-muted text-uppercase small">Valor Total Estimado</h6>
-                            <h3 id="total-value" class="mb-0">R$ 0,00</h3>
-                        </div>
-                        <i class="fas fa-coins fa-2x text-success opacity-50"></i>
-                    </div>
+                    <h6 class="text-muted text-uppercase small">Valor Total Estimado</h6>
+                    <h3 id="total-value">R$ 0,00</h3>
                 </div>
             </div>
             <div class="col-md-4">
                 <div class="card p-3 border-start border-4 border-warning">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="text-muted text-uppercase small">Encerram em 48h</h6>
-                            <h3 id="urgent-count" class="mb-0">0</h3>
-                        </div>
-                        <i class="fas fa-hourglass-half fa-2x text-warning opacity-50"></i>
-                    </div>
+                    <h6 class="text-muted text-uppercase small">Urgentes (48h)</h6>
+                    <h3 id="urgent-count">0</h3>
                 </div>
             </div>
         </div>
 
         <div class="card">
-            <div class="card-header bg-white py-3">
-                <h5 class="mb-0"><i class="fas fa-list me-2"></i>Lista de Pregões</h5>
-            </div>
             <div class="card-body">
                 <table id="tabela-pharma" class="table table-striped table-hover dt-responsive nowrap" style="width:100%">
                     <thead>
                         <tr>
-                            <th>Encerramento</th>
+                            <th>Fim</th>
                             <th>UF</th>
-                            <th>Local / Edital</th>
+                            <th>Órgão / Edital</th>
                             <th>Objeto</th>
-                            <th>Valor Est.</th>
-                            <th>Ação</th>
+                            <th>Valor Total</th>
+                            <th>Ações</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalItens" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header bg-light">
+                    <div>
+                        <h5 class="modal-title" id="modalTitle">Itens do Pregão</h5>
+                        <small class="text-muted" id="modalSubtitle">Carregando...</small>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped table-itens mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width: 50px;">#</th>
+                                    <th>Descrição do Item</th>
+                                    <th style="width: 100px;">Qtd</th>
+                                    <th style="width: 80px;">Un</th>
+                                    <th style="width: 120px;">Val. Unit.</th>
+                                    <th style="width: 120px;">Total Item</th>
+                                </tr>
+                            </thead>
+                            <tbody id="lista-itens-body">
+                                </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <a href="#" id="btn-pncp-link" target="_blank" class="btn btn-primary"><i class="fas fa-external-link-alt"></i> Ver no PNCP</a>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                </div>
             </div>
         </div>
     </div>
@@ -110,8 +130,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/locale/pt-br.js"></script>
 
     <script>
-        // Aponta para o arquivo gerado pelo limpeza.py
-        const FILE_URL = 'pregacoes_pharma_limpos.json.gz'; 
+        const FILE_URL = 'pregacoes_pharma_limpos.json.gz';
+        var table; // Variável global para a tabela
 
         $(document).ready(function() {
             moment.locale('pt-br');
@@ -121,126 +141,139 @@
         async function carregarDados() {
             try {
                 $('#loading-msg').text(`Baixando ${FILE_URL}...`);
-                
-                const response = await fetch(FILE_URL, {cache: "no-store"}); // Evita cache antigo
-                if (!response.ok) throw new Error("Arquivo de dados não encontrado.");
+                const response = await fetch(FILE_URL, {cache: "no-store"});
+                if (!response.ok) throw new Error("Arquivo não encontrado.");
                 
                 const blob = await response.blob();
                 const arrayBuffer = await blob.arrayBuffer();
                 
-                $('#loading-msg').text('Descompactando e processando...');
-                
                 let textData;
                 try {
-                    const decompressed = pako.ungzip(new Uint8Array(arrayBuffer), { to: 'string' });
-                    textData = decompressed;
+                    textData = pako.ungzip(new Uint8Array(arrayBuffer), { to: 'string' });
                 } catch (e) {
-                    console.warn("Falha GZIP, tentando texto puro...");
                     textData = await blob.text();
                 }
 
                 const dados = JSON.parse(textData);
-                
                 inicializarTabela(dados);
-                calcularEstatisticas(dados);
-                
+                atualizarStats(dados);
                 $('#loading').fadeOut();
 
             } catch (erro) {
-                $('#loading').html(`
-                    <div class="text-danger text-center p-4">
-                        <i class="fas fa-exclamation-triangle fa-3x mb-3"></i>
-                        <h3>Erro ao carregar dados</h3>
-                        <p>${erro.message}</p>
-                        <small>Verifique se o GitHub Actions rodou o script 'limpeza.py' com sucesso.</small>
-                    </div>
-                `);
+                $('#loading').html(`<div class="text-danger text-center"><h3>Erro</h3><p>${erro.message}</p></div>`);
             }
         }
 
         function inicializarTabela(dados) {
-            $('#tabela-pharma').DataTable({
+            table = $('#tabela-pharma').DataTable({
                 data: dados,
-                order: [[0, 'asc']], // Ordena por data de encerramento (mais urgente primeiro)
+                order: [[0, 'asc']],
                 pageLength: 25,
-                language: {
-                    url: "//cdn.datatables.net/plug-ins/1.13.4/i18n/pt-BR.json"
-                },
+                language: { url: "//cdn.datatables.net/plug-ins/1.13.4/i18n/pt-BR.json" },
                 columns: [
                     { 
                         data: 'data_enc',
                         render: function(data) {
                             if (!data) return '<span class="text-muted">N/A</span>';
-                            const dataObj = moment(data);
-                            const diffDias = dataObj.diff(moment(), 'days');
-                            
-                            // Destaque visual para prazos curtos
-                            let cor = 'text-dark';
-                            if (diffDias < 0) cor = 'text-muted text-decoration-line-through';
-                            else if (diffDias <= 2) cor = 'data-critica';
-                            
-                            return `<span class="${cor}" data-sort="${data}">${dataObj.format('DD/MM/YYYY HH:mm')}</span>`;
+                            const m = moment(data);
+                            const dias = m.diff(moment(), 'days');
+                            let cls = dias <= 2 && dias >= 0 ? 'data-critica' : '';
+                            return `<span class="${cls}">${m.format('DD/MM/YYYY HH:mm')}</span>`;
                         }
                     },
+                    { data: 'uf' },
                     { 
-                        data: 'uf',
-                        render: function(data) {
-                            return `<span class="badge bg-secondary badge-uf">${data}</span>`;
-                        }
-                    },
-                    { 
-                        data: null,
-                        render: function(data, type, row) {
-                            return `
-                                <div class="fw-bold">${row.cidade}</div>
-                                <div class="small text-muted"><i class="fas fa-file-alt me-1"></i>${row.edital}</div>
-                            `;
+                        data: null, 
+                        render: function(row) {
+                            return `<b>${row.cidade}</b><br><small>${row.edital}</small>`; 
                         }
                     },
                     { 
                         data: 'objeto',
                         render: function(data) {
-                            return `<div class="text-truncate" style="max-width: 350px;" title="${data}">${data}</div>`;
+                            return `<div class="text-truncate" style="max-width:300px" title="${data}">${data}</div>`;
                         }
                     },
                     { 
                         data: 'valor_estimado',
-                        render: function(data) {
-                            return `<div class="valor-monetario">${parseFloat(data).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</div>`;
+                        render: function(v) { 
+                            return parseFloat(v).toLocaleString('pt-BR',{style:'currency', currency:'BRL'}); 
                         }
                     },
                     {
-                        data: 'link',
-                        render: function(data) {
-                            return `<a href="${data}" target="_blank" class="btn btn-sm btn-outline-primary"><i class="fas fa-external-link-alt"></i> Abrir</a>`;
+                        data: null,
+                        render: function(data, type, row) {
+                            // Armazena os dados do objeto no botão para facilitar o clique
+                            // Mas como o objeto é grande, melhor usar o evento de click do datatables
+                            return `
+                                <div class="btn-group" role="group">
+                                    <button class="btn btn-sm btn-info text-white btn-detalhes" title="Ver Itens">
+                                        <i class="fas fa-list-ol"></i> Itens
+                                    </button>
+                                    <a href="${row.link}" target="_blank" class="btn btn-sm btn-outline-primary" title="Abrir PNCP">
+                                        <i class="fas fa-external-link-alt"></i>
+                                    </a>
+                                </div>
+                            `;
                         }
                     }
                 ]
             });
+
+            // Evento de Clique no Botão Detalhes
+            $('#tabela-pharma tbody').on('click', '.btn-detalhes', function () {
+                var tr = $(this).closest('tr');
+                var row = table.row(tr).data();
+                abrirModalItens(row);
+            });
         }
 
-        function calcularEstatisticas(dados) {
-            // Contagem Total
+        function abrirModalItens(dados) {
+            // Preenche cabeçalho
+            $('#modalTitle').text(`Edital ${dados.edital} - ${dados.cidade}/${dados.uf}`);
+            $('#modalSubtitle').text(dados.objeto);
+            $('#btn-pncp-link').attr('href', dados.link);
+
+            // Preenche Tabela
+            const tbody = $('#lista-itens-body');
+            tbody.empty();
+
+            if (!dados.itens || dados.itens.length === 0) {
+                tbody.html('<tr><td colspan="6" class="text-center py-4 text-muted">Nenhum item detalhado disponível para este pregão.</td></tr>');
+            } else {
+                dados.itens.forEach(item => {
+                    const totalItem = (item.qtd * item.valUnit);
+                    const html = `
+                        <tr>
+                            <td>${item.n}</td>
+                            <td>${item.desc}</td>
+                            <td>${parseFloat(item.qtd).toLocaleString('pt-BR')}</td>
+                            <td>${item.un}</td>
+                            <td>${parseFloat(item.valUnit).toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+                            <td class="fw-bold">${totalItem.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+                        </tr>
+                    `;
+                    tbody.append(html);
+                });
+            }
+
+            // Abre Modal
+            var myModal = new bootstrap.Modal(document.getElementById('modalItens'));
+            myModal.show();
+        }
+
+        function atualizarStats(dados) {
             $('#total-count').text(dados.length);
-
-            // Valor Total
-            const totalValor = dados.reduce((acc, item) => acc + (item.valor_estimado || 0), 0);
-            $('#total-value').text(totalValor.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL', maximumFractionDigits: 0}));
-
-            // Urgentes (Próximas 48h)
-            const hoje = moment();
-            const limiteUrgencia = moment().add(48, 'hours');
+            const total = dados.reduce((acc, i) => acc + (i.valor_estimado || 0), 0);
+            $('#total-value').text(total.toLocaleString('pt-BR', {style:'currency', currency:'BRL', maximumFractionDigits: 0}));
             
-            const urgentes = dados.filter(item => {
-                if (!item.data_enc) return false;
-                const dataItem = moment(item.data_enc);
-                return dataItem.isAfter(hoje) && dataItem.isBefore(limiteUrgencia);
+            const urgentes = dados.filter(i => {
+                if(!i.data_enc) return false;
+                const d = moment(i.data_enc);
+                return d.isAfter(moment()) && d.isBefore(moment().add(48, 'h'));
             }).length;
-
             $('#urgent-count').text(urgentes);
-            
-            // Data atualização (Hoje)
-            $('#last-update').text(`Dados processados em: ${moment().format('DD/MM/YYYY HH:mm')}`);
+            $('#last-update').text("Atualizado: " + moment().format('DD/MM HH:mm'));
         }
     </script>
 </body>
