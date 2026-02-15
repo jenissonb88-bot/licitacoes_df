@@ -2,8 +2,8 @@ name: Sniper Pharma Inteligente
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 3 * * *'      # 1x/dia 3h UTC (0h BR)
-    - cron: '0 5 1,16 * *'    # Dias 1/16 5h UTC (2h BR)
+    - cron: '0 3 * * *'
+    - cron: '0 5 1,16 * *'
 
 jobs:
   run-bot:
@@ -13,22 +13,20 @@ jobs:
       actions: write
       id-token: write
     steps:
-    - name: 🚀 Checkout
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
       with:
         persist-credentials: true
         fetch-depth: 0
 
-    - name: 🐍 Setup Python
-      uses: actions/setup-python@v5
+    - uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
-    - name: 📦 Dependencies
-      run: pip install requests pandas openpyxl
+    - name: 📦 INSTALL PACKAGES **PRIMEIRO**
+      run: |
+        pip install requests pandas openpyxl unicodedata2
 
     - name: 🎯 SNIPER CAPTURA
-      id: sniper
       run: python app.py
 
     - name: 🧹 LIMPEZA
@@ -40,10 +38,8 @@ jobs:
         DIA=$(date +%d)
         if [ "$DIA" = "01" ] || [ "$DIA" = "16" ]; then
           echo "domino=true" >> $GITHUB_OUTPUT
-          echo "🎯 DIA $DIA - EFEITO DOMINÓ ATIVADO"
         else
           echo "domino=false" >> $GITHUB_OUTPUT
-          echo "📅 DIA $DIA - Aguardando 1/16"
         fi
 
     - name: 💾 COMMIT
@@ -52,17 +48,12 @@ jobs:
         git config --global user.email "bot@sniper.pharma"
         git add .
         if ! git diff --staged --quiet; then
-          git commit -m "🤖 $(date +%Y-%m-%d) - $(ls -lh dadosoportunidades.json.gz 2>/dev/null | awk '{print $5}' || echo 'Novo')"
+          git commit -m "🤖 $(date +%Y-%m-%d)"
           git push
-          echo "✅ Commit & Push OK"
-        else
-          echo "⚪ Sem mudanças"
         fi
 
-    - name: 🔄 EFEITO DOMINÓ
+    - name: 🔄 DOMINÓ
       if: steps.domino.outputs.domino == 'true'
-      run: |
-        echo "🚀 Disparando próxima varredura..."
-        gh workflow run sync-data.yml --ref ${{ github.ref }}
+      run: gh workflow run sync-data.yml
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
