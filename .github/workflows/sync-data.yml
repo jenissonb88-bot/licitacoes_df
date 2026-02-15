@@ -11,49 +11,25 @@ jobs:
     permissions:
       contents: write
       actions: write
-      id-token: write
     steps:
+    # 1️⃣ CHECKOUT PRIMEIRO
     - uses: actions/checkout@v4
-      with:
-        persist-credentials: true
-        fetch-depth: 0
-
+    
+    # 2️⃣ PYTHON
     - uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-
-    - name: 📦 INSTALL PACKAGES **PRIMEIRO**
+    
+    # 3️⃣ *** INSTALAR ANTES ***
+    - name: 📦 INSTALL PACKAGES
       run: |
-        pip install requests pandas openpyxl unicodedata2
-
-    - name: 🎯 SNIPER CAPTURA
+        pip install requests pandas openpyxl
+    
+    # 4️⃣ AGORA PYTHON FUNCIONA
+    - name: 🎯 CAPTURA
       run: python app.py
-
+    
     - name: 🧹 LIMPEZA
       run: python limpeza.py
-
-    - name: 📊 CHECK DOMINÓ
-      id: domino
-      run: |
-        DIA=$(date +%d)
-        if [ "$DIA" = "01" ] || [ "$DIA" = "16" ]; then
-          echo "domino=true" >> $GITHUB_OUTPUT
-        else
-          echo "domino=false" >> $GITHUB_OUTPUT
-        fi
-
-    - name: 💾 COMMIT
-      run: |
-        git config --global user.name "Sniper Pharma"
-        git config --global user.email "bot@sniper.pharma"
-        git add .
-        if ! git diff --staged --quiet; then
-          git commit -m "🤖 $(date +%Y-%m-%d)"
-          git push
-        fi
-
-    - name: 🔄 DOMINÓ
-      if: steps.domino.outputs.domino == 'true'
-      run: gh workflow run sync-data.yml
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    # resto igual...
