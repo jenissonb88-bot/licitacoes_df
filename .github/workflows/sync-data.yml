@@ -2,8 +2,8 @@ name: Sniper Pharma Inteligente
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 3 * * *'      # Varredura diária 3h
-    - cron: '0 5 1,16 * *'    # Revisão dias 1/16 5h
+    - cron: '0 3 * * *'        # Diária 3h
+    - cron: '0 5 1,16 * *'      # Revisão 1/16 5h
 
 jobs:
   run-bot:
@@ -12,33 +12,53 @@ jobs:
       contents: write
       actions: write
     steps:
-    - uses: actions/checkout@v3
-      with: persist-credentials: true
-      
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with: python-version: 3.10
-      
-    - name: Install Dependencies
-      run: pip install requests pandas
-      
-    - name: 🚀 Sniper Captura
-      id: sniper
-      run: python app-3.py
-      
-    - name: 🧹 Faxineiro Limpeza
-      run: python limpeza.py
-      
-    - name: 💾 Salvar Dados
-      run: |
-        git config --global user.name "Sniper Bot"
-        git config --global user.email "bot@sniper.com"
-        git add .
-        git commit -m "Ciclo Completo $(date +%Y-%m-%d)" || echo "Sem alterações"
-        git push
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: true
+        fetch-depth: 0
         
-    - name: 🔄 Efeito Dominó
-      if: steps.sniper.outputs.triggernext == 'true'
-      run: gh workflow run sync-data.yml
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        
+    - name: Install Dependencies
+      run: pip install requests pandas openpyxl
+      
+    - name: 🚀 Sniper Captura & Limpeza
+      id: captura
+      run: |
+        python app-3.py
+        python limpeza.py
+        
+    - name: 📊 Verificar Trigger Dominó
+      id: trigger
+      run: |
+        DIA_MES=$(date +%d)
+        if [ "$DIA_MES" = "01" ] || [ "$DIA_MES" = "16" ]; then
+          echo "trigger_dominó=true" >> $GITHUB_OUTPUT
+          echo "Hoje é dia $DIA_MES - Disparando Efeito Dominó!"
+        else
+          echo "trigger_dominó=false" >> $GITHUB_OUTPUT
+          echo "Hoje dia $DIA_MES - Sem dominó"
+        fi
+      
+    - name: 💾 Commit & Push
+      run: |
+        git config --global user.name "Sniper Pharma Bot"
+        git config --global user.email "bot@sniper.pharma"
+        git add .
+        if git diff --staged --quiet; then
+          echo "✅ Sem alterações"
+        else
+          git commit -m "🤖 Captura $(date +%Y-%m-%d) - $(ls -lh dadosoportunidades.json.gz | awk '{print $5}')"
+          git push
+        fi
+      
+    - name: 🔄 EFEITO DOMINÓ (Corrigido)
+      if: steps.trigger.outputs.trigger_dominó == 'true'
+      run: |
+        echo "🎯 Disparando próxima execução..."
+        gh workflow run sync-data.yml --ref ${{ github.ref }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
