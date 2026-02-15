@@ -28,7 +28,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        fetch-depth: 0 # Importante para o git pull --rebase funcionar bem
+        fetch-depth: 0 # Importante para o git pull --rebase funcionar bem com histórico
 
     - name: Setup Python
       uses: actions/setup-python@v5
@@ -85,33 +85,38 @@ jobs:
     - name: Run limpeza.py (Filtros)
       run: python limpeza.py
 
-    # --- 3. COMMIT E PUSH SEGURO ---
+    # --- 3. COMMIT E PUSH BLINDADO ---
     - name: Commit results
       run: |
         git config user.name "Sniper Pharma Bot"
         git config user.email "sniper@pharma.bot"
         
-        # Cria checkpoint se não existir
+        # Garante criação do checkpoint se não existir
         if [ ! -f checkpoint.txt ]; then echo "$START_DATE" > checkpoint.txt; fi
         
-        # Adiciona arquivos (usando || true para não quebrar se algo faltar)
-        # Verifica se a pasta 'dados' existe antes de adicionar
+        # Adiciona pasta 'dados' SOMENTE se ela existir e tiver algo
         if [ -d "dados" ]; then
           git add dados/ || true
         fi
         
+        # Adiciona arquivos essenciais (|| true evita erro se não mudaram)
         git add checkpoint.txt || true
         git add pregacoes_pharma_limpos.json.gz || true
         
-        # Só tenta commitar se houver mudanças no stage
+        # Verifica se há algo no stage para commitar
         if ! git diff --staged --quiet; then
           git commit -m "Sniper $START_DATE | Mode: $MODE"
           
-          # --- CORREÇÃO DO ERRO DE REJEIÇÃO ---
-          # Puxa as mudanças remotas e aplica as locais por cima
+          # --- CORREÇÃO DE CONFLITOS E ERROS DE PUSH ---
+          
+          # 1. Limpa arquivos 'sujos' não commitados (logs, cache) que impedem o rebase
+          git reset --hard
+          
+          # 2. Sincroniza com o remoto (baixa mudanças novas e aplica as nossas no topo)
           echo "🔄 Sincronizando com remoto..."
           git pull --rebase origin main || git pull --rebase origin master
           
+          # 3. Envia
           echo "⬆️ Enviando dados..."
           git push
         else
