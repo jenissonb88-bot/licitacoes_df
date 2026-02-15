@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sniper Pharma - Monitor de Licitações</title>
+    <title>Sniper Pharma - Oportunidades Ativas</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" rel="stylesheet">
@@ -11,88 +11,91 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 
     <style>
-        :root { --primary-color: #0d6efd; --bg-color: #f8f9fa; }
+        :root { --primary-color: #0d6efd; --bg-color: #f4f6f9; }
         body { background-color: var(--bg-color); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .navbar { box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .card { border: none; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        .status-badge { font-size: 0.8em; }
+        .navbar { box-shadow: 0 2px 4px rgba(0,0,0,0.1); background: linear-gradient(to right, #004e92, #000428); }
+        .card { border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; border-radius: 10px; }
         .table-hover tbody tr:hover { background-color: rgba(13, 110, 253, 0.05); cursor: pointer; }
         .loading-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(255,255,255,0.9); z-index: 9999;
+            background: rgba(255,255,255,0.95); z-index: 9999;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
-        .text-truncate-2 {
-            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-        }
+        .valor-monetario { font-weight: bold; color: #198754; }
+        .badge-uf { width: 40px; }
+        .data-critica { color: #dc3545; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div id="loading" class="loading-overlay">
         <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
-        <h5 class="mt-3 text-secondary">Carregando e descompactando dados...</h5>
-        <p class="text-muted small" id="loading-msg">Baixando arquivo...</p>
+        <h5 class="mt-3 text-secondary">Carregando Oportunidades...</h5>
+        <p class="text-muted small" id="loading-msg">Conectando ao banco de dados...</p>
     </div>
 
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top">
         <div class="container-fluid">
-            <a class="navbar-brand" href="#"><i class="fas fa-crosshairs me-2"></i>Sniper Pharma</a>
-            <span class="navbar-text text-white small" id="last-update">Atualizado: ...</span>
+            <a class="navbar-brand" href="#"><i class="fas fa-biohazard me-2"></i>Sniper Pharma <span class="badge bg-warning text-dark" style="font-size: 0.6em">V4.0</span></a>
+            <span class="navbar-text text-white small" id="last-update">Carregando...</span>
         </div>
     </nav>
 
     <div class="container-fluid mt-4">
         <div class="row g-3 mb-4">
-            <div class="col-md-3">
+            <div class="col-md-4">
                 <div class="card p-3 border-start border-4 border-primary">
-                    <h6 class="text-muted">Total Oportunidades</h6>
-                    <h3 id="total-count">0</h3>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card p-3 border-start border-4 border-success">
-                    <h6 class="text-muted">Hoje</h6>
-                    <h3 id="today-count">0</h3>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card p-3">
-                    <h6 class="text-muted">Filtros Rápidos</h6>
-                    <div id="quick-filters">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted text-uppercase small">Total Ativos</h6>
+                            <h3 id="total-count" class="mb-0">0</h3>
                         </div>
+                        <i class="fas fa-file-contract fa-2x text-primary opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card p-3 border-start border-4 border-success">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted text-uppercase small">Valor Total Estimado</h6>
+                            <h3 id="total-value" class="mb-0">R$ 0,00</h3>
+                        </div>
+                        <i class="fas fa-coins fa-2x text-success opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card p-3 border-start border-4 border-warning">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted text-uppercase small">Encerram em 48h</h6>
+                            <h3 id="urgent-count" class="mb-0">0</h3>
+                        </div>
+                        <i class="fas fa-hourglass-half fa-2x text-warning opacity-50"></i>
+                    </div>
                 </div>
             </div>
         </div>
 
         <div class="card">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0"><i class="fas fa-list me-2"></i>Lista de Pregões</h5>
+            </div>
             <div class="card-body">
                 <table id="tabela-pharma" class="table table-striped table-hover dt-responsive nowrap" style="width:100%">
                     <thead>
                         <tr>
-                            <th>Data Pub</th>
+                            <th>Encerramento</th>
                             <th>UF</th>
-                            <th>Órgão / Cidade</th>
+                            <th>Local / Edital</th>
                             <th>Objeto</th>
-                            <th>Edital</th>
+                            <th>Valor Est.</th>
                             <th>Ação</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
                 </table>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal fade" id="modalDetalhes" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Detalhes do Edital</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body" id="modal-body-content">
-                    </div>
             </div>
         </div>
     </div>
@@ -104,14 +107,14 @@
     <script src="https://cdn.datatables.net/responsive/2.4.1/js/dataTables.responsive.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/locale/pt-br.js"></script>
 
     <script>
-        // CONFIGURAÇÃO: Nome do arquivo gerado pelo app.py ou limpeza.py
-        // Se usar limpeza.py, provavelmente é 'pregacoes_pharma_limpos.json.gz'
-        // Se usar direto o app.py, é 'dadosoportunidades.json.gz'
-        const FILE_URL = 'dadosoportunidades.json.gz'; 
+        // Aponta para o arquivo gerado pelo limpeza.py
+        const FILE_URL = 'pregacoes_pharma_limpos.json.gz'; 
 
         $(document).ready(function() {
+            moment.locale('pt-br');
             carregarDados();
         });
 
@@ -119,95 +122,125 @@
             try {
                 $('#loading-msg').text(`Baixando ${FILE_URL}...`);
                 
-                const response = await fetch(FILE_URL);
-                if (!response.ok) throw new Error("Arquivo não encontrado (404)");
+                const response = await fetch(FILE_URL, {cache: "no-store"}); // Evita cache antigo
+                if (!response.ok) throw new Error("Arquivo de dados não encontrado.");
                 
                 const blob = await response.blob();
                 const arrayBuffer = await blob.arrayBuffer();
                 
-                $('#loading-msg').text('Descompactando dados...');
+                $('#loading-msg').text('Descompactando e processando...');
                 
-                // Descompacta GZIP usando Pako
                 let textData;
                 try {
                     const decompressed = pako.ungzip(new Uint8Array(arrayBuffer), { to: 'string' });
                     textData = decompressed;
                 } catch (e) {
-                    console.warn("Falha ao descompactar GZIP, tentando ler como texto puro...");
+                    console.warn("Falha GZIP, tentando texto puro...");
                     textData = await blob.text();
                 }
 
-                // Parse JSON
-                let dados = JSON.parse(textData);
+                const dados = JSON.parse(textData);
                 
-                // Se o JSON for um dicionário de objetos (formato do app.py), converte para lista
-                if (!Array.isArray(dados) && typeof dados === 'object') {
-                    dados = Object.values(dados);
-                }
-
                 inicializarTabela(dados);
-                atualizarCards(dados);
+                calcularEstatisticas(dados);
                 
                 $('#loading').fadeOut();
 
             } catch (erro) {
-                $('#loading').html(`<div class="text-danger text-center"><h3>Erro ao carregar dados</h3><p>${erro.message}</p><p>Verifique se o arquivo ${FILE_URL} existe no repositório.</p></div>`);
-                console.error(erro);
+                $('#loading').html(`
+                    <div class="text-danger text-center p-4">
+                        <i class="fas fa-exclamation-triangle fa-3x mb-3"></i>
+                        <h3>Erro ao carregar dados</h3>
+                        <p>${erro.message}</p>
+                        <small>Verifique se o GitHub Actions rodou o script 'limpeza.py' com sucesso.</small>
+                    </div>
+                `);
             }
         }
 
         function inicializarTabela(dados) {
-            const tabela = $('#tabela-pharma').DataTable({
+            $('#tabela-pharma').DataTable({
                 data: dados,
-                order: [[0, 'desc']], // Ordena por data (coluna 0) descrescente
+                order: [[0, 'asc']], // Ordena por data de encerramento (mais urgente primeiro)
+                pageLength: 25,
                 language: {
                     url: "//cdn.datatables.net/plug-ins/1.13.4/i18n/pt-BR.json"
                 },
                 columns: [
                     { 
-                        data: 'dataPub',
+                        data: 'data_enc',
                         render: function(data) {
-                            return data ? moment(data).format('DD/MM/YYYY') : '-';
+                            if (!data) return '<span class="text-muted">N/A</span>';
+                            const dataObj = moment(data);
+                            const diffDias = dataObj.diff(moment(), 'days');
+                            
+                            // Destaque visual para prazos curtos
+                            let cor = 'text-dark';
+                            if (diffDias < 0) cor = 'text-muted text-decoration-line-through';
+                            else if (diffDias <= 2) cor = 'data-critica';
+                            
+                            return `<span class="${cor}" data-sort="${data}">${dataObj.format('DD/MM/YYYY HH:mm')}</span>`;
                         }
                     },
-                    { data: 'uf' },
+                    { 
+                        data: 'uf',
+                        render: function(data) {
+                            return `<span class="badge bg-secondary badge-uf">${data}</span>`;
+                        }
+                    },
                     { 
                         data: null,
                         render: function(data, type, row) {
-                            return `<strong>${row.orgao || '---'}</strong><br><small class="text-muted">${row.cidade || ''}</small>`;
+                            return `
+                                <div class="fw-bold">${row.cidade}</div>
+                                <div class="small text-muted"><i class="fas fa-file-alt me-1"></i>${row.edital}</div>
+                            `;
                         }
                     },
                     { 
                         data: 'objeto',
                         render: function(data) {
-                            return `<div class="text-truncate-2" title="${data}">${data}</div>`;
+                            return `<div class="text-truncate" style="max-width: 350px;" title="${data}">${data}</div>`;
                         }
                     },
-                    { data: 'editaln' },
+                    { 
+                        data: 'valor_estimado',
+                        render: function(data) {
+                            return `<div class="valor-monetario">${parseFloat(data).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</div>`;
+                        }
+                    },
                     {
-                        data: null,
-                        render: function(data, type, row) {
-                            return `<a href="${row.link}" target="_blank" class="btn btn-sm btn-primary"><i class="fas fa-external-link-alt"></i> PNCP</a>`;
+                        data: 'link',
+                        render: function(data) {
+                            return `<a href="${data}" target="_blank" class="btn btn-sm btn-outline-primary"><i class="fas fa-external-link-alt"></i> Abrir</a>`;
                         }
                     }
                 ]
             });
         }
 
-        function atualizarCards(dados) {
+        function calcularEstatisticas(dados) {
+            // Contagem Total
             $('#total-count').text(dados.length);
-            
-            const hoje = moment().format('YYYY-MM-DD');
-            const novosHoje = dados.filter(d => d.dataPub && d.dataPub.startsWith(hoje)).length;
-            $('#today-count').text(novosHoje);
 
-            // Atualiza data do último registro
-            if(dados.length > 0) {
-                // Ordena temporariamente para pegar o mais recente
-                const sorted = [...dados].sort((a,b) => new Date(b.dataPub) - new Date(a.dataPub));
-                const lastDate = sorted[0].dataPub;
-                $('#last-update').text(`Último registro: ${moment(lastDate).format('DD/MM/YYYY HH:mm')}`);
-            }
+            // Valor Total
+            const totalValor = dados.reduce((acc, item) => acc + (item.valor_estimado || 0), 0);
+            $('#total-value').text(totalValor.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL', maximumFractionDigits: 0}));
+
+            // Urgentes (Próximas 48h)
+            const hoje = moment();
+            const limiteUrgencia = moment().add(48, 'hours');
+            
+            const urgentes = dados.filter(item => {
+                if (!item.data_enc) return false;
+                const dataItem = moment(item.data_enc);
+                return dataItem.isAfter(hoje) && dataItem.isBefore(limiteUrgencia);
+            }).length;
+
+            $('#urgent-count').text(urgentes);
+            
+            // Data atualização (Hoje)
+            $('#last-update').text(`Dados processados em: ${moment().format('DD/MM/YYYY HH:mm')}`);
         }
     </script>
 </body>
