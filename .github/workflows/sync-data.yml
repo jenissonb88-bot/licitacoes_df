@@ -1,35 +1,33 @@
-name: Sniper Pharma Inteligente
+name: Sniper Pharma Diário
 on:
-  workflow_dispatch:
   schedule:
-    - cron: '0 3 * * *'
-    - cron: '0 5 1,16 * *'
+    - cron: '0 9 * * *'  # 9h UTC = 6h BRT
+  workflow_dispatch:  # Manual
 
 jobs:
-  run-bot:
+  sniper:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      actions: write
     steps:
-    # 1️⃣ CHECKOUT PRIMEIRO
     - uses: actions/checkout@v4
     
-    # 2️⃣ PYTHON
-    - uses: actions/setup-python@v5
+    - name: Setup Python
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: '3.11'
     
-    # 3️⃣ *** INSTALAR ANTES ***
-    - name: 📦 INSTALL PACKAGES
-      run: |
-        pip install requests pandas openpyxl
+    - name: Install deps
+      run: pip install requests
     
-    # 4️⃣ AGORA PYTHON FUNCIONA
-    - name: 🎯 CAPTURA
+    - name: Run app.py
       run: python app.py
-    
-    - name: 🧹 LIMPEZA
+      
+    - name: Run limpeza.py
       run: python limpeza.py
-    
-    # resto igual...
+      
+    - name: Commit results
+      run: |
+        git config user.name "Sniper Pharma Bot"
+        git config user.email "sniper@pharma.bot"
+        git add -f dados/* checkpoint.txt pregacoes_pharma_limpos.json.gz
+        git commit -m "Sniper $(cat checkpoint.txt) - $(date +%Y-%m-%d)" || exit 0
+        git push
