@@ -8,7 +8,7 @@ ARQDADOS = 'dadosoportunidades.json.gz'
 ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'
 
 # --- 1. WHITELIST (SALVA SEMPRE) ---
-# Se o objeto tiver estas palavras, ele PASSA, mesmo que tenha termos da blacklist.
+# Prioridade Máxima: Passa mesmo se tiver termos proibidos.
 WHITELIST_OBJETO = [
     "FRALDA", "ABSORVENTE"
 ]
@@ -43,9 +43,11 @@ def normalize(texto):
 WHITELIST_NORM = [normalize(x) for x in WHITELIST_OBJETO]
 BLACKLIST_NORM = [normalize(x) for x in BLACKLIST_OBJETO]
 
-print("🧹 LIMPEZA V4 - WHITELIST + ÁLCOOL 70% + BLACKLIST EXPANDIDA")
+print("🧹 LIMPEZA V5 - CORTE 2026 + REGRAS AVANÇADAS")
 
-data_limite = datetime(2025, 12, 1, 0, 0, 0)
+# --- DATA DE CORTE AJUSTADA ---
+# Descarta tudo que encerrou ANTES de 01/01/2026
+data_limite = datetime(2026, 1, 1, 0, 0, 0)
 
 if not os.path.exists(ARQDADOS):
     print(f"❌ Arquivo {ARQDADOS} não encontrado.")
@@ -68,11 +70,12 @@ for preg in todos:
     if id_preg in duplicatas: continue
     duplicatas.add(id_preg)
     
-    # Filtro Data
+    # Filtro Data (CORTE 01/01/2026)
     data_enc = preg.get('dataEnc', '')
     try:
         if data_enc:
             data_enc_dt = datetime.fromisoformat(data_enc.replace('Z', '+00:00'))
+            # Se a data de encerramento for MENOR que 01/01/2026, tchau.
             if data_enc_dt.replace(tzinfo=None) < data_limite:
                 excluidos_enc += 1
                 continue
@@ -82,7 +85,7 @@ for preg in todos:
     objeto_txt = preg.get('objeto', '')
     objeto_norm = normalize(objeto_txt)
     
-    manter_pregao = True # Assume que mantém, a menos que caia nas regras
+    manter_pregao = True 
     motivo_exclusao = ""
 
     # REGRA 1: Whitelist (Fraldas/Absorventes) - Prioridade Total
@@ -98,7 +101,6 @@ for preg in todos:
         if raw_itens and isinstance(raw_itens, list):
             for item in raw_itens:
                 desc_item = normalize(item.get('descricao', ''))
-                # Verifica se tem ALCOOL e 70 na mesma descrição
                 if "ALCOOL" in desc_item and "70" in desc_item:
                     tem_alcool_70 = True
                     break
@@ -114,7 +116,6 @@ for preg in todos:
         excluidos_blacklist += 1
         motivo_exclusao = "Blacklist Objeto"
 
-    # Se foi barrado, pula para o próximo
     if not manter_pregao:
         continue
 
@@ -147,7 +148,7 @@ for preg in todos:
 
 print(f"\n📊 RESULTADO:")
 print(f"  📦 Origem: {len(todos)}")
-print(f"  ❌ Antigos: {excluidos_enc}")
+print(f"  ❌ Antigos (< 2026): {excluidos_enc}")
 print(f"  ❌ Blacklist: {excluidos_blacklist}")
 print(f"  ❌ Limpeza (s/ Álcool): {excluidos_limpeza}")
 print(f"  ✅ Mantidos: {len(limpos)}")
