@@ -1,39 +1,127 @@
-name: Sniper Pharma Diário
+name: Sniper Pharma Controller
 
 on:
   schedule:
-    - cron: '0 9 * * *' # 9h UTC = 6h BRT
-  workflow_dispatch: # Manual
+    - cron: '0 9 * * *'  # Roda todo dia às 06:00 BRT
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Modo de Execução'
+        required: true
+        default: 'manual_loop'
+        type: choice
+        options:
+        - manual_loop
+        - single_run
+      target_date:
+        description: 'Data Alvo (YYYY-MM-DD) para iniciar o loop ou rodar único'
+        required: false
+        default: '2025-12-01'
 
 jobs:
   sniper:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write # Necessário para o workflow se auto-executar
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-    
+
     - name: Install deps
       run: pip install requests
-    
-    - name: Run app.py
-      run: python app.py
-    
+
+    # --- LÓGICA DE DECISÃO DE DATAS ---
+    - name: Definir Datas e Modo
+      id: config
+      run: |
+        # Configuração de Fuso Horário
+        export TZ="America/Sao_Paulo"
+        TODAY=$(date +'%Y-%m-%d')
+        DAY_OF_MONTH=$(date +'%d')
+
+        # PADRÃO: Se for agendado (CRON)
+        if [ "${{ github.event_name }}" == "schedule" ]; then
+          
+          # Se for dia 01 ou dia 16 -> Varredura Completa desde 2026-01-01
+          if [ "$DAY_OF_MONTH" == "01" ] || [ "$DAY_OF_MONTH" == "16" ]; then
+            echo "START_DATE=2026-01-01" >> $GITHUB_ENV
+            echo "END_DATE=$TODAY" >> $GITHUB_ENV
+            echo "MODE=full_scan" >> $GITHUB_ENV
+            echo "Running Scheduled FULL SCAN"
+          
+          # Outros dias -> Pega os ultimos 3 dias
+          else
+            START_3DAYS=$(date -d "3 days ago" +'%Y-%m-%d')
+            echo "START_DATE=$START_3DAYS" >> $GITHUB_ENV
+            echo "END_DATE=$TODAY" >> $GITHUB_ENV
+            echo "MODE=daily_update" >> $GITHUB_ENV
+            echo "Running Scheduled DAILY UPDATE"
+          fi
+
+        # SE FOR MANUAL (Workflow Dispatch)
+        else
+          INPUT_DATE="${{ inputs.target_date }}"
+          echo "START_DATE=$INPUT_DATE" >> $GITHUB_ENV
+          echo "END_DATE=$INPUT_DATE" >> $GITHUB_ENV  # Manual Loop foca em 1 dia por vez
+          echo "MODE=${{ inputs.mode }}" >> $GITHUB_ENV
+          echo "Running Manual Mode: ${{ inputs.mode }} for $INPUT_DATE"
+        fi
+
+    # --- EXECUÇÃO DO PYTHON ---
+    # IMPORTANTE: Seu app.py precisa aceitar argumentos sys.argv ou argparse
+    # Exemplo de chamada: python app.py 2025-12-01 2025-12-01
+    - name: Run app.py com Datas
+      run: |
+        echo "Executando de $START_DATE até $END_DATE"
+        # Passamos as datas como variaveis de ambiente ou argumentos
+        # Ajuste abaixo conforme seu script Python espera receber!
+        python app.py --start "$START_DATE" --end "$END_DATE"
+
     - name: Run limpeza.py
       run: python limpeza.py
-    
+
+    # --- COMMIT DOS DADOS ---
     - name: Commit results
       run: |
         git config user.name "Sniper Pharma Bot"
         git config user.email "sniper@pharma.bot"
-        mkdir -p dados
-        git add dados/* checkpoint.txt pregacoes_pharma_limpos.json.gz 2>/dev/null || true
-        if git diff --staged --quiet; then
-          echo "Nenhum arquivo para commit"
-        else
-          git commit -m "Sniper $(cat checkpoint.txt 2>/dev/null || echo 'diário') - $(date +%Y-%m-%d)"
+        
+        # Cria checkpoint manual se não existir
+        echo "$START_DATE" > checkpoint.txt
+        
+        git add dados/ || true
+        git add checkpoint.txt || true
+        git add pregacoes_pharma_limpos.json.gz || true
+        
+        # Só commita se houver mudança
+        if ! git diff --staged --quiet; then
+          git commit -m "Data: $START_DATE | Mode: $MODE"
           git push
+        else
+          echo "Sem dados novos para $START_DATE."
+        fi
+
+    # --- AUTO-TRIGGER (LOOP RECURSIVO) ---
+    - name: Trigger Próximo Dia (Se Loop Manual)
+      if: inputs.mode == 'manual_loop'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        CURRENT="${{ inputs.target_date }}"
+        # Calcula o próximo dia
+        NEXT_DAY=$(date -d "$CURRENT + 1 day" +'%Y-%m-%d')
+        TODAY=$(date +'%Y-%m-%d')
+        
+        # Verifica se o próximo dia ainda é passado ou hoje
+        if [[ "$NEXT_DAY" < "$TODAY" ]] || [[ "$NEXT_DAY" == "$TODAY" ]]; then
+          echo "Gatilho para o próximo dia: $NEXT_DAY"
+          gh workflow run sync-data.yml -f mode=manual_loop -f target_date="$NEXT_DAY"
+        else
+          echo "Chegamos na data atual ($TODAY). Fim do Loop."
         fi
