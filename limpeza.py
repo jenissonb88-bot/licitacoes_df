@@ -7,46 +7,33 @@ from datetime import datetime
 ARQDADOS = 'dadosoportunidades.json.gz'
 ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'
 
-# --- 1. WHITELIST (SALVA SEMPRE) ---
-# Prioridade Máxima: Passa mesmo se tiver termos proibidos.
-WHITELIST_OBJETO = [
-    "FRALDA", "ABSORVENTE"
-]
+# --- CONFIGURAÇÕES ---
+# Whitelist: Salva sempre
+WHITELIST_OBJETO = ["FRALDA", "ABSORVENTE"]
 
-# --- 2. BLACKLIST (DESCARTA SE TIVER) ---
+# Blacklist: Descarta se tiver no objeto
 BLACKLIST_OBJETO = [
-    # Originais
     "TRANSPORTE", "VEICULO", "MANUTENCAO", "LIMPEZA PREDIAL", 
     "AR CONDICIONADO", "OBRAS", "ENGENHARIA", "CONFECCAO", 
     "ESTANTE", "MOBILIARIO", "INFORMATICA", "COMPUTADOR",
     "TONER", "CARTUCHO", "VETERINARIO", "ANIMAIS", "RACAO",
-    "ODONTOLOGICO", "ODONTO",
-    
-    # Novos Solicitados
-    "GENERO ALIMENTICIO", 
-    "MATERIAL DE CONSTRUCAO", 
-    "MATERIAL ELETRICO", 
-    "MATERIAL ESPORTIVO", 
-    "LOCACAO DE EQUIPAMENTO", 
-    "AQUISICAO DE EQUIPAMENTO", 
-    "EXAME LABORATORI", 
-    "MERENDA" # Já cobre "MERENDA ESCOLAR"
+    "ODONTOLOGICO", "ODONTO", "GENERO ALIMENTICIO", 
+    "MATERIAL DE CONSTRUCAO", "MATERIAL ELETRICO", 
+    "MATERIAL ESPORTIVO", "LOCACAO DE EQUIPAMENTO", 
+    "AQUISICAO DE EQUIPAMENTO", "EXAME LABORATORI", "MERENDA"
 ]
 
 def normalize(texto):
-    """Remove acentos e coloca em maiúsculo"""
     if not texto: return ""
     return ''.join(c for c in unicodedata.normalize('NFD', str(texto)).upper()
                    if unicodedata.category(c) != 'Mn')
 
-# Pré-processa listas
 WHITELIST_NORM = [normalize(x) for x in WHITELIST_OBJETO]
 BLACKLIST_NORM = [normalize(x) for x in BLACKLIST_OBJETO]
 
-print("🧹 LIMPEZA V5 - CORTE 2026 + REGRAS AVANÇADAS")
+print("🧹 LIMPEZA V6 - DADOS DETALHADOS (ME/EPP & FORNECEDORES)")
 
-# --- DATA DE CORTE AJUSTADA ---
-# Descarta tudo que encerrou ANTES de 01/01/2026
+# Data de corte: 01/01/2026
 data_limite = datetime(2026, 1, 1, 0, 0, 0)
 
 if not os.path.exists(ARQDADOS):
@@ -56,102 +43,130 @@ if not os.path.exists(ARQDADOS):
 with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
     todos = json.load(f)
 
-print(f"📦 {len(todos)} pregões carregados")
-
 limpos = []
 duplicatas = set()
-excluidos_enc = 0
-excluidos_blacklist = 0
-excluidos_limpeza = 0
 
 for preg in todos:
     id_preg = preg.get('id')
-    
     if id_preg in duplicatas: continue
     duplicatas.add(id_preg)
     
-    # Filtro Data (CORTE 01/01/2026)
+    # 1. Filtro Data
     data_enc = preg.get('dataEnc', '')
     try:
         if data_enc:
             data_enc_dt = datetime.fromisoformat(data_enc.replace('Z', '+00:00'))
-            # Se a data de encerramento for MENOR que 01/01/2026, tchau.
             if data_enc_dt.replace(tzinfo=None) < data_limite:
-                excluidos_enc += 1
                 continue
     except: pass
 
-    # --- LÓGICA DE FILTRAGEM ---
+    # 2. Filtros de Objeto (Whitelist/Blacklist/Limpeza)
     objeto_txt = preg.get('objeto', '')
     objeto_norm = normalize(objeto_txt)
+    manter = True 
     
-    manter_pregao = True 
-    motivo_exclusao = ""
-
-    # REGRA 1: Whitelist (Fraldas/Absorventes) - Prioridade Total
     if any(t in objeto_norm for t in WHITELIST_NORM):
-        manter_pregao = True
-    
-    # REGRA 2: Material de Limpeza (Só fica se tiver Álcool 70 nos itens)
+        manter = True
     elif "MATERIAL DE LIMPEZA" in objeto_norm:
-        tem_alcool_70 = False
-        raw_itens = preg.get('itensraw', [])
-        
-        # Verifica nos itens se tem álcool
-        if raw_itens and isinstance(raw_itens, list):
-            for item in raw_itens:
-                desc_item = normalize(item.get('descricao', ''))
-                if "ALCOOL" in desc_item and "70" in desc_item:
-                    tem_alcool_70 = True
-                    break
-        
-        if not tem_alcool_70:
-            manter_pregao = False
-            excluidos_limpeza += 1
-            motivo_exclusao = "Limpeza s/ Alcool 70"
-
-    # REGRA 3: Blacklist Padrão
+        # Regra do alcool
+        tem_alcool = False
+        for item in preg.get('itensraw', []):
+            d = normalize(item.get('descricao', ''))
+            if "ALCOOL" in d and "70" in d:
+                tem_alcool = True; break
+        if not tem_alcool: manter = False
     elif any(t in objeto_norm for t in BLACKLIST_NORM):
-        manter_pregao = False
-        excluidos_blacklist += 1
-        motivo_exclusao = "Blacklist Objeto"
+        manter = False
 
-    if not manter_pregao:
-        continue
+    if not manter: continue
 
-    # --- PROCESSA E SALVA ---
+    # 3. PROCESSAMENTO AVANÇADO DE ITENS E RESULTADOS
+    # Vamos criar um mapa de resultados para ligar ao item
+    resultados_map = {}
+    raw_res = preg.get('resultadosraw', [])
+    if raw_res and isinstance(raw_res, list):
+        for res in raw_res:
+            num_item = res.get('numeroItem')
+            resultados_map[num_item] = {
+                'nomeFornecedor': res.get('razaoSocial', 'Fornecedor Desconhecido'),
+                'valorHomologado': res.get('valorUnitarioHomologado', 0),
+                'situacao': 'HOMOLOGADO' # Se está na lista de resultados, foi adjudicado/homologado
+            }
+
     lista_itens = []
-    raw = preg.get('itensraw', [])
-    if raw and isinstance(raw, list):
-        for item in raw:
+    raw_itens = preg.get('itensraw', [])
+    
+    tipo_licitacao = "AMPLO" # Default
+    cont_me_epp = 0
+    total_itens = 0
+
+    if raw_itens and isinstance(raw_itens, list):
+        total_itens = len(raw_itens)
+        for item in raw_itens:
+            n_item = item.get('numeroItem')
+            
+            # Checa ME/EPP (Campo 'temBeneficioMicroEpp' ou similar)
+            is_me_epp = item.get('temBeneficioMicroEpp', False)
+            if is_me_epp: cont_me_epp += 1
+
+            # Checa se tem resultado
+            dados_res = resultados_map.get(n_item)
+            
+            situacao_item = "EM_ANDAMENTO"
+            fornecedor = None
+            val_hom = 0
+            
+            status_raw = str(item.get('situacaoCompraItemName', '')).upper()
+            
+            if dados_res:
+                situacao_item = "HOMOLOGADO"
+                fornecedor = dados_res['nomeFornecedor']
+                val_hom = dados_res['valorHomologado']
+            elif "CANCELADO" in status_raw or "ANULADO" in status_raw:
+                situacao_item = "CANCELADO"
+            elif "FRACASSADO" in status_raw or "DESERTO" in status_raw:
+                situacao_item = "DESERTO"
+            
             lista_itens.append({
-                'n': item.get('numeroItem'),
+                'n': n_item,
                 'desc': item.get('descricao', ''),
                 'qtd': item.get('quantidade', 0),
                 'un': item.get('unidadeMedida', ''),
-                'valUnit': item.get('valorUnitarioEstimado', 0)
+                'valUnit': item.get('valorUnitarioEstimado', 0),
+                'me_epp': is_me_epp,
+                'situacao': situacao_item,
+                'fornecedor': fornecedor,
+                'valHomologado': val_hom
             })
+
+    # Define etiqueta do processo (AMPLO, EXCLUSIVO, PARCIAL)
+    if total_itens > 0:
+        if cont_me_epp == total_itens:
+            tipo_licitacao = "EXCLUSIVO"
+        elif cont_me_epp > 0:
+            tipo_licitacao = "PARCIAL"
+        else:
+            tipo_licitacao = "AMPLO"
 
     limpos.append({
         'id': id_preg,
         'uf': preg.get('uf', ''),
         'cidade': preg.get('cidade', ''),
+        'orgao': preg.get('orgao', ''),
+        'unidade': preg.get('unidadeCompradora', ''),
+        'uasg': preg.get('uasg', ''),
         'edital': preg.get('editaln', ''),
         'valor_estimado': round(preg.get('valorGlobalApi', 0), 2),
         'data_pub': preg.get('dataPub', ''),
         'data_enc': data_enc,
         'objeto': objeto_txt[:250],
         'link': preg.get('link', ''),
+        'tipo_licitacao': tipo_licitacao, # Campo Novo
         'itens': lista_itens,
-        'resultados_count': len(preg.get('resultadosraw', []))
+        'resultados_count': len(raw_res)
     })
 
-print(f"\n📊 RESULTADO:")
-print(f"  📦 Origem: {len(todos)}")
-print(f"  ❌ Antigos (< 2026): {excluidos_enc}")
-print(f"  ❌ Blacklist: {excluidos_blacklist}")
-print(f"  ❌ Limpeza (s/ Álcool): {excluidos_limpeza}")
-print(f"  ✅ Mantidos: {len(limpos)}")
+print(f"📊 Processados: {len(limpos)} pregões ativos.")
 
 with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f:
     json.dump(limpos, f, ensure_ascii=False)
