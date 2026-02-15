@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sniper Pharma - Monitor V6 (Z-A)</title>
+    <title>Sniper Pharma - Monitor V8 (Histórico)</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -12,24 +12,21 @@
         :root { --primary-dark: #2c3e50; --accent-blue: #3498db; }
         body { background-color: #f4f7f6; font-family: 'Segoe UI', sans-serif; font-size: 0.85rem; }
         
-        /* Header e Tabela */
         .header-bar { background: var(--primary-dark); color: white; padding: 12px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .card-table { border: none; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden; }
-        .table-pncp thead { background-color: #34495e; color: white; text-transform: uppercase; font-size: 0.75rem; }
+        .table-pncp thead { background-color: #34495e; color: white; text-transform: uppercase; font-size: 0.75rem; cursor: pointer; }
+        .table-pncp thead th:hover { background-color: #2c3e50; }
         .table-pncp td { vertical-align: middle; padding: 10px; border-bottom: 1px solid #eee; }
 
-        /* Dados Principais */
         .uasg-orgao { font-weight: 700; color: #2c3e50; font-size: 0.9rem; }
         .unidade-comp { color: #555; font-size: 0.8rem; display: block; margin-top: 2px; }
         .local-uf { color: #7f8c8d; font-size: 0.8rem; display: block; font-style: italic; }
 
-        /* Badges de Tipo de Licitação */
         .badge-tipo { font-size: 0.7rem; font-weight: 700; padding: 4px 8px; border-radius: 4px; display: inline-block; width: 100%; text-align: center; }
-        .tipo-amplo { background-color: #d1e7dd; color: #0f5132; border: 1px solid #badbcc; } /* Verde */
-        .tipo-exclusivo { background-color: #f8d7da; color: #842029; border: 1px solid #f5c2c7; } /* Vermelho */
-        .tipo-parcial { background-color: #fff3cd; color: #664d03; border: 1px solid #ffecb5; } /* Amarelo */
+        .tipo-amplo { background-color: #d1e7dd; color: #0f5132; border: 1px solid #badbcc; }
+        .tipo-exclusivo { background-color: #f8d7da; color: #842029; border: 1px solid #f5c2c7; }
+        .tipo-parcial { background-color: #fff3cd; color: #664d03; border: 1px solid #ffecb5; }
 
-        /* Modal e Grupos */
         .group-header { padding: 8px 15px; font-weight: 700; color: white; border-radius: 4px 4px 0 0; display: flex; justify-content: space-between; align-items: center; }
         .bg-fornecedor { background-color: #2c3e50; } 
         .bg-andamento { background-color: #198754; } 
@@ -39,12 +36,14 @@
         .me-epp-sim { color: #dc3545; font-weight: 800; } 
         .me-epp-nao { color: #ccc; font-weight: 400; }
 
-        /* Overlay de Carregamento */
         #loading-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(255,255,255,0.95); z-index: 9999;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
+        
+        .sort-icon { float: right; margin-left: 5px; opacity: 0.5; }
+        .active-sort { opacity: 1; color: #48c774; }
     </style>
 </head>
 <body>
@@ -56,8 +55,14 @@
 </div>
 
 <div class="header-bar d-flex justify-content-between align-items-center sticky-top">
-    <div class="fw-bold fs-5"><i class="fas fa-crosshairs me-2"></i>SNIPER PHARMA V6 (Z-A)</div>
-    <button class="btn btn-sm btn-outline-light" onclick="location.reload()"><i class="fas fa-sync-alt"></i></button>
+    <div class="fw-bold fs-5"><i class="fas fa-crosshairs me-2"></i>SNIPER PHARMA V8</div>
+    <div class="d-flex align-items-center gap-3">
+        <div class="form-check form-switch text-white">
+            <input class="form-check-input" type="checkbox" id="chkOcultarVencidos" onchange="render()">
+            <label class="form-check-label small" for="chkOcultarVencidos">Ocultar Vencidos</label>
+        </div>
+        <button class="btn btn-sm btn-outline-light" onclick="location.reload()"><i class="fas fa-sync-alt"></i></button>
+    </div>
 </div>
 
 <div class="container-fluid py-3">
@@ -82,12 +87,12 @@
             <table class="table table-hover table-pncp mb-0">
                 <thead>
                     <tr>
-                        <th style="width: 100px;">Data Fim <i class="fas fa-sort-amount-down ms-1"></i></th>
-                        <th style="width: 80px;" class="text-center">Tipo</th>
-                        <th>Órgão / Unidade / Local</th>
+                        <th style="width: 110px;" onclick="ordenar('data_enc')">Data Fim <i id="icon-data_enc" class="fas fa-sort sort-icon"></i></th>
+                        <th style="width: 80px;" class="text-center" onclick="ordenar('tipo')">Tipo <i id="icon-tipo" class="fas fa-sort sort-icon"></i></th>
+                        <th onclick="ordenar('orgao')">Órgão / Unidade / Local <i id="icon-orgao" class="fas fa-sort sort-icon"></i></th>
                         <th style="width: 100px;">Edital</th>
                         <th>Objeto</th>
-                        <th class="text-end" style="width: 120px;">Valor Est.</th>
+                        <th class="text-end" style="width: 120px;" onclick="ordenar('valor')">Valor Est. <i id="icon-valor" class="fas fa-sort sort-icon"></i></th>
                         <th class="text-center" style="width: 80px;">Ação</th>
                     </tr>
                 </thead>
@@ -96,7 +101,7 @@
         </div>
         <div class="p-3 d-flex justify-content-between align-items-center border-top">
             <div class="text-muted small">
-                Total de Registros: <span id="totalReg" class="fw-bold">0</span>
+                Exibindo <span id="totalVisible" class="fw-bold">0</span> de <span id="totalReg" class="fw-bold">0</span> registros
             </div>
             <div class="d-flex align-items-center">
                 <button class="btn btn-sm btn-secondary me-2" onclick="mudarPagina(-1)" id="btnAnt">Anterior</button>
@@ -128,58 +133,36 @@
     let pagina = 1;
     const ITENS_POR_PAG = 20;
     
+    // Estado da Ordenação
+    let ordemAtual = { campo: 'data_enc', direcao: 'asc' }; // Z-A na lógica invertida
+
     const fmtBrl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
     const fmtData = d => d ? new Date(d).toLocaleDateString('pt-BR') : '--';
 
-    // Inicialização Segura
     window.onload = async () => {
         try {
             updateLoading("Baixando arquivo de dados...");
             const res = await fetch(`${FILE_URL}?v=${Date.now()}`);
-            
-            if(!res.ok) throw new Error(`Arquivo não encontrado (${res.status}). O robô ainda não gerou os dados ou o arquivo está vazio.`);
+            if(!res.ok) throw new Error("Arquivo não encontrado.");
             
             const blob = await res.blob();
             const arrayBuffer = await blob.arrayBuffer();
 
             updateLoading("Descompactando...");
-            
             let text;
-            try {
-                text = pako.ungzip(new Uint8Array(arrayBuffer), {to:'string'});
-            } catch (e) {
-                console.warn("Falha GZIP, tentando texto plano...");
-                text = await new Response(blob).text();
-            }
+            try { text = pako.ungzip(new Uint8Array(arrayBuffer), {to:'string'}); }
+            catch { text = await new Response(blob).text(); }
             
             updateLoading("Processando JSON...");
-            
-            try {
-                dadosOriginais = JSON.parse(text);
-            } catch (e) {
-                throw new Error("O arquivo baixado não é um JSON válido.");
-            }
+            try { dadosOriginais = JSON.parse(text); } 
+            catch { throw new Error("JSON inválido."); }
 
-            if (!Array.isArray(dadosOriginais)) {
-                dadosOriginais = []; 
-                console.warn("JSON válido, mas não é uma lista.");
-            }
+            if (!Array.isArray(dadosOriginais)) dadosOriginais = [];
             
-            // --- ORDENAÇÃO Z-A (Decrescente) ---
-            // Datas mais distantes (novas) no topo, datas antigas embaixo
-            dadosOriginais.sort((a,b) => {
-                // Se a data for nula, assume uma data muito antiga para ir pro final da lista
-                const da = a.data_enc ? new Date(a.data_enc) : new Date('1970-01-01');
-                const db = b.data_enc ? new Date(b.data_enc) : new Date('1970-01-01');
-                
-                // Lógica Invertida: db - da
-                return db - da; 
-            });
+            // Renderiza com a ordenação padrão (Z-A)
+            ordenar('data_enc', true);
             
-            render();
-            
-            const loadingOverlay = document.getElementById('loading-overlay');
-            if(loadingOverlay) loadingOverlay.style.display = 'none';
+            document.getElementById('loading-overlay').style.display = 'none';
 
         } catch (e) {
             console.error(e);
@@ -193,44 +176,93 @@
     }
 
     function showError(msg) {
-        const spinner = document.getElementById('spinner');
-        if(spinner) spinner.style.display = 'none';
-        
-        const elMsg = document.getElementById('loading-msg');
-        if(elMsg) {
-            elMsg.innerHTML = `<div class="text-danger mb-2"><i class="fas fa-exclamation-triangle fa-2x"></i></div>${msg}`;
-            elMsg.classList.remove('text-secondary');
-            elMsg.classList.add('text-danger');
+        document.getElementById('spinner').style.display = 'none';
+        const el = document.getElementById('loading-msg');
+        el.innerHTML = `<div class="text-danger mb-2"><i class="fas fa-exclamation-triangle fa-2x"></i></div>${msg}`;
+        document.getElementById('btn-retry').classList.remove('d-none');
+    }
+
+    function ordenar(campo, force = false) {
+        if (!force) {
+            if (ordemAtual.campo === campo) {
+                ordemAtual.direcao = ordemAtual.direcao === 'asc' ? 'desc' : 'asc';
+            } else {
+                ordemAtual.campo = campo;
+                ordemAtual.direcao = 'asc';
+            }
         }
-        
-        const btnRetry = document.getElementById('btn-retry');
-        if(btnRetry) btnRetry.classList.remove('d-none');
+
+        document.querySelectorAll('.sort-icon').forEach(i => i.className = 'fas fa-sort sort-icon');
+        const icon = document.getElementById(`icon-${campo}`);
+        if(icon) {
+            icon.className = `fas fa-sort-${ordemAtual.direcao === 'asc' ? 'up' : 'down'} sort-icon active-sort`;
+        }
+
+        render();
     }
 
     function render() {
-        const ufEl = document.getElementById('fUf');
-        const orgEl = document.getElementById('fOrgao');
-        const objEl = document.getElementById('fObjeto');
-        const tipoEl = document.getElementById('fTipo');
+        const uf = document.getElementById('fUf').value.toUpperCase();
+        const org = document.getElementById('fOrgao').value.toUpperCase();
+        const obj = document.getElementById('fObjeto').value.toUpperCase();
+        const tipo = document.getElementById('fTipo').value;
+        const ocultarVencidos = document.getElementById('chkOcultarVencidos').checked;
+        const hoje = new Date();
 
-        if(!ufEl || !orgEl || !objEl || !tipoEl) return;
-
-        const uf = ufEl.value.toUpperCase();
-        const org = orgEl.value.toUpperCase();
-        const obj = objEl.value.toUpperCase();
-        const tipo = tipoEl.value;
-
+        // 1. Filtragem
         dadosFiltrados = dadosOriginais.filter(d => {
-            const fullLocal = ((d.cidade || '') + ' ' + (d.orgao || '')).toUpperCase();
-            const objUpper = (d.objeto || '').toUpperCase();
-            const ufUpper = (d.uf || '').toUpperCase();
+            const dataObj = d.data_enc ? new Date(d.data_enc) : null;
             
-            return (ufUpper.includes(uf) && 
+            // Filtro de Vencidos (Só aplica se checkbox estiver marcado)
+            if (ocultarVencidos && dataObj && dataObj < hoje) return false;
+
+            const fullLocal = ((d.cidade || '') + ' ' + (d.orgao || '')).toUpperCase();
+            return ((d.uf || '').toUpperCase().includes(uf) && 
                     fullLocal.includes(org) && 
-                    objUpper.includes(obj) &&
+                    (d.objeto || '').toUpperCase().includes(obj) &&
                     (tipo === "" || d.tipo_licitacao === tipo));
         });
 
+        // 2. Ordenação
+        dadosFiltrados.sort((a, b) => {
+            let valA, valB;
+
+            switch (ordemAtual.campo) {
+                case 'data_enc':
+                    // Para ordenar Z-A (Futuro -> Passado) como padrão:
+                    // Se for data nula, joga pro passado distante
+                    valA = a.data_enc ? new Date(a.data_enc).getTime() : 0;
+                    valB = b.data_enc ? new Date(b.data_enc).getTime() : 0;
+                    
+                    // Inversão padrão para Data: Mais novo primeiro
+                    if (ordemAtual.direcao === 'asc') return valB - valA; 
+                    else return valA - valB;
+                    
+                case 'valor':
+                    valA = a.valor_estimado || 0;
+                    valB = b.valor_estimado || 0;
+                    break;
+                case 'orgao':
+                    valA = (a.orgao || '').toLowerCase();
+                    valB = (b.orgao || '').toLowerCase();
+                    break;
+                case 'tipo':
+                    valA = (a.tipo_licitacao || '').toLowerCase();
+                    valB = (b.tipo_licitacao || '').toLowerCase();
+                    break;
+                default:
+                    valA = 0; valB = 0;
+            }
+
+            // Ordenação padrão para strings/numeros
+            if (ordemAtual.campo !== 'data_enc') {
+                if (valA < valB) return ordemAtual.direcao === 'asc' ? -1 : 1;
+                if (valA > valB) return ordemAtual.direcao === 'asc' ? 1 : -1;
+                return 0;
+            }
+        });
+
+        // 3. Paginação
         const totalPaginas = Math.ceil(dadosFiltrados.length / ITENS_POR_PAG) || 1;
         if(pagina > totalPaginas) pagina = totalPaginas;
         if(pagina < 1) pagina = 1;
@@ -239,55 +271,50 @@
         const lote = dadosFiltrados.slice(inicio, inicio + ITENS_POR_PAG);
         
         const tbody = document.getElementById('tbody');
-        if(tbody) {
-            tbody.innerHTML = '';
-            lote.forEach(d => {
-                const dataObj = d.data_enc ? new Date(d.data_enc) : null;
-                const hoje = new Date();
-                let corData = 'text-dark';
-                
-                if (dataObj) {
-                    const diffHoras = (dataObj - hoje) / 36e5; 
-                    if (diffHoras < 0) corData = 'text-decoration-line-through text-muted';
-                    else if (diffHoras < 48) corData = 'text-danger fw-bold';
-                }
+        tbody.innerHTML = '';
 
-                let classeTipo = 'tipo-amplo'; 
-                if(d.tipo_licitacao === 'EXCLUSIVO') classeTipo = 'tipo-exclusivo';
-                if(d.tipo_licitacao === 'PARCIAL') classeTipo = 'tipo-parcial';
+        lote.forEach(d => {
+            const dataObj = d.data_enc ? new Date(d.data_enc) : null;
+            let corData = 'text-dark';
+            
+            if (dataObj) {
+                const diffHoras = (dataObj - hoje) / 36e5; 
+                if (diffHoras < 0) corData = 'text-decoration-line-through text-muted'; // Vencido
+                else if (diffHoras < 48) corData = 'text-danger fw-bold'; // Urgente
+            }
 
-                tbody.innerHTML += `
-                    <tr>
-                        <td class="${corData}">${fmtData(d.data_enc)}</td>
-                        <td class="text-center"><span class="badge-tipo ${classeTipo}">${d.tipo_licitacao || 'AMPLO'}</span></td>
-                        <td>
-                            <div class="uasg-orgao">UASG ${d.uasg || '---'} - ${d.orgao || 'Órgão Desconhecido'}</div>
-                            <div class="unidade-comp">${d.unidade || ''}</div>
-                            <div class="local-uf">${d.cidade || ''} - ${d.uf || ''}</div>
-                        </td>
-                        <td>${d.edital || '-'}</td>
-                        <td><div class="text-truncate" style="max-width:350px" title="${d.objeto}">${d.objeto}</div></td>
-                        <td class="text-end fw-bold text-success">${fmtBrl.format(d.valor_estimado || 0)}</td>
-                        <td class="text-center">
-                            <button class="btn btn-sm btn-outline-primary" onclick="verDetalhes('${d.id}')"><i class="fas fa-list"></i></button>
-                            <a href="${d.link}" target="_blank" class="btn btn-sm btn-outline-dark"><i class="fas fa-external-link-alt"></i></a>
-                        </td>
-                    </tr>
-                `;
-            });
-        }
+            let classeTipo = 'tipo-amplo'; 
+            if(d.tipo_licitacao === 'EXCLUSIVO') classeTipo = 'tipo-exclusivo';
+            if(d.tipo_licitacao === 'PARCIAL') classeTipo = 'tipo-parcial';
 
-        const elPagAtual = document.getElementById('pagAtual');
-        const elPagTotal = document.getElementById('pagTotal');
-        const elTotalReg = document.getElementById('totalReg');
-        const elBtnAnt = document.getElementById('btnAnt');
-        const elBtnProx = document.getElementById('btnProx');
+            tbody.innerHTML += `
+                <tr>
+                    <td class="${corData}">${fmtData(d.data_enc)}</td>
+                    <td class="text-center"><span class="badge-tipo ${classeTipo}">${d.tipo_licitacao || 'AMPLO'}</span></td>
+                    <td>
+                        <div class="uasg-orgao">UASG ${d.uasg || '---'} - ${d.orgao || 'Órgão Desconhecido'}</div>
+                        <div class="unidade-comp">${d.unidade || ''}</div>
+                        <div class="local-uf">${d.cidade || ''} - ${d.uf || ''}</div>
+                    </td>
+                    <td>${d.edital || '-'}</td>
+                    <td><div class="text-truncate" style="max-width:350px" title="${d.objeto}">${d.objeto}</div></td>
+                    <td class="text-end fw-bold text-success">${fmtBrl.format(d.valor_estimado || 0)}</td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-outline-primary" onclick="verDetalhes('${d.id}')"><i class="fas fa-list"></i></button>
+                        <a href="${d.link}" target="_blank" class="btn btn-sm btn-outline-dark"><i class="fas fa-external-link-alt"></i></a>
+                    </td>
+                </tr>
+            `;
+        });
 
-        if(elPagAtual) elPagAtual.innerText = pagina;
-        if(elPagTotal) elPagTotal.innerText = totalPaginas;
-        if(elTotalReg) elTotalReg.innerText = dadosFiltrados.length;
-        if(elBtnAnt) elBtnAnt.disabled = pagina === 1;
-        if(elBtnProx) elBtnProx.disabled = pagina === totalPaginas;
+        // Atualiza controles
+        document.getElementById('pagAtual').innerText = pagina;
+        document.getElementById('pagTotal').innerText = totalPaginas;
+        document.getElementById('totalReg').innerText = dadosOriginais.length;
+        document.getElementById('totalVisible').innerText = dadosFiltrados.length;
+        
+        document.getElementById('btnAnt').disabled = pagina === 1;
+        document.getElementById('btnProx').disabled = pagina === totalPaginas;
     }
 
     function mudarPagina(d) { pagina += d; render(); document.querySelector('.card-table').scrollIntoView(); }
@@ -297,12 +324,7 @@
         if(!lic) return;
 
         const itens = lic.itens || [];
-        
-        const grupos = {
-            'EM_ANDAMENTO': [],
-            'HOMOLOGADO': {}, 
-            'OUTROS': [] 
-        };
+        const grupos = { 'EM_ANDAMENTO': [], 'HOMOLOGADO': {}, 'OUTROS': [] };
 
         itens.forEach(it => {
             const sit = (it.situacao || 'EM_ANDAMENTO');
@@ -405,10 +427,8 @@
                 </div>`;
         }
 
-        const modalBody = document.getElementById('modalBody');
-        if(modalBody) modalBody.innerHTML = html;
-        const modalEl = document.getElementById('modalDetalhes');
-        if(modalEl) new bootstrap.Modal(modalEl).show();
+        document.getElementById('modalBody').innerHTML = html;
+        new bootstrap.Modal(document.getElementById('modalDetalhes')).show();
     }
 </script>
 </body>
