@@ -31,12 +31,12 @@
 
         /* Modal e Grupos */
         .group-header { padding: 8px 15px; font-weight: 700; color: white; border-radius: 4px 4px 0 0; display: flex; justify-content: space-between; align-items: center; }
-        .bg-fornecedor { background-color: #2c3e50; } /* Azul Escuro para fornecedor */
-        .bg-andamento { background-color: #198754; } /* Verde para em andamento */
-        .bg-fracassado { background-color: #dc3545; } /* Vermelho para fracassado/cancelado */
+        .bg-fornecedor { background-color: #2c3e50; } 
+        .bg-andamento { background-color: #198754; } 
+        .bg-fracassado { background-color: #dc3545; } 
         
         .table-itens th { background: #f8f9fa; font-size: 0.75rem; }
-        .me-epp-sim { color: #dc3545; font-weight: 800; } /* Vermelho Negrito */
+        .me-epp-sim { color: #dc3545; font-weight: 800; } 
         .me-epp-nao { color: #ccc; font-weight: 400; }
 
         /* Overlay de Carregamento */
@@ -95,9 +95,14 @@
             </table>
         </div>
         <div class="p-3 d-flex justify-content-between align-items-center border-top">
-            <button class="btn btn-sm btn-secondary" onclick="mudarPagina(-1)" id="btnAnt">Anterior</button>
-            <span class="text-muted small">Página <span id="pagAtual">1</span> de <span id="pagTotal">1</span></span>
-            <button class="btn btn-sm btn-secondary" onclick="mudarPagina(1)" id="btnProx">Próximo</button>
+            <div class="text-muted small">
+                Total de Registros: <span id="totalReg" class="fw-bold">0</span>
+            </div>
+            <div class="d-flex align-items-center">
+                <button class="btn btn-sm btn-secondary me-2" onclick="mudarPagina(-1)" id="btnAnt">Anterior</button>
+                <span class="text-muted small mx-2">Página <span id="pagAtual">1</span> de <span id="pagTotal">1</span></span>
+                <button class="btn btn-sm btn-secondary ms-2" onclick="mudarPagina(1)" id="btnProx">Próximo</button>
+            </div>
         </div>
     </div>
 </div>
@@ -133,7 +138,7 @@
             // Adiciona timestamp para evitar cache do navegador
             const res = await fetch(`${FILE_URL}?v=${Date.now()}`);
             
-            if(!res.ok) throw new Error(`Arquivo não encontrado (${res.status}). Verifique se o robô rodou.`);
+            if(!res.ok) throw new Error(`Arquivo não encontrado (${res.status}). O robô ainda não gerou os dados ou o arquivo está vazio.`);
             
             const blob = await res.blob();
             const arrayBuffer = await blob.arrayBuffer();
@@ -151,13 +156,20 @@
             }
             
             updateLoading("Processando JSON...");
-            dadosOriginais = JSON.parse(text);
+            
+            try {
+                dadosOriginais = JSON.parse(text);
+            } catch (e) {
+                throw new Error("O arquivo baixado não é um JSON válido. Pode estar corrompido.");
+            }
 
             if (!Array.isArray(dadosOriginais)) {
-                throw new Error("Formato de dados inválido (não é uma lista).");
+                // Se o JSON existir mas estiver vazio ou não for lista
+                dadosOriginais = []; 
+                console.warn("JSON válido, mas não é uma lista.");
             }
             
-            // Ordenação Inicial: Data de Encerramento (Mais próxima primeiro)
+            // Ordenação Inicial: Data de Encerramento
             dadosOriginais.sort((a,b) => {
                 const da = a.data_enc ? new Date(a.data_enc) : new Date('2099-01-01');
                 const db = b.data_enc ? new Date(b.data_enc) : new Date('2099-01-01');
@@ -167,32 +179,48 @@
             render();
             
             // Esconde loading apenas se tudo deu certo
-            document.getElementById('loading-overlay').style.display = 'none';
+            const loadingOverlay = document.getElementById('loading-overlay');
+            if(loadingOverlay) loadingOverlay.style.display = 'none';
 
         } catch (e) {
             console.error(e);
-            showError(`Erro fatal: ${e.message}`);
+            showError(`Erro: ${e.message}`);
         }
     };
 
     function updateLoading(msg) {
-        document.getElementById('loading-msg').innerText = msg;
+        const el = document.getElementById('loading-msg');
+        if(el) el.innerText = msg;
     }
 
     function showError(msg) {
-        document.getElementById('spinner').style.display = 'none';
+        const spinner = document.getElementById('spinner');
+        if(spinner) spinner.style.display = 'none';
+        
         const elMsg = document.getElementById('loading-msg');
-        elMsg.innerHTML = `<div class="text-danger mb-2"><i class="fas fa-exclamation-triangle fa-2x"></i></div>${msg}`;
-        elMsg.classList.remove('text-secondary');
-        elMsg.classList.add('text-danger');
-        document.getElementById('btn-retry').classList.remove('d-none');
+        if(elMsg) {
+            elMsg.innerHTML = `<div class="text-danger mb-2"><i class="fas fa-exclamation-triangle fa-2x"></i></div>${msg}`;
+            elMsg.classList.remove('text-secondary');
+            elMsg.classList.add('text-danger');
+        }
+        
+        const btnRetry = document.getElementById('btn-retry');
+        if(btnRetry) btnRetry.classList.remove('d-none');
     }
 
     function render() {
-        const uf = document.getElementById('fUf').value.toUpperCase();
-        const org = document.getElementById('fOrgao').value.toUpperCase();
-        const obj = document.getElementById('fObjeto').value.toUpperCase();
-        const tipo = document.getElementById('fTipo').value;
+        const ufEl = document.getElementById('fUf');
+        const orgEl = document.getElementById('fOrgao');
+        const objEl = document.getElementById('fObjeto');
+        const tipoEl = document.getElementById('fTipo');
+
+        // Proteção contra elementos não encontrados
+        if(!ufEl || !orgEl || !objEl || !tipoEl) return;
+
+        const uf = ufEl.value.toUpperCase();
+        const org = orgEl.value.toUpperCase();
+        const obj = objEl.value.toUpperCase();
+        const tipo = tipoEl.value;
 
         dadosFiltrados = dadosOriginais.filter(d => {
             const fullLocal = ((d.cidade || '') + ' ' + (d.orgao || '')).toUpperCase();
@@ -213,62 +241,67 @@
         const lote = dadosFiltrados.slice(inicio, inicio + ITENS_POR_PAG);
         
         const tbody = document.getElementById('tbody');
-        tbody.innerHTML = '';
+        if(tbody) {
+            tbody.innerHTML = '';
+            lote.forEach(d => {
+                // Estilo da Data
+                const dataObj = d.data_enc ? new Date(d.data_enc) : null;
+                const hoje = new Date();
+                let corData = 'text-dark';
+                
+                if (dataObj) {
+                    const diffHoras = (dataObj - hoje) / 36e5; 
+                    if (diffHoras < 0) corData = 'text-decoration-line-through text-muted';
+                    else if (diffHoras < 48) corData = 'text-danger fw-bold';
+                }
 
-        lote.forEach(d => {
-            // Estilo da Data
-            const dataObj = d.data_enc ? new Date(d.data_enc) : null;
-            const hoje = new Date();
-            let corData = 'text-dark';
-            
-            if (dataObj) {
-                const diffHoras = (dataObj - hoje) / 36e5; // Diferença em horas
-                if (diffHoras < 0) corData = 'text-decoration-line-through text-muted';
-                else if (diffHoras < 48) corData = 'text-danger fw-bold';
-            }
+                let classeTipo = 'tipo-amplo'; 
+                if(d.tipo_licitacao === 'EXCLUSIVO') classeTipo = 'tipo-exclusivo';
+                if(d.tipo_licitacao === 'PARCIAL') classeTipo = 'tipo-parcial';
 
-            // Estilo da Tarja (Tipo)
-            let classeTipo = 'tipo-amplo'; // Default
-            if(d.tipo_licitacao === 'EXCLUSIVO') classeTipo = 'tipo-exclusivo';
-            if(d.tipo_licitacao === 'PARCIAL') classeTipo = 'tipo-parcial';
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="${corData}">${fmtData(d.data_enc)}</td>
+                        <td class="text-center"><span class="badge-tipo ${classeTipo}">${d.tipo_licitacao || 'AMPLO'}</span></td>
+                        <td>
+                            <div class="uasg-orgao">UASG ${d.uasg || '---'} - ${d.orgao || 'Órgão Desconhecido'}</div>
+                            <div class="unidade-comp">${d.unidade || ''}</div>
+                            <div class="local-uf">${d.cidade || ''} - ${d.uf || ''}</div>
+                        </td>
+                        <td>${d.edital || '-'}</td>
+                        <td><div class="text-truncate" style="max-width:350px" title="${d.objeto}">${d.objeto}</div></td>
+                        <td class="text-end fw-bold text-success">${fmtBrl.format(d.valor_estimado || 0)}</td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-outline-primary" onclick="verDetalhes('${d.id}')"><i class="fas fa-list"></i></button>
+                            <a href="${d.link}" target="_blank" class="btn btn-sm btn-outline-dark"><i class="fas fa-external-link-alt"></i></a>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
 
-            tbody.innerHTML += `
-                <tr>
-                    <td class="${corData}">${fmtData(d.data_enc)}</td>
-                    <td class="text-center"><span class="badge-tipo ${classeTipo}">${d.tipo_licitacao || 'AMPLO'}</span></td>
-                    <td>
-                        <div class="uasg-orgao">UASG ${d.uasg || '---'} - ${d.orgao || 'Órgão Desconhecido'}</div>
-                        <div class="unidade-comp">${d.unidade || ''}</div>
-                        <div class="local-uf">${d.cidade || ''} - ${d.uf || ''}</div>
-                    </td>
-                    <td>${d.edital || '-'}</td>
-                    <td><div class="text-truncate" style="max-width:350px" title="${d.objeto}">${d.objeto}</div></td>
-                    <td class="text-end fw-bold text-success">${fmtBrl.format(d.valor_estimado || 0)}</td>
-                    <td class="text-center">
-                        <button class="btn btn-sm btn-outline-primary" onclick="verDetalhes('${d.id}')"><i class="fas fa-list"></i></button>
-                        <a href="${d.link}" target="_blank" class="btn btn-sm btn-outline-dark"><i class="fas fa-external-link-alt"></i></a>
-                    </td>
-                </tr>
-            `;
-        });
+        // Atualiza Paginação com segurança
+        const elPagAtual = document.getElementById('pagAtual');
+        const elPagTotal = document.getElementById('pagTotal');
+        const elTotalReg = document.getElementById('totalReg');
+        const elBtnAnt = document.getElementById('btnAnt');
+        const elBtnProx = document.getElementById('btnProx');
 
-        document.getElementById('pagAtual').innerText = pagina;
-        document.getElementById('pagTotal').innerText = totalPaginas;
-        document.getElementById('totalReg').innerText = dadosFiltrados.length;
-        document.getElementById('btnAnt').disabled = pagina === 1;
-        document.getElementById('btnProx').disabled = pagina === totalPaginas;
+        if(elPagAtual) elPagAtual.innerText = pagina;
+        if(elPagTotal) elPagTotal.innerText = totalPaginas;
+        if(elTotalReg) elTotalReg.innerText = dadosFiltrados.length; // AQUI ESTAVA O ERRO ANTES
+        if(elBtnAnt) elBtnAnt.disabled = pagina === 1;
+        if(elBtnProx) elBtnProx.disabled = pagina === totalPaginas;
     }
 
     function mudarPagina(d) { pagina += d; render(); document.querySelector('.card-table').scrollIntoView(); }
 
-    // --- FUNÇÃO DE DETALHES ---
     function verDetalhes(id) {
         const lic = dadosOriginais.find(d => d.id === id);
         if(!lic) return;
 
         const itens = lic.itens || [];
         
-        // Agrupamento
         const grupos = {
             'EM_ANDAMENTO': [],
             'HOMOLOGADO': {}, 
@@ -376,8 +409,10 @@
                 </div>`;
         }
 
-        document.getElementById('modalBody').innerHTML = html;
-        new bootstrap.Modal(document.getElementById('modalDetalhes')).show();
+        const modalBody = document.getElementById('modalBody');
+        if(modalBody) modalBody.innerHTML = html;
+        const modalEl = document.getElementById('modalDetalhes');
+        if(modalEl) new bootstrap.Modal(modalEl).show();
     }
 </script>
 </body>
