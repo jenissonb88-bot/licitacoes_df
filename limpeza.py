@@ -1,104 +1,60 @@
-import json, os, gzip, unicodedata, re, pandas as pd
+import json
+import gzip
+import os
+from datetime import datetime
 
 ARQDADOS = 'dadosoportunidades.json.gz'
-ARQCSV = 'Exportar Dados.csv'
+ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'
 
-BLACKLISTOBJETO = [
-    'LOCACAO', 'ALUGUEL', 'GRAFICO', 'IMPRESSAO', 'EQUIPAMENTO', 'MOVEIS',
-    'MANUTENCAO', 'OBRA', 'INFORMATICA', 'VEICULO', 'PRESTACAO DE SERVICO',
-    'REFORMA', 'ESPORTIVO', 'MATERIAL PERMANENTE', 'MERENDA', 'ESCOLAR', 
-    'EXPEDIENTE', 'EXAMES', 'LABORATORIO'
-]
+print("🧹 LIMPEZA - ATIVOS (dataEnc ≥ 01/12/2025)")
 
-UFS_NE = ['AL','BA','CE','MA','PB','PE','PI','RN','SE']
-UFS_OUTROS = ['ES','MG','RJ','SP','GO','MT','MS','DF','TO','PA','AM','RO']
-UFS_EXCLUIDAS = ['PR','SC','RS','AP','AC']
+data_limite = datetime(2025, 12, 1, 23, 59, 59)
 
-def normalize(t):
-    return ''.join(c for c in unicodedata.normalize('NFD', str(t) or '').upper()
-                   if unicodedata.category(c) != 'Mn')
+with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
+    todos = json.load(f)
 
-def validar_regiao(lic):
-    uf = lic.get('uf', '').upper()
-    if uf in UFS_EXCLUIDAS: return False
-    obj_norm = normalize(lic.get('objeto', ''))
+print(f"📦 {len(todos)} pregões carregados")
+
+limpos = []
+duplicatas = set()
+excluidos_enc = 0
+
+for preg in todos:
+    id_preg = preg.get('id')
     
-    if uf in UFS_NE:
-        return any(t in obj_norm for t in ['MEDICAMENTO','FARMACIA','INSUMO FARMACEUTICO','MATERIAL MEDICO','DIETA ENTERAL','FORMULA','LU VAS','ALCOOL'])
-    if uf in UFS_OUTROS:
-        return any(t in obj_norm for t in ['MEDICAMENTO','FARMACIA','INSUMO FARMACEUTICO','REMEDIO'])
-    return False
-
-def limpar():
-    if not os.path.exists(ARQDADOS): 
-        print("❌ ARQDADOS não encontrado"); return
-
-    meusprodutos = set()
-    if os.path.exists(ARQCSV):
-        try:
-            df = pd.read_csv(ARQCSV, encoding='latin1', sep=None, engine='python')
-            for val in df.iloc[:, 0].dropna().unique():
-                meusprodutos.add(normalize(str(val)))
-            print(f"📦 {len(meusprodutos)} produtos carregados")
-        except Exception as e:
-            print(f"⚠️ Erro CSV: {e}")
-
-    with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f: 
-        dados = json.load(f)
-
-    bancofinal = []; mapasit = {1: 'EM ANDAMENTO', 2: 'HOMOLOGADO', 3: 'ANULADO', 4: 'REVOGADO', 5: 'FRACASSADO', 6: 'DESERTO'}
-
-    for lic in dados:
-        obj_norm = normalize(lic.get('objeto', ''))
-        if any(t in obj_norm for t in BLACKLISTOBJETO): continue
-        if not validar_regiao(lic): continue
-        if lic.get('dataEnc') and lic['dataEnc'][:10] < '2026-01-01': continue
-
-        if 'itensraw' not in lic:
-            bancofinal.append(lic); continue
-
-        itensproc, has_match = {}, False
-        for it in lic['itensraw']:
-            num = int(it.get('numeroItem') or it.get('sequencialItem') or 0)
-            desc = it.get('descricao', ''); desc_norm = normalize(desc)
-            match_prod = any(p in desc_norm for p in meusprodutos)
-
-            itensproc[num] = {
-                'item': num, 'desc': desc, 
-                'qtd': float(it.get('quantidade') or 0),
-                'unitEst': float(it.get('valorUnitarioEstimado') or 0),
-                'totalEst': float(it.get('valorTotalEstimado') or 0),
-                'unitHom': 0.0, 'totalHom': 0.0,
-                'meepp': 'Sim' if it.get('tipoBeneficioId') in [1,2,3] else 'No',
-                'match': match_prod,
-                'situacao': mapasit.get(it.get('situacaoCompraItemId'), 'EM ANDAMENTO'),
-                'fornecedor': 'EM ANDAMENTO'
-            }
-            if match_prod: has_match = True
-
-        if not has_match: continue
-
-        for res in lic.get('resultadosraw', []):
-            num = int(res.get('numeroItem') or res.get('sequencialItem') or 0)
-            if num in itensproc:
-                itensproc[num].update({
-                    'situacao': 'HOMOLOGADO',
-                    'fornecedor': res.get('nomeRazaoSocialFornecedor') or 'VENCEDOR',
-                    'unitHom': float(res.get('valorUnitarioHomologado') or 0),
-                    'totalHom': float(res.get('valorTotalHomologado') or 0)
-                })
-
-        countme = sum(1 for i in itensproc.values() if i['meepp'] == 'Sim')
-        lic['tarja'] = 'TODO EXCLUSIVO' if countme == len(itensproc) else 'PARCIAL' if countme else 'TODO AMPLO'
-        lic['itens'] = sorted(itensproc.values(), key=lambda x: x['item'])
-        lic['valorFinal'] = sum(i['totalEst'] for i in itensproc.values())
-
-        for k in ['itensraw', 'resultadosraw', 'valorGlobalApi']: lic.pop(k, None)
-        bancofinal.append(lic)
-
-    with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
-        json.dump(bancofinal, f, ensure_ascii=False, separators=(',', ':'))
+    if id_preg in duplicatas: 
+        continue
+    duplicatas.add(id_preg)
     
-    print(f"✅ Limpeza concluída: {len(bancofinal)} pregões pharma finais!")
+    data_enc = preg.get('dataEnc', '')
+    try:
+        data_enc_dt = datetime.fromisoformat(data_enc.replace('Z', '+00:00'))
+        if data_enc_dt < data_limite:
+            excluidos_enc += 1
+            continue
+    except:
+        continue
+    
+    limpos.append({
+        'id': id_preg,
+        'uf': preg.get('uf', ''),
+        'cidade': preg.get('cidade', ''),
+        'edital': preg.get('editaln', ''),
+        'valor_estimado': round(preg.get('valorGlobalApi', 0), 2),
+        'data_pub': preg.get('dataPub', ''),
+        'data_enc': data_enc,
+        'objeto': preg.get('objeto', '')[:150],
+        'link': preg.get('link', ''),
+        'itens_count': len(preg.get('itensraw', [])),
+        'resultados_count': len(preg.get('resultadosraw', []))
+    })
 
-if __name__ == '__main__': limpar()
+print(f"\n📊 RESULTADO:")
+print(f"  📦 Carregados: {len(todos)}")
+print(f"  ❌ Excluídos: {excluidos_enc}")
+print(f"  ✅ Mantidos: {len(limpos)}")
+
+with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f:
+    json.dump(limpos, f, ensure_ascii=False)
+
+print("🎉 LIMPEZA OK!")
