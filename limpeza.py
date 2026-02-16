@@ -7,24 +7,18 @@ from datetime import datetime
 ARQDADOS = 'dadosoportunidades.json.gz'
 ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'
 
-print("🧹 LIMPEZA V13 - GASES MEDICINAIS NA BLACKLIST")
+print("🧹 LIMPEZA V15 - TIPO BENEFICIO ID OFICIAL")
 
 # --- 1. DEFINIÇÃO GEOGRÁFICA ---
-
-# Grupo 1: Nordeste (NE)
 ESTADOS_NE = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
-
-# Grupo 2: Outros Estados Monitorados
 ESTADOS_OUTROS = [
     'ES', 'RJ', 'SP', 'MG',         # Sudeste
     'GO', 'MT', 'MS', 'DF',         # Centro-Oeste
     'AM', 'PA', 'TO'                # Norte Selecionado
 ]
-
-# Lista TOTAL de estados permitidos
 ESTADOS_ALVO = ESTADOS_NE + ESTADOS_OUTROS
 
-# --- 2. BLACKLIST (Itens proibidos) ---
+# --- 2. BLACKLIST ---
 BLACKLIST = [
     "TRANSPORTE", "VEICULO", "MANUTENCAO", "LIMPEZA PREDIAL", 
     "AR CONDICIONADO", "OBRAS", "ENGENHARIA", "CONFECCAO", 
@@ -35,13 +29,10 @@ BLACKLIST = [
     "MATERIAL ESPORTIVO", "LOCACAO DE EQUIPAMENTO", 
     "AQUISICAO DE EQUIPAMENTO", "EXAME LABORATORI", "MERENDA",
     "RECEITUARIO", "PRESTACAO DE SERVICO",
-    "ADESAO",
-    # ADICIONADO:
-    "GASES MEDICINAIS"
+    "ADESAO", "GASES MEDICINAIS"
 ]
 
-# --- 3. WHITELIST GLOBAL (Vale para todos os ESTADOS_ALVO) ---
-# REMOVIDO: GASES MEDICINAIS
+# --- 3. WHITELIST GLOBAL ---
 WHITELIST_GLOBAL = [
     "REMEDIO", "FARMACO", 
     "HIPERTENSIV", "INJETAV", "ONCOLOGIC", "ANALGESIC", 
@@ -49,7 +40,7 @@ WHITELIST_GLOBAL = [
     "ANSIOLITIC", "DIABETIC", "GLICEMIC", "MEDICAMENT CONTROLAD"
 ]
 
-# --- 4. WHITELIST REGIONAL (Só vale se for ESTADOS_NE) ---
+# --- 4. WHITELIST REGIONAL (Nordeste) ---
 WHITELIST_NE = [
     "FRALDA", "ABSORVENTE", "SORO",
     "MATERIAL PENSO", "MATERIAL MEDICO-HOSPITALAR", 
@@ -84,7 +75,7 @@ for preg in todos:
     if id_preg in duplicatas: continue
     duplicatas.add(id_preg)
     
-    # 1. Filtro de Data (Corte 2026)
+    # 1. Filtro de Data
     data_enc = preg.get('dataEnc', '')
     try:
         if data_enc:
@@ -95,28 +86,16 @@ for preg in todos:
 
     # 2. Filtro Geográfico
     uf = preg.get('uf', '').upper()
-    if uf not in ESTADOS_ALVO:
-        continue
+    if uf not in ESTADOS_ALVO: continue
 
-    # 3. Análise do Objeto
+    # 3. Filtro Objeto
     objeto_txt = preg.get('objeto', '')
     objeto_norm = normalize(objeto_txt)
-    
     aceitar = False
     
-    # Verifica Blacklist (Prioridade Máxima - Exclui Gases aqui)
-    if any(t in objeto_norm for t in BLACKLIST_NORM):
-        aceitar = False
-    
-    # Verifica Whitelist Global
-    elif any(t in objeto_norm for t in WHITELIST_GLOBAL_NORM):
-        aceitar = True
-        
-    # Verifica Whitelist Regional
-    elif uf in ESTADOS_NE and any(t in objeto_norm for t in WHITELIST_NE_NORM):
-        aceitar = True
-        
-    # Regra Especial: Limpeza + Álcool
+    if any(t in objeto_norm for t in BLACKLIST_NORM): aceitar = False
+    elif any(t in objeto_norm for t in WHITELIST_GLOBAL_NORM): aceitar = True
+    elif uf in ESTADOS_NE and any(t in objeto_norm for t in WHITELIST_NE_NORM): aceitar = True
     elif "MATERIAL DE LIMPEZA" in objeto_norm:
         tem_alcool = False
         for item in preg.get('itensraw', []):
@@ -127,7 +106,7 @@ for preg in todos:
 
     if not aceitar: continue
 
-    # 4. Processamento de Itens e Resultados
+    # 4. Processamento
     mapa_resultados = {}
     raw_res = preg.get('resultadosraw', [])
     if raw_res and isinstance(raw_res, list):
@@ -149,20 +128,32 @@ for preg in todos:
             n_item = item.get('numeroItem')
             total_validos += 1
             
-            # Código ME/EPP: 1,2,3 = Sim | 4,5 = Não
-            cod_beneficio = 4
-            tb_obj = item.get('tipoBeneficio')
-            if isinstance(tb_obj, dict): cod_beneficio = tb_obj.get('value', 4)
-            elif 'tipoBeneficioId' in item: cod_beneficio = item.get('tipoBeneficioId', 4)
+            # --- LÓGICA OFICIAL: tipoBeneficioId ---
+            # 1=Exclusiva ME/EPP, 2=Subcontratação, 3=Cota Reservada -> SIM (Benefício)
+            # 4=Sem Benefício, 5=Não se Aplica -> NÃO (Amplo)
             
-            try: cod_beneficio = int(cod_beneficio)
-            except: cod_beneficio = 4
+            cod_beneficio = 4 # Default: Amplo
             
+            # Tenta pegar direto (padrão mais comum)
+            if 'tipoBeneficioId' in item:
+                cod_beneficio = item['tipoBeneficioId']
+            
+            # Fallback: Tenta pegar dentro do objeto tipoBeneficio (se existir)
+            elif isinstance(item.get('tipoBeneficio'), dict):
+                cod_beneficio = item['tipoBeneficio'].get('value') or item['tipoBeneficio'].get('id', 4)
+            
+            # Converte para int com segurança
+            try:
+                cod_beneficio = int(cod_beneficio)
+            except:
+                cod_beneficio = 4
+
+            # Aplica a regra do Manual
             is_me_epp = cod_beneficio in [1, 2, 3]
+            
             if is_me_epp: count_me_epp += 1
             
             res = mapa_resultados.get(n_item)
-            
             sit_final = "EM_ANDAMENTO"
             forn_final = None
             val_final = item.get('valorUnitarioEstimado', 0)
