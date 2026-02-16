@@ -47,7 +47,6 @@ def buscar_todos_itens(session, cnpj, ano, seq):
     return itens
 
 def buscar_resultado_item(session, cnpj, ano, seq, num_item):
-    """Estratégia do Coleta_PNCP: Busca individual por item"""
     url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num_item}/resultados"
     try:
         r = session.get(url, timeout=15)
@@ -63,7 +62,6 @@ def buscar_resultado_item(session, cnpj, ano, seq, num_item):
 def e_pharma_saude(lic):
     obj = normalize(lic.get('objetoCompra') or lic.get('objeto', ''))
     unid = normalize(lic.get('unidadeOrgao', {}).get('nomeUnidade', ''))
-    # Gatilhos amplos para garantir que nada escape da 'porta de entrada'
     termos = ['MEDICAMENT', 'FARMAC', 'HOSPITAL', 'SAUDE', 'ODONTO', 'ENFERMAGEM', 'MATERIAL MEDICO', 'INSUMO', 'LUVA', 'SERINGA', 'AGULHA', 'LABORATORI', 'FRALDA', 'ABSORVENTE', 'REMEDIO', 'SORO', 'MMH']
     if any(t in obj for t in termos): return True
     if any(t in unid for t in ['SAUDE', 'HOSPITAL', 'FUNDO MUNICIPAL']): return True
@@ -174,6 +172,5 @@ if __name__ == '__main__':
 
         with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
             json.dump(list(banco.values()), f, ensure_ascii=False)
-            
     finally:
         if os.path.exists(ARQ_LOCK): os.remove(ARQ_LOCK)
