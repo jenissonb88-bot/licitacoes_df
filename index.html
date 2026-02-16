@@ -6,49 +6,71 @@
     <title>Sniper Pharma - Monitor de Licitações</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #f4f7f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .card-licitacao { border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; transition: transform 0.2s; }
-        .card-licitacao:hover { transform: translateY(-5px); }
-        .header-card { background-color: #004a99; color: white; padding: 12px 15px; border-radius: 12px 12px 0 0; }
-        .badge-uf { background-color: #ffc107; color: #212529; font-weight: bold; font-size: 0.9em; }
-        .status-aberto { color: #28a745; font-weight: bold; }
-        .status-homologado { color: #007bff; font-weight: bold; }
-        .detalhes-item { background-color: #fff; padding: 15px; border-top: 1px solid #dee2e6; }
-        .pagination-container { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 30px; padding-bottom: 50px; }
-        .btn-page { min-width: 40px; }
-        .input-jump { width: 60px; text-align: center; }
-        .table-itens { font-size: 0.85em; }
-        .val-estimado { background-color: #fff3cd; font-weight: 600; }
-        .val-homologado { background-color: #cfe2ff; font-weight: 600; }
+        body { background-color: #f0f2f5; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+        .container { max-width: 1200px; }
+        
+        /* Estilo dos Cards */
+        .card-licitacao { border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 25px; overflow: hidden; }
+        .header-card { background-color: #003366; color: white; padding: 12px 20px; }
+        .badge-uf { background-color: #ffc107; color: #000; font-weight: bold; border-radius: 4px; padding: 3px 8px; }
+        
+        /* Badges de Situação (Estilo Portal PNCP) */
+        .status-badge { padding: 4px 10px; border-radius: 4px; font-size: 0.85em; font-weight: 600; border: 1px solid; display: inline-block; text-transform: uppercase; }
+        .status-fracassado { background-color: #f8d7da; color: #842029; border-color: #f5c2c7; }
+        .status-deserto { background-color: #fff3cd; color: #664d03; border-color: #ffecb5; }
+        .status-cancelado { background-color: #e2e3e5; color: #41464b; border-color: #d3d6d8; }
+        .status-homologado { background-color: #cfe2ff; color: #084298; border-color: #b6d4fe; }
+        .status-aberto { background-color: #d1e7dd; color: #0f5132; border-color: #badbcc; }
+
+        /* Tabela de Itens */
+        .table-itens { font-size: 0.9em; vertical-align: middle; }
+        .val-unitario { background-color: #fff9db; font-weight: 600; color: #856404; }
+        .val-homologado { background-color: #e7f1ff; font-weight: 600; color: #0c4128; }
+        .row-muted { opacity: 0.6; background-color: #fafafa; }
+        .group-divider { background-color: #eee; font-weight: bold; text-align: center; font-size: 0.8em; letter-spacing: 1px; }
+
+        /* Paginação e Salto */
+        .pagination-container { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
+        .input-jump { width: 70px; display: inline-block; }
     </style>
 </head>
 <body>
 
-<div class="container py-4">
-    <h2 class="mb-4 text-center">🔭 Monitor Sniper Pharma - Drogafonte</h2>
-    
-    <div class="row mb-4">
-        <div class="col-md-8">
-            <input type="text" id="searchInput" class="form-control" placeholder="Buscar por órgão, objeto, cidade ou fornecedor vencedor...">
+<div class="container py-5">
+    <div class="text-center mb-5">
+        <h1 class="fw-bold" style="color: #003366;">🚀 Sniper Pharma</h1>
+        <p class="text-muted">Monitor Estratégico de Licitações - Drogafonte</p>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-9">
+            <input type="text" id="searchInput" class="form-control form-control-lg" placeholder="Pesquisar por órgão, cidade ou objeto...">
         </div>
-        <div class="col-md-4">
-            <select id="filterUF" class="form-select">
+        <div class="col-md-3">
+            <select id="filterUF" class="form-select form-select-lg">
                 <option value="">Todas as UFs</option>
             </select>
         </div>
     </div>
 
-    <div id="monitor-content"></div>
+    <div id="monitor-content">
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2">A carregar licitações de 2026...</p>
+        </div>
+    </div>
 
-    <div class="pagination-container">
-        <button class="btn btn-outline-primary" id="prevPage">Anterior</button>
-        <span id="pageInfo" class="fw-bold">Página 1</span>
-        <button class="btn btn-outline-primary" id="nextPage">Próxima</button>
+    <div class="pagination-container d-flex flex-wrap justify-content-between align-items-center mt-4">
+        <div>
+            <button class="btn btn-outline-primary" id="prevPage">Anterior</button>
+            <span id="pageInfo" class="mx-3 fw-bold text-dark">Página 1</span>
+            <button class="btn btn-outline-primary" id="nextPage">Próxima</button>
+        </div>
         
-        <div class="ms-4 d-flex align-items-center">
-            <span class="me-2">Ir para a página:</span>
+        <div class="d-flex align-items-center">
+            <span class="me-2 text-muted">Ir para a página:</span>
             <input type="number" id="jumpInput" class="form-control input-jump me-2" min="1">
-            <button class="btn btn-primary btn-sm" id="btnJump">Ir</button>
+            <button class="btn btn-dark" id="btnJump">Ir</button>
         </div>
     </div>
 </div>
@@ -57,9 +79,9 @@
 let allData = [];
 let filteredData = [];
 let currentPage = 1;
-const itemsPerPage = 10;
+const itemsPerPage = 12;
 
-// Carregar dados
+// Função para descompactar e carregar o JSON.GZ
 async function loadData() {
     try {
         const response = await fetch('pregacoes_pharma_limpos.json.gz');
@@ -69,79 +91,97 @@ async function loadData() {
         const text = await new Response(decompressedStream).text();
         allData = JSON.parse(text);
         
-        // Ordenar por data (mais recentes primeiro)
+        // Ordenação por data (mais recentes primeiro)
         allData.sort((a, b) => new Date(b.data_enc) - new Date(a.data_enc));
         
         filteredData = [...allData];
-        populateUFs();
+        setupUF();
         renderMonitor();
-    } catch (error) {
-        console.error("Erro ao carregar dados:", error);
+    } catch (e) {
+        document.getElementById('monitor-content').innerHTML = `<div class="alert alert-danger">Erro ao carregar ficheiro de dados: ${e.message}</div>`;
     }
 }
 
 function renderMonitor() {
-    const content = document.getElementById('monitor-content');
-    content.innerHTML = '';
+    const container = document.getElementById('monitor-content');
+    container.innerHTML = '';
 
     const start = (currentPage - 1) * itemsPerPage;
     const end = start + itemsPerPage;
-    const paginatedItems = filteredData.slice(start, end);
+    const items = filteredData.slice(start, end);
 
-    paginatedItems.forEach(preg => {
+    items.forEach(preg => {
+        // Agrupamento de itens por situação
+        const grupos = {
+            vendas: preg.itens.filter(i => !['FRACASSADO', 'DESERTO', 'CANCELADO'].includes(i.situacao)),
+            fracassados: preg.itens.filter(i => i.situacao === 'FRACASSADO'),
+            desertos: preg.itens.filter(i => i.situacao === 'DESERTO'),
+            cancelados: preg.itens.filter(i => i.situacao === 'CANCELADO')
+        };
+
+        const renderLinha = (it, extraClass = '') => `
+            <tr class="${extraClass}">
+                <td class="text-center fw-bold">${it.n}</td>
+                <td>${it.desc}</td>
+                <td class="text-center">${it.qtd} ${it.un}</td>
+                <td class="val-unitario">R$ ${it.valUnit.toFixed(4)}</td>
+                <td class="val-homologado">R$ ${it.valHomologado > 0 ? it.valHomologado.toFixed(4) : '---'}</td>
+                <td>
+                    <span class="status-badge status-${it.situacao.toLowerCase()}">${it.situacao}</span>
+                    ${it.fornecedor ? `<br><small class="text-primary fw-bold">${it.fornecedor}</small>` : ''}
+                </td>
+            </tr>
+        `;
+
         const card = document.createElement('div');
         card.className = 'card card-licitacao';
-        
-        // Lógica de cores para valor total
-        const valorTotal = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(preg.valor_estimado);
-
         card.innerHTML = `
-            <div class="header-card d-flex justify-content-between align-items-center">
-                <span><span class="badge badge-uf me-2">${preg.uf}</span> <strong>${preg.orgao}</strong></span>
+            <div class="header-card d-flex justify-content-between">
+                <span><span class="badge-uf me-2">${preg.uf}</span> <strong>${preg.orgao}</strong></span>
                 <span class="small">${preg.edital}</span>
             </div>
             <div class="card-body">
-                <p class="mb-1 text-muted small"><strong>Cidade:</strong> ${preg.cidade} | <strong>Encerramento:</strong> ${new Date(preg.data_enc).toLocaleString()}</p>
-                <p class="mb-2"><strong>Objeto:</strong> ${preg.objeto}</p>
-                <div class="d-flex justify-content-between align-items-center">
-                    <span class="badge bg-secondary">${preg.tipo_licitacao}</span>
-                    <h5 class="mb-0 text-primary">${valorTotal}</h5>
-                    <button class="btn btn-sm btn-outline-dark" onclick="toggleDetails('${preg.id}')">Ver Itens</button>
+                <div class="row mb-3">
+                    <div class="col-md-8">
+                        <h6 class="text-muted small mb-1">UNIDADE: ${preg.unidade} | CIDADE: ${preg.cidade}</h6>
+                        <p class="mb-0"><strong>Objeto:</strong> ${preg.objeto}</p>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <small class="d-block text-muted">Abertura: ${new Date(preg.data_enc).toLocaleString()}</small>
+                        <h4 class="text-primary mt-1">R$ ${preg.valor_estimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</h4>
+                    </div>
                 </div>
-            </div>
-            <div id="details-${preg.id}" class="detalhes-item d-none">
-                <table class="table table-sm table-hover table-itens">
-                    <thead>
-                        <tr class="table-light">
-                            <th>Item</th>
-                            <th>Descrição</th>
-                            <th>Qtd</th>
-                            <th>Un</th>
-                            <th class="val-estimado">R$ Est. Unit</th>
-                            <th class="val-homologado">R$ Homologado</th>
-                            <th>Fornecedor Vencedor</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${preg.itens.map(it => `
+                <div class="d-flex justify-content-between border-top pt-3">
+                    <span class="badge bg-light text-dark border">${preg.tipo_licitacao}</span>
+                    <button class="btn btn-sm btn-primary" onclick="document.getElementById('det-${preg.id}').classList.toggle('d-none')">Ver Itens e Resultados</button>
+                </div>
+                
+                <div id="det-${preg.id}" class="d-none mt-4">
+                    <table class="table table-sm table-hover table-bordered table-itens">
+                        <thead class="table-dark">
                             <tr>
-                                <td>${it.n}</td>
-                                <td>${it.desc}</td>
-                                <td>${it.qtd}</td>
-                                <td>${it.un}</td>
-                                <td class="val-estimado">R$ ${it.valUnit.toFixed(4)}</td>
-                                <td class="val-homologado">R$ ${it.valHomologado ? it.valHomologado.toFixed(4) : '---'}</td>
-                                <td><span class="${it.fornecedor ? 'status-homologado' : 'status-aberto'}">${it.fornecedor || 'AGUARDANDO'}</span></td>
+                                <th>Item</th>
+                                <th>Descrição do Produto</th>
+                                <th>Qtd/Un</th>
+                                <th class="val-unitario">Est. Unit</th>
+                                <th class="val-homologado">Homologado</th>
+                                <th>Situação / Vencedor</th>
                             </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-                <div class="mt-2 text-end">
-                    <a href="${preg.link}" target="_blank" class="btn btn-sm btn-primary">Abrir no PNCP</a>
+                        </thead>
+                        <tbody>
+                            ${grupos.vendas.map(i => renderLinha(i)).join('')}
+                            ${grupos.fracassados.length ? `<tr class="group-divider"><td colspan="6">ITENS FRACASSADOS</td></tr>` + grupos.fracassados.map(i => renderLinha(i, 'row-muted')).join('') : ''}
+                            ${grupos.desertos.length ? `<tr class="group-divider"><td colspan="6">ITENS DESERTOS</td></tr>` + grupos.desertos.map(i => renderLinha(i, 'row-muted')).join('') : ''}
+                            ${grupos.cancelados.length ? `<tr class="group-divider"><td colspan="6">ITENS CANCELADOS</td></tr>` + grupos.cancelados.map(i => renderLinha(i, 'row-muted')).join('') : ''}
+                        </tbody>
+                    </table>
+                    <div class="text-end mt-3">
+                        <a href="${preg.link}" target="_blank" class="btn btn-sm btn-outline-secondary">Visualizar no Portal Oficial (PNCP)</a>
+                    </div>
                 </div>
             </div>
         `;
-        content.appendChild(card);
+        container.appendChild(card);
     });
 
     const totalPages = Math.ceil(filteredData.length / itemsPerPage);
@@ -149,29 +189,49 @@ function renderMonitor() {
     document.getElementById('jumpInput').max = totalPages;
 }
 
-function toggleDetails(id) {
-    const el = document.getElementById(`details-${id}`);
-    el.classList.toggle('d-none');
-}
-
-// Funções de Navegação
-document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
-document.getElementById('nextPage').onclick = () => { if(currentPage * itemsPerPage < filteredData.length) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
-
-// Função de Salto de Página (Ir para a página)
+// Lógica de Salto de Página
 document.getElementById('btnJump').onclick = () => {
-    const jumpVal = parseInt(document.getElementById('jumpInput').value);
-    const totalPages = Math.ceil(filteredData.length / itemsPerPage);
-    if(jumpVal >= 1 && jumpVal <= totalPages) {
-        currentPage = jumpVal;
+    const val = parseInt(document.getElementById('jumpInput').value);
+    const max = Math.ceil(filteredData.length / itemsPerPage);
+    if (val >= 1 && val <= max) {
+        currentPage = val;
         renderMonitor();
         window.scrollTo(0,0);
-    } else {
-        alert("Página inválida.");
     }
 };
 
-// ... Funções de busca e filtros de UF (mesma lógica anterior) ...
+// Navegação Simples
+document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
+document.getElementById('nextPage').onclick = () => { if(currentPage * itemsPerPage < filteredData.length) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
+
+// Busca e Filtros
+document.getElementById('searchInput').oninput = function() {
+    const termo = this.value.toUpperCase();
+    filteredData = allData.filter(p => 
+        p.orgao.toUpperCase().includes(termo) || 
+        p.objeto.toUpperCase().includes(termo) || 
+        p.cidade.toUpperCase().includes(termo)
+    );
+    currentPage = 1;
+    renderMonitor();
+};
+
+document.getElementById('filterUF').onchange = function() {
+    const uf = this.value;
+    filteredData = uf ? allData.filter(p => p.uf === uf) : [...allData];
+    currentPage = 1;
+    renderMonitor();
+};
+
+function setupUF() {
+    const ufs = [...new Set(allData.map(p => p.uf))].sort();
+    const select = document.getElementById('filterUF');
+    ufs.forEach(uf => {
+        const opt = document.createElement('option');
+        opt.value = uf; opt.innerText = uf;
+        select.appendChild(opt);
+    });
+}
 
 loadData();
 </script>
