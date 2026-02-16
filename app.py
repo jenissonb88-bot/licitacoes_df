@@ -65,17 +65,12 @@ def buscar_todos_resultados(session, cnpj, ano, seq):
     return resultados
 
 def e_pharma(lic):
-    # Filtro de Captação (Deve ser abrangente para pegar tudo)
     obj = lic.get('objetoCompra') or lic.get('objeto', '')
     obj_norm = normalize(obj)
     
-    # LISTA GATILHO COMPLETA SOLICITADA
     termos_gatilho = [
-        # Termos Gerais
         'MEDICAMENT', 'FARMAC', 'HOSPITAL', 'SAUDE', 'ODONTO', 'ENFERMAGEM',
         'MATERIAL MEDICO', 'INSUMO', 'LUVA', 'SERINGA', 'AGULHA', 'LABORATORI',
-        
-        # Lista Especifica Solicitada
         'FRALDA', 'ABSORVENTE', 'REMEDIO', 'SORO', 
         'HIPERTENSIV', 'INJETAV', 'ONCOLOGIC', 'ANALGESIC', 
         'ANTI-INFLAMAT', 'ANTIBIOTIC', 'ANTIDEPRESSIV', 
@@ -88,7 +83,20 @@ def e_pharma(lic):
 
 def precisa_atualizar(lic_atual, lic_nova):
     if not lic_atual: return True
-    return len(lic_nova.get('resultadosraw', [])) > len(lic_atual.get('resultadosraw', []))
+    
+    # NOVA LÓGICA: Verifica Timestamp de Atualização do PNCP
+    dt_atual = lic_atual.get('dataAtualizacaoPncp', '')
+    dt_nova = lic_nova.get('dataAtualizacaoPncp', '')
+    
+    # Se o PNCP diz que mudou, baixamos de novo.
+    if dt_nova and dt_nova != dt_atual:
+        return True
+        
+    # Fallback: Se tiver mais resultados que antes, atualiza
+    if len(lic_nova.get('resultadosraw', [])) > len(lic_atual.get('resultadosraw', [])):
+        return True
+        
+    return False
 
 def processar_licitacao(lic, session):
     try:
@@ -99,15 +107,12 @@ def processar_licitacao(lic, session):
         seq = lic['sequencialCompra']
         unid = lic.get('unidadeOrgao', {})
         
-        itensraw = buscar_todos_itens(session, cnpj, ano, seq)
-        if not itensraw: return None 
-        
-        resultadosraw = buscar_todos_resultados(session, cnpj, ano, seq)
-        
-        return {
+        # Estrutura inicial (leve)
+        nova_lic = {
             'id': f"{cnpj}{ano}{seq}",
             'dataPub': lic.get('dataPublicacaoPncp'),
             'dataEnc': lic.get('dataEncerramentoProposta'),
+            'dataAtualizacaoPncp': lic.get('dataAtualizacao'), # CAMPO CHAVE
             'uf': unid.get('ufSigla'),
             'cidade': unid.get('municipioNome'),
             'orgao': lic['orgaoEntidade']['razaoSocial'],
@@ -117,10 +122,20 @@ def processar_licitacao(lic, session):
             'uasg': unid.get('codigoUnidade', '---'),
             'link': f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
             'valorGlobalApi': float(lic.get('valorTotalEstimado') or 0),
-            'itensraw': itensraw,
-            'resultadosraw': resultadosraw,
+            'itensraw': [],
+            'resultadosraw': [],
             'ultimaAtualizacao': datetime.now().isoformat()
         }
+        
+        # Agora buscamos os dados pesados
+        itensraw = buscar_todos_itens(session, cnpj, ano, seq)
+        if not itensraw: return None 
+        nova_lic['itensraw'] = itensraw
+        
+        resultadosraw = buscar_todos_resultados(session, cnpj, ano, seq)
+        nova_lic['resultadosraw'] = resultadosraw
+        
+        return nova_lic
     except: return None
 
 def buscar_dia_completo(session, data_obj, banco):
@@ -156,10 +171,12 @@ def buscar_dia_completo(session, data_obj, banco):
                     try:
                         res = futuro.result()
                         if res:
-                            if precisa_atualizar(banco.get(res['id']), res):
+                            # Verifica se precisa atualizar o que já temos no banco
+                            lic_existente = banco.get(res['id'])
+                            if precisa_atualizar(lic_existente, res):
                                 banco[res['id']] = res
                                 total_capturados += 1
-                                print(f"✅ SALVO: {res['uf']} - {res['editaln']} (Res: {len(res['resultadosraw'])})")
+                                print(f"✅ ATUALIZADO: {res['uf']} - {res['editaln']} (Res: {len(res['resultadosraw'])})")
                     except: pass
 
             if len(lics) < 50 or pag >= total_paginas: break
@@ -172,8 +189,7 @@ def buscar_dia_completo(session, data_obj, banco):
     return total_capturados
 
 if __name__ == '__main__':
-    print(f"🚀 SNIPER PHARMA V-APP 2.1 (Full Keywords)")
-    
+    print(f"🚀 SNIPER PHARMA V-APP 2.2 (Sync Timestamp)")
     parser = argparse.ArgumentParser()
     parser.add_argument('--start', type=str); parser.add_argument('--end', type=str)
     args = parser.parse_args()
