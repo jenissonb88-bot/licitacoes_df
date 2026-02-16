@@ -11,14 +11,14 @@
         .header-card { background-color: #004a99; color: white; padding: 12px 15px; border-radius: 12px 12px 0 0; }
         .badge-uf { background-color: #000; color: #fff; font-weight: bold; padding: 3px 8px; border-radius: 4px; }
         
-        /* TARJAS DE STATUS DO PREGÃO */
-        .badge-amplo { background-color: #198754; color: white; font-weight: bold; padding: 5px 12px; } 
-        .badge-exclusivo { background-color: #dc3545; color: white; font-weight: bold; padding: 5px 12px; } 
-        .badge-parcial { background-color: #ffc107; color: #212529; font-weight: bold; padding: 5px 12px; } 
+        /* TARJAS DE STATUS DO PREGÃO (REGRAS DE NEGÓCIO) */
+        .badge-amplo { background-color: #198754 !important; color: white !important; font-weight: bold !important; padding: 5px 12px; } 
+        .badge-exclusivo { background-color: #dc3545 !important; color: white !important; font-weight: bold !important; padding: 5px 12px; } 
+        .badge-parcial { background-color: #ffc107 !important; color: #212529 !important; font-weight: bold !important; padding: 5px 12px; } 
 
-        /* CORES DA EXCLUSIVIDADE DO ITEM */
-        .benef-sim { color: #dc3545; font-weight: bold; } /* Vermelho: SIM (Exclusivo) */
-        .benef-nao { color: #198754; font-weight: bold; } /* Verde: NÃO (Amplo) */
+        /* CORES DA EXCLUSIVIDADE DO ITEM (SIM/NÃO) */
+        .benef-sim { color: #dc3545 !important; font-weight: bold !important; } /* Vermelho: SIM */
+        .benef-nao { color: #198754 !important; font-weight: bold !important; } /* Verde: NÃO */
 
         /* Estilos da Modal e Tabela */
         .modal-xl { max-width: 95%; }
@@ -48,15 +48,15 @@
         </div>
         <div class="col-md-3">
             <label class="filter-label">EDITAL / UASG</label>
-            <input type="text" id="filterEdital" class="form-control form-control-sm" placeholder="Ex: 00083/2025 ou 987123">
+            <input type="text" id="filterEdital" class="form-control form-control-sm" placeholder="Ex: 00083/2025">
         </div>
         <div class="col-md-4">
             <label class="filter-label">ÓRGÃO / UNIDADE COMPRADORA</label>
-            <input type="text" id="filterOrgao" class="form-control form-control-sm" placeholder="Nome da Prefeitura ou Secretaria">
+            <input type="text" id="filterOrgao" class="form-control form-control-sm" placeholder="Nome da Prefeitura">
         </div>
         <div class="col-md-3">
             <label class="filter-label">CIDADE / UF</label>
-            <input type="text" id="filterLoc" class="form-control form-control-sm" placeholder="Cidade ou Estado">
+            <input type="text" id="filterLoc" class="form-control form-control-sm" placeholder="Cidade ou UF">
         </div>
     </div>
 
@@ -78,7 +78,7 @@
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title" id="modalTitle">Detalhes da Licitação</h5>
+                <h5 class="modal-title" id="modalTitle">Detalhes</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="modalBody"></div>
@@ -102,12 +102,13 @@ async function loadData() {
     try {
         const response = await fetch('pregacoes_pharma_limpos.json.gz');
         const blob = await response.blob();
-        const text = await new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
+        const ds = new DecompressionStream('gzip');
+        const text = await new Response(blob.stream().pipeThrough(ds)).text();
         allData = JSON.parse(text);
         allData.sort((a, b) => new Date(b.data_enc) - new Date(a.data_enc));
         filteredData = [...allData];
         renderMonitor();
-    } catch (e) { console.error("Erro no carregamento:", e); }
+    } catch (e) { console.error("Erro:", e); }
 }
 
 function renderMonitor() {
@@ -133,14 +134,13 @@ function renderMonitor() {
                         <span class="badge ${statusClass} me-2">${preg.tipo_licitacao}</span>
                         <span class="badge bg-light text-dark border">Itens: ${preg.itens.length}</span>
                     </div>
-                    <h5 class="mb-0 text-primary">Est: R$ ${preg.valor_estimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</h5>
+                    <h5 class="mb-0 text-primary">R$ ${preg.valor_estimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</h5>
                     <button class="btn btn-sm btn-outline-primary fw-bold" onclick="showPopup('${preg.id}')">VER DETALHES</button>
                 </div>
             </div>`;
         content.appendChild(div);
     });
-    const totalPages = Math.ceil(filteredData.length / itemsPerPage) || 1;
-    document.getElementById('pageInfo').innerText = `Página ${currentPage} de ${totalPages}`;
+    document.getElementById('pageInfo').innerText = `Página ${currentPage} de ${Math.ceil(filteredData.length / itemsPerPage) || 1}`;
 }
 
 function showPopup(id) {
@@ -158,31 +158,23 @@ function showPopup(id) {
         ganhos[it.fornecedor].total += (it.qtd * it.valHomologado);
     });
 
-    let html = `
-        <div class="alert alert-secondary p-2 small mb-3">
-            <strong>ÓRGÃO:</strong> ${preg.orgao} | <strong>UNIDADE:</strong> ${preg.unidade}<br>
-            <strong>OBJETO:</strong> ${preg.objeto}
-        </div>
-        <table class="table table-sm table-bordered table-itens">
-            <thead class="table-dark">
-                <tr>
-                    <th class="text-center">Item</th><th>Descrição</th><th class="text-center">Exclusivo ME/EPP?</th>
-                    <th class="text-center">Qtd/Un</th><th class="text-center">Est. Unit</th>
-                    <th class="text-center">Homol. Unit</th><th class="text-center">Total Item</th>
-                </tr>
-            </thead><tbody>`;
+    let html = `<table class="table table-sm table-bordered table-itens">
+        <thead class="table-dark">
+            <tr>
+                <th class="text-center">Item</th><th>Descrição</th><th class="text-center">Exclusivo ME/EPP?</th>
+                <th class="text-center">Qtd/Un</th><th class="text-center">Est. Unit</th>
+                <th class="text-center">Homol. Unit</th><th class="text-center">Total Item</th>
+            </tr>
+        </thead><tbody>`;
 
     if (aguardando.length) {
         html += `<tr><td colspan="7" class="header-status-aguardando">⏳ ITENS AGUARDANDO RESULTADO</td></tr>`;
         aguardando.forEach(it => html += renderRow(it));
     }
 
-    for (const [forn, dados] of Object.entries(ganhos)) {
-        html += `<tr class="header-fornecedor">
-            <td colspan="6">🏢 FORNECEDOR: ${forn}</td>
-            <td class="text-center">Soma: R$ ${dados.total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-        </tr>`;
-        dados.itens.forEach(it => html += renderRow(it));
+    for (const [forn, d] of Object.entries(ganhos)) {
+        html += `<tr class="header-fornecedor"><td colspan="6">🏢 FORNECEDOR: ${forn}</td><td class="text-center">Soma: R$ ${d.total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td></tr>`;
+        d.itens.forEach(it => html += renderRow(it));
     }
 
     if (falhas.length) {
@@ -198,8 +190,8 @@ function showPopup(id) {
 function renderRow(it, css = '') {
     const total = it.valHomologado ? (it.qtd * it.valHomologado) : 0;
     
-    // REGRA SOLICITADA: SIM (Vermelho) para Exclusivo | NÃO (Verde) para Amplo
-    const isExclusivo = it.me_epp || [1, 2, 3].includes(parseInt(it.benef));
+    // LOGICA ROBUSTA: SIM (Vermelho) | NÃO (Verde)
+    const isExclusivo = it.me_epp === true || it.me_epp === 1 || [1, 2, 3].includes(parseInt(it.benef));
     const benefTxt = isExclusivo ? 'SIM' : 'NÃO';
     const benefClass = isExclusivo ? 'benef-sim' : 'benef-nao';
 
@@ -233,9 +225,8 @@ document.querySelectorAll('input').forEach(el => el.oninput = filtrar);
 document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
 document.getElementById('nextPage').onclick = () => { if(currentPage * itemsPerPage < filteredData.length) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
 document.getElementById('btnJump').onclick = () => {
-    const val = parseInt(document.getElementById('jumpInput').value);
-    const max = Math.ceil(filteredData.length / itemsPerPage);
-    if(val >= 1 && val <= max) { currentPage = val; renderMonitor(); window.scrollTo(0,0); }
+    const v = parseInt(document.getElementById('jumpInput').value);
+    if(v >= 1 && v <= Math.ceil(filteredData.length / itemsPerPage)) { currentPage = v; renderMonitor(); window.scrollTo(0,0); }
 };
 
 loadData();
