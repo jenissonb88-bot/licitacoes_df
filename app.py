@@ -82,17 +82,19 @@ def e_pharma(lic):
     return any(t in obj_norm for t in termos_gatilho)
 
 def precisa_atualizar(lic_atual, lic_nova):
+    # Se não temos a licitação no banco, claro que precisa salvar
     if not lic_atual: return True
     
-    # NOVA LÓGICA: Verifica Timestamp de Atualização do PNCP
-    dt_atual = lic_atual.get('dataAtualizacaoPncp', '')
-    dt_nova = lic_nova.get('dataAtualizacaoPncp', '')
+    # 1. Critério Forte: Data de Atualização do PNCP mudou?
+    # O PNCP manda 'dataAtualizacao' na busca. Se for diferente do que temos, mudou algo.
+    dt_atual_salva = lic_atual.get('dataAtualizacaoPncp')
+    dt_nova_api = lic_nova.get('dataAtualizacaoPncp') # Pegamos isso no processar_licitacao
     
-    # Se o PNCP diz que mudou, baixamos de novo.
-    if dt_nova and dt_nova != dt_atual:
-        return True
-        
-    # Fallback: Se tiver mais resultados que antes, atualiza
+    if dt_nova_api and dt_atual_salva:
+        if dt_nova_api != dt_atual_salva:
+            return True
+
+    # 2. Critério de Fallback (Segurança): Número de resultados aumentou?
     if len(lic_nova.get('resultadosraw', [])) > len(lic_atual.get('resultadosraw', [])):
         return True
         
@@ -107,12 +109,13 @@ def processar_licitacao(lic, session):
         seq = lic['sequencialCompra']
         unid = lic.get('unidadeOrgao', {})
         
-        # Estrutura inicial (leve)
-        nova_lic = {
+        # Estrutura Base
+        dados_tratados = {
             'id': f"{cnpj}{ano}{seq}",
             'dataPub': lic.get('dataPublicacaoPncp'),
             'dataEnc': lic.get('dataEncerramentoProposta'),
-            'dataAtualizacaoPncp': lic.get('dataAtualizacao'), # CAMPO CHAVE
+            # Captura a data de atualização oficial do registro
+            'dataAtualizacaoPncp': lic.get('dataAtualizacao'), 
             'uf': unid.get('ufSigla'),
             'cidade': unid.get('municipioNome'),
             'orgao': lic['orgaoEntidade']['razaoSocial'],
@@ -127,15 +130,15 @@ def processar_licitacao(lic, session):
             'ultimaAtualizacao': datetime.now().isoformat()
         }
         
-        # Agora buscamos os dados pesados
+        # Busca Pesada (Itens e Resultados)
         itensraw = buscar_todos_itens(session, cnpj, ano, seq)
         if not itensraw: return None 
-        nova_lic['itensraw'] = itensraw
+        dados_tratados['itensraw'] = itensraw
         
         resultadosraw = buscar_todos_resultados(session, cnpj, ano, seq)
-        nova_lic['resultadosraw'] = resultadosraw
+        dados_tratados['resultadosraw'] = resultadosraw
         
-        return nova_lic
+        return dados_tratados
     except: return None
 
 def buscar_dia_completo(session, data_obj, banco):
@@ -171,12 +174,13 @@ def buscar_dia_completo(session, data_obj, banco):
                     try:
                         res = futuro.result()
                         if res:
-                            # Verifica se precisa atualizar o que já temos no banco
-                            lic_existente = banco.get(res['id'])
-                            if precisa_atualizar(lic_existente, res):
+                            lic_banco = banco.get(res['id'])
+                            if precisa_atualizar(lic_banco, res):
                                 banco[res['id']] = res
                                 total_capturados += 1
-                                print(f"✅ ATUALIZADO: {res['uf']} - {res['editaln']} (Res: {len(res['resultadosraw'])})")
+                                n_res = len(res['resultadosraw'])
+                                status = "ATUALIZADO" if lic_banco else "NOVO"
+                                print(f"✅ {status}: {res['uf']} - {res['editaln']} (Res: {n_res})")
                     except: pass
 
             if len(lics) < 50 or pag >= total_paginas: break
@@ -189,7 +193,7 @@ def buscar_dia_completo(session, data_obj, banco):
     return total_capturados
 
 if __name__ == '__main__':
-    print(f"🚀 SNIPER PHARMA V-APP 2.2 (Sync Timestamp)")
+    print(f"🚀 SNIPER PHARMA V-APP 2.2 (Sincronização Real)")
     parser = argparse.ArgumentParser()
     parser.add_argument('--start', type=str); parser.add_argument('--end', type=str)
     args = parser.parse_args()
