@@ -9,7 +9,7 @@ ARQDADOS = 'dadosoportunidades.json.gz'
 ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'
 ARQCSV = 'Exportar Dados.csv'
 
-print("🧹 LIMPEZA V27 - PONTE DE DADOS COMPLETA")
+print("🧹 LIMPEZA V28 - MODO COMPATIBILIDADE TOTAL")
 
 def normalize(texto):
     if not texto: return ""
@@ -30,7 +30,6 @@ if os.path.exists(ARQCSV):
                     next(leitor, None) 
                     for linha in leitor:
                         if not linha: continue
-                        # Colunas: 0 (Desc), 1 (Fármaco), 5 (Nome Tec)
                         termos = []
                         if len(linha) > 1: termos.append(linha[1]) 
                         if len(linha) > 5: termos.append(linha[5]) 
@@ -92,7 +91,6 @@ for preg in todos:
     if preg['id'] in duplicatas: continue
     duplicatas.add(preg['id'])
     
-    # Extração de Dados Slim
     p_dt_enc = preg.get('dt_enc') or preg.get('dataEnc')
     p_uf = preg.get('uf') or ''
     p_obj = preg.get('obj') or preg.get('objeto') or ''
@@ -106,18 +104,16 @@ for preg in todos:
 
     obj_norm = normalize(p_obj)
     
-    # Blacklist (Exceto Nutrição)
     if any(t in obj_norm for t in BLACKLIST_NORM):
         if not ("DIETA" in obj_norm or "FORMULA" in obj_norm): continue
 
-    # --- VALIDAÇÃO ---
     aprovado = False
     
-    # 1. Whitelist Objeto
+    # 1. Whitelist
     obj_is_global = any(t in obj_norm for t in WHITELIST_GLOBAL_NORM)
     obj_is_ne = any(t in obj_norm for t in WHITELIST_NE_NORM)
     
-    # 2. Match CSV
+    # 2. CSV
     item_match_csv = False
     if csv_ativo and len(catalogo_produtos) > 0:
         for item in p_itens:
@@ -125,14 +121,11 @@ for preg in todos:
             if any(t in normalize(desc) for t in catalogo_produtos):
                 item_match_csv = True; break
 
-    # Regras Regionais
     if p_uf.upper() in ESTADOS_NE:
         if obj_is_global or obj_is_ne or item_match_csv: aprovado = True
     else:
-        # Fora do NE, exige objeto forte OU CSV confirmado
         if obj_is_global: aprovado = True
     
-    # Fallback Álcool
     if not aprovado and "MATERIAL DE LIMPEZA" in obj_norm:
          for item in p_itens:
             desc = item.get('d') or item.get('descricao') or ''
@@ -141,17 +134,14 @@ for preg in todos:
 
     if not aprovado: continue
 
-    # --- MONTAGEM FINAL ---
     lista_final = []
     count_me = 0
     
     for item in p_itens:
-        # Recupera dados Slim
         bid = item.get('benef')
         is_me = False
         try: is_me = int(bid) in [1, 3]
         except: pass
-        
         if is_me: count_me += 1
         
         lista_final.append({
@@ -162,7 +152,7 @@ for preg in todos:
             'valUnit': float(item.get('v_est', 0)),
             'me_epp': is_me,
             'situacao': item.get('sit', 'ABERTO'),
-            'fornecedor': item.get('res_forn'), # AQUI ESTÁ O SEGREDO
+            'fornecedor': item.get('res_forn'), 
             'valHomologado': float(item.get('res_val', 0))
         })
 
