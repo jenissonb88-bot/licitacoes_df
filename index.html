@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sniper Pharma - Monitor V14 (Agrupado e Totais)</title>
+    <title>Sniper Pharma - Monitor V15 (Dados Reais)</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -32,9 +32,6 @@
         .bg-andamento { background-color: #198754; } 
         .bg-fracassado { background-color: #dc3545; } 
         
-        .table-itens th { background: #f8f9fa; font-size: 0.75rem; text-align: center; }
-        .table-itens td { font-size: 0.8rem; vertical-align: middle; }
-        
         .me-epp-sim { color: #dc3545; font-weight: 800; } 
         .me-epp-nao { color: #198754; font-weight: 700; }
         
@@ -61,7 +58,7 @@
 </div>
 
 <div class="header-bar d-flex justify-content-between align-items-center sticky-top">
-    <div class="fw-bold fs-5"><i class="fas fa-crosshairs me-2"></i>SNIPER PHARMA V14</div>
+    <div class="fw-bold fs-5"><i class="fas fa-crosshairs me-2"></i>SNIPER PHARMA V15</div>
     <div class="d-flex align-items-center gap-3">
         <div class="form-check form-switch text-white">
             <input class="form-check-input" type="checkbox" id="chkOcultarVencidos" onchange="render()">
@@ -185,7 +182,6 @@
         document.getElementById('error-msg').innerHTML = msg;
     }
 
-    // Ordenação e Renderização (Padrão)
     function ordenar(campo, force = false) {
         if (!force) {
             if (ordemAtual.campo === campo) ordemAtual.direcao = ordemAtual.direcao === 'asc' ? 'desc' : 'asc';
@@ -292,19 +288,16 @@
 
     function mudarPagina(d) { pagina += d; render(); document.querySelector('.card-table').scrollIntoView(); }
 
-    // --- NOVA LÓGICA DE DETALHES AGRUPADOS ---
     function verDetalhes(id) {
         const lic = dadosOriginais.find(d => d.id === id);
         if(!lic) return;
         
-        // Separação em Grupos
         const aguardando = [];
-        const homologados = {}; // Dicionário: { 'NomeFornecedor': [item1, item2] }
+        const homologados = {}; 
         const fracassados = [];
 
         lic.itens.forEach(it => {
             const sit = (it.situacao || 'EM_ANDAMENTO');
-            
             if (sit === 'HOMOLOGADO') {
                 const forn = it.fornecedor || 'FORNECEDOR NÃO INFORMADO';
                 if (!homologados[forn]) homologados[forn] = [];
@@ -318,7 +311,6 @@
             }
         });
 
-        // Cabeçalho Modal
         let html = `
             <div class="alert alert-light border shadow-sm">
                 <strong>${lic.orgao}</strong><br>
@@ -326,11 +318,11 @@
                 <div class="mt-2 text-muted small">${lic.objeto}</div>
             </div>`;
 
-        // 1. Renderizar AGUARDANDO RESULTADOS
+        // AGUARDANDO
         if (aguardando.length > 0) {
             html += `<div class="card mb-3 border-success shadow-sm mt-3">
                 <div class="group-header bg-andamento">
-                    <span><i class="fas fa-clock me-2"></i> Aguardando Resultados / Em Andamento</span>
+                    <span><i class="fas fa-clock me-2"></i> Aguardando Resultados</span>
                     <span class="badge bg-white text-dark">${aguardando.length} itens</span>
                 </div>
                 <div class="card-body p-0">
@@ -348,14 +340,11 @@
             </div>`;
         }
 
-        // 2. Renderizar HOMOLOGADOS (Por Fornecedor)
+        // HOMOLOGADOS
         if (Object.keys(homologados).length > 0) {
             html += `<h6 class="mt-4 border-bottom pb-2 fw-bold text-success"><i class="fas fa-check-circle me-1"></i> Itens Homologados por Fornecedor</h6>`;
-            
             for (const [fornecedor, itens] of Object.entries(homologados)) {
-                // Calcula Total do Fornecedor
                 const totalFornecedor = itens.reduce((acc, it) => acc + ((it.qtd || 0) * (it.valHomologado || 0)), 0);
-                
                 html += `<div class="card mb-3 shadow-sm border-dark">
                     <div class="group-header bg-fornecedor">
                         <span><i class="fas fa-truck me-2"></i> ${fornecedor}</span>
@@ -378,11 +367,11 @@
             }
         }
 
-        // 3. Renderizar FRACASSADOS/CANCELADOS
+        // FRACASSADOS
         if (fracassados.length > 0) {
             html += `<div class="card mb-3 border-danger shadow-sm mt-4">
                 <div class="group-header bg-fracassado">
-                    <span><i class="fas fa-times-circle me-2"></i> Fracassados, Desertos ou Cancelados</span>
+                    <span><i class="fas fa-times-circle me-2"></i> Fracassados / Cancelados</span>
                     <span class="badge bg-white text-dark">${fracassados.length} itens</span>
                 </div>
                 <div class="card-body p-0">
@@ -404,7 +393,6 @@
         new bootstrap.Modal(document.getElementById('modalDetalhes')).show();
     }
 
-    // Função Auxiliar para Gerar TRs
     function gerarLinhasTabela(lista, isHomologado, isFracassado = false) {
         return lista.map(it => {
             const txtMeEpp = it.me_epp 
@@ -412,28 +400,18 @@
                 : '<span class="me-epp-nao">NÃO</span>';
             
             let colsExtras = '';
-            
             if (isHomologado) {
-                // Colunas: Unit. Homologado | Total Homologado
                 const totalItem = (it.qtd || 0) * (it.valHomologado || 0);
-                colsExtras = `
-                    <td class="text-end fw-bold text-primary">${fmtBrl.format(it.valHomologado)}</td>
-                    <td class="text-end fw-bold text-dark bg-light">${fmtBrl.format(totalItem)}</td>
-                `;
+                colsExtras = `<td class="text-end fw-bold text-primary">${fmtBrl.format(it.valHomologado)}</td><td class="text-end fw-bold text-dark bg-light">${fmtBrl.format(totalItem)}</td>`;
             } else if (isFracassado) {
-                // Coluna: Situação
                 colsExtras = `<td class="text-center fw-bold text-danger">${it.situacao}</td>`;
             } else {
-                // Coluna: Valor Estimado (Aguardando)
                 colsExtras = `<td class="text-end">${fmtBrl.format(it.valUnit)}</td>`;
             }
 
             return `<tr>
-                <td class="text-center">${it.n}</td>
-                <td class="text-center">${txtMeEpp}</td>
-                <td>${it.desc}</td>
-                <td class="text-center">${it.qtd}</td>
-                <td class="text-center">${it.un}</td>
+                <td class="text-center">${it.n}</td><td class="text-center">${txtMeEpp}</td>
+                <td>${it.desc}</td><td class="text-center">${it.qtd}</td><td class="text-center">${it.un}</td>
                 ${colsExtras}
             </tr>`;
         }).join('');
