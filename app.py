@@ -25,8 +25,12 @@ def formatar_data_pncp(data_obj):
 
 def criar_sessao():
     s = requests.Session()
-    retries = Retry(total=5, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
-    s.mount('https://', HTTPAdapter(max_retries=retries))
+    s.headers.update({
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    })
+    retry = Retry(total=5, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
+    s.mount('https://', HTTPAdapter(max_retries=retry))
     return s
 
 def buscar_todos_itens(session, cnpj, ano, seq):
@@ -45,20 +49,21 @@ def buscar_todos_itens(session, cnpj, ano, seq):
         except: break
     return itens
 
-def buscar_resultado_item(session, cnpj, ano, seq, seq_item):
-    """Busca direta do vencedor pelo ID interno do item"""
-    url = f'https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{seq_item}/results/1'
-    # Testamos também o endpoint alternativo caso o 'results' falhe
+def buscar_resultado_item(session, cnpj, ano, seq, num_item):
+    """
+    CAMINHO CORRIGIDO: Baseado no coleta_pncp.py e Swagger PNCP.
+    Usa o numeroItem e retorna a lista de resultados.
+    """
+    url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num_item}/resultados"
     try:
-        r = session.get(url, timeout=12)
+        r = session.get(url, timeout=15)
         if r.status_code == 200:
-            return r.json()
-        
-        # Fallback para o endpoint de 'resultados' (plural)
-        url_alt = f'https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{seq_item}/resultados/1'
-        r_alt = session.get(url_alt, timeout=12)
-        if r_alt.status_code == 200:
-            return r_alt.json()
+            res_list = r.json()
+            # A API retorna uma lista. Pegamos o primeiro vencedor homologado.
+            if isinstance(res_list, list) and len(res_list) > 0:
+                return res_list[0]
+            elif isinstance(res_list, dict):
+                return res_list
     except: pass
     return None
 
@@ -77,22 +82,24 @@ def processar_licitacao(lic_resumo, session):
         ano = lic_resumo['anoCompra']
         seq = lic_resumo['sequencialCompra']
         
+        # 1. Busca todos os itens
         itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
         if not itens_raw: return None
 
         itens_limpos = []
         for item in itens_raw:
             try:
-                num = int(item.get('numeroItem'))
-                seq_item = item.get('sequencialItem')
+                # O PNCP espera o numeroItem na URL de resultados
+                num_item = item.get('numeroItem')
                 
                 # Captura ME/EPP
                 bid = item.get('tipoBeneficio') or item.get('tipoBeneficioId') or 4
                 if isinstance(bid, dict): bid = bid.get('value') or bid.get('id', 4)
                 
-                # --- VERIFICAÇÃO FORÇADA DE RESULTADO ---
-                # Ignoramos o 'temResultado' e tentamos buscar em todos
-                res_data = buscar_resultado_item(session, cnpj, ano, seq, seq_item)
+                # --- BUSCA DE RESULTADO (Caminho Validado) ---
+                res_data = None
+                if item.get('temResultado'):
+                    res_data = buscar_resultado_item(session, cnpj, ano, seq, num_item)
                 
                 sit_txt = str(item.get('situacaoCompraItemName', '')).upper()
                 status_final = "ABERTO"
@@ -103,15 +110,15 @@ def processar_licitacao(lic_resumo, session):
                     status_final = sit_txt
 
                 item_obj = {
-                    'n': num, 'd': item.get('descricao', ''), 'q': float(item.get('quantidade', 0)),
+                    'n': num_item, 'd': item.get('descricao', ''), 'q': float(item.get('quantidade', 0)),
                     'u': item.get('unidadeMedida', ''), 'v_est': float(item.get('valorUnitarioEstimado', 0)),
                     'benef': bid, 'sit': status_final
                 }
 
                 if res_data:
-                    # Tenta capturar o nome por várias chaves possíveis da API
-                    item_obj['res_forn'] = res_data.get('nomeRazaoSocialFornecedor') or res_data.get('razaoSocial') or res_data.get('fornecedorNome')
-                    item_obj['res_val'] = float(res_data.get('valorUnitarioHomologado', 0))
+                    # Nomenclaturas oficiais PNCP
+                    item_obj['res_forn'] = res_data.get('nomeRazaoSocialFornecedor') or res_data.get('razaoSocial')
+                    item_obj['res_val'] = float(res_data.get('valorUnitarioHomologado') or 0)
 
                 itens_limpos.append(item_obj)
             except: continue
@@ -161,7 +168,7 @@ def buscar_dia_completo(session, data_obj, banco):
                         banco[res['id']] = res
                         total_capturados += 1
                         n_res = sum(1 for i in res['itens'] if 'res_forn' in i)
-                        print(f"   DISK-WRITE: {res['uf']} - {res['edit']} | Vencedores Encontrados: {n_res}")
+                        print(f"   DISK-WRITE: {res['uf']} - {res['edit']} | Vencedores: {n_res}")
             
             if pag >= total_paginas: break
             pag += 1
