@@ -47,6 +47,7 @@ def buscar_todos_itens(session, cnpj, ano, seq):
     return itens
 
 def buscar_resultado_item(session, cnpj, ano, seq, num_item):
+    """Estratégia do Coleta_PNCP: Busca individual por item"""
     url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num_item}/resultados"
     try:
         r = session.get(url, timeout=15)
@@ -62,6 +63,7 @@ def buscar_resultado_item(session, cnpj, ano, seq, num_item):
 def e_pharma_saude(lic):
     obj = normalize(lic.get('objetoCompra') or lic.get('objeto', ''))
     unid = normalize(lic.get('unidadeOrgao', {}).get('nomeUnidade', ''))
+    # Gatilhos amplos para garantir que nada escape da 'porta de entrada'
     termos = ['MEDICAMENT', 'FARMAC', 'HOSPITAL', 'SAUDE', 'ODONTO', 'ENFERMAGEM', 'MATERIAL MEDICO', 'INSUMO', 'LUVA', 'SERINGA', 'AGULHA', 'LABORATORI', 'FRALDA', 'ABSORVENTE', 'REMEDIO', 'SORO', 'MMH']
     if any(t in obj for t in termos): return True
     if any(t in unid for t in ['SAUDE', 'HOSPITAL', 'FUNDO MUNICIPAL']): return True
@@ -116,50 +118,12 @@ def processar_licitacao(lic_resumo, session):
         }
     except: return None
 
-def aplicar_dieta_dados(banco):
-    """Remove pregões antigos conforme regras de 180 e 360 dias"""
-    hoje = datetime.now()
-    removidos = 0
-    ids_para_deletar = []
-
-    for id_lic, lic in banco.items():
-        try:
-            dt_enc_str = lic.get('dt_enc')
-            if not dt_enc_str: continue
-            
-            # Converte data de encerramento para objeto datetime
-            dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
-            idade_dias = (hoje - dt_enc).days
-            
-            # Verifica se TODOS os itens têm resultado
-            itens = lic.get('itens', [])
-            total_itens = len(itens)
-            itens_com_resultado = sum(1 for i in itens if 'res_forn' in i)
-            
-            concluido = (total_itens > 0 and itens_com_resultado == total_itens)
-
-            # REGRA 1: Todos com resultado + mais de 180 dias
-            if concluido and idade_dias > 180:
-                ids_para_deletar.append(id_lic)
-            
-            # REGRA 2: Pendentes + mais de 360 dias
-            elif not concluido and idade_dias > 360:
-                ids_para_deletar.append(id_lic)
-                
-        except: continue
-
-    for id_del in ids_para_deletar:
-        del banco[id_del]
-        removidos += 1
-    
-    return removidos
-
 def buscar_dia_completo(session, data_obj, banco):
     dstr = data_obj.strftime('%Y%m%d')
     url_pub = 'https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao'
     total_capturados = 0
     pag = 1
-    print(f"🔎 Varrendo {dstr}...")
+    print(f"🔎 Capturando {dstr}...")
     
     while True:
         params = {'dataInicial': dstr, 'dataFinal': dstr, 'codigoModalidadeContratacao': 6, 'pagina': pag, 'tamanhoPagina': 50}
@@ -179,7 +143,7 @@ def buscar_dia_completo(session, data_obj, banco):
                         banco[res['id']] = res
                         total_capturados += 1
                         n_res = sum(1 for i in res['itens'] if 'res_forn' in i)
-                        print(f"   SALVO: {res['uf']} - {res['edit']} | Vencedores: {n_res}")
+                        print(f"   + {res['uf']} - {res['edit']} | Venc: {n_res}")
             
             if pag >= payload.get('totalPaginas', 1): break
             pag += 1
@@ -198,7 +162,6 @@ if __name__ == '__main__':
             with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
                 d = json.load(f); banco = {i['id']: i for i in d}
         
-        # Execução da Varredura
         datas = []
         if args.start and args.end:
             dt_i = datetime.strptime(args.start, '%Y-%m-%d').date()
@@ -208,12 +171,6 @@ if __name__ == '__main__':
             for i in range(6): datas.append(date.today() - timedelta(days=i))
         
         for dia in datas: buscar_dia_completo(session, dia, banco)
-
-        # --- APLICAÇÃO DA DIETA DE DADOS ---
-        print("\n🧹 Iniciando Dieta de Dados (Limpeza de banco)...")
-        removidos = aplicar_dieta_dados(banco)
-        if removidos > 0:
-            print(f"♻️  Removidos {removidos} pregões antigos/concluídos para economizar espaço.")
 
         with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
             json.dump(list(banco.values()), f, ensure_ascii=False)
