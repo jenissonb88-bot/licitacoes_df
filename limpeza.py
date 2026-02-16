@@ -12,8 +12,7 @@ def normalize(t):
     if not t: return ""
     return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
 
-# LEI DO VETO
-VETOS = [normalize(x) for x in ["ADESAO", "INTENCAO", "IRP", "BUFFET", "PRESTACAO", "TERCEIRIZACAO", "EXAME LABORATORI"]]
+VETOS = [normalize(x) for x in ["ADESAO", "INTENCAO", "IRP", "BUFFET", "PRESTACAO DE SERVICO", "TERCEIRIZACAO", "EXAME LABORATORI", "OBRAS", "PNEU", "VEICULO"]]
 
 catalogo = set()
 if os.path.exists(ARQCSV):
@@ -27,27 +26,29 @@ if os.path.exists(ARQCSV):
                             if len(l) > i:
                                 t = normalize(l[i])
                                 if len(t) > 4: catalogo.add(t)
+            print(f"📊 Catálogo Drogafonte carregado: {len(catalogo)} termos.")
             break
         except: continue
 
-if not os.path.exists(ARQDADOS): exit()
+if not os.path.exists(ARQDADOS): 
+    print("❌ Arquivo de dados não encontrado.")
+    exit()
+
 with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f: banco = json.load(f)
+inicial = len(banco)
 
 banco_limpo = []
 for p in banco:
     uf = p.get('uf', '').upper()
     obj = normalize(p.get('obj', ''))
     
-    # 1. Trava Data
     try:
         dt = datetime.fromisoformat(p.get('dt_enc', '').replace('Z', '+00:00')).replace(tzinfo=None)
         if dt < DATA_CORTE_FIXA: continue
     except: continue
 
-    # 2. Veto Suprema
     if any(v in obj for v in VETOS) and not "DIETA" in obj: continue
 
-    # 3. Filtro Geográfico de Especialista
     is_pharma = any(t in obj for t in ["MEDICAMENT", "FARMACO", "REMEDIO", "SORO", "AMPOAL"])
     is_material = any(t in obj for t in ["MMH", "INSUMO", "MATERIAL MEDIC", "EQUIPO", "SONDA", "LUVA"])
     
@@ -57,16 +58,16 @@ for p in banco:
     elif is_pharma:
         aprovado = True
     
-    # 4. Cruzamento com CSV (Resgate)
     if not aprovado:
         for it in p.get('itens', []):
             if any(term in normalize(it.get('d', '')) for term in catalogo):
                 aprovado = True; break
     
     if aprovado:
-        p['itens'] = [i for i in p.get('itens', []) if not any(v in normalize(i.get('d', '')) for v in ["BUFFET", "LIMPEZA", "COFFEE"])]
+        p['itens'] = [i for i in p.get('itens', []) if not any(v in normalize(i.get('d', '')) for v in ["BUFFET", "LIMPEZA", "COFFEE", "OBRAS"])]
         banco_limpo.append(p)
 
+# GERAÇÃO DO WEB_DATA
 web_data = []
 for p in banco_limpo:
     c_ex = 0; itens_fmt = []
@@ -88,4 +89,8 @@ for p in banco_limpo:
 
 with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f: json.dump(web_data, f, ensure_ascii=False)
 with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f: json.dump(banco_limpo, f, ensure_ascii=False)
-print(f"♻️ Limpeza Geográfica concluída: {len(banco_limpo)} registros.")
+
+print(f"♻️ Limpeza Geográfica concluída!")
+print(f"   📉 Registros antes: {inicial}")
+print(f"   📈 Registros agora: {len(banco_limpo)}")
+print(f"   🗑️ Removidos: {inicial - len(banco_limpo)}")
