@@ -2,12 +2,14 @@ import json
 import gzip
 import os
 import unicodedata
+import csv
 from datetime import datetime
 
 ARQDADOS = 'dadosoportunidades.json.gz'
 ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'
+ARQCSV = 'Exportar Dados.csv'
 
-print("🧹 LIMPEZA V15 - TIPO BENEFICIO ID OFICIAL")
+print("🧹 LIMPEZA V16 - VALIDAÇÃO POR CSV + NOVAS REGRAS")
 
 # --- 1. DEFINIÇÃO GEOGRÁFICA ---
 ESTADOS_NE = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
@@ -18,40 +20,80 @@ ESTADOS_OUTROS = [
 ]
 ESTADOS_ALVO = ESTADOS_NE + ESTADOS_OUTROS
 
-# --- 2. BLACKLIST ---
+# --- 2. BLACKLIST (Exclusão Imediata pelo Objeto) ---
 BLACKLIST = [
     "TRANSPORTE", "VEICULO", "MANUTENCAO", "LIMPEZA PREDIAL", 
     "AR CONDICIONADO", "OBRAS", "ENGENHARIA", "CONFECCAO", 
     "ESTANTE", "MOBILIARIO", "INFORMATICA", "COMPUTADOR",
     "TONER", "CARTUCHO", "ANIMAIS", "RACAO",
-    "GENERO ALIMENTICIO", 
     "MATERIAL DE CONSTRUCAO", "MATERIAL ELETRICO", 
     "MATERIAL ESPORTIVO", "LOCACAO DE EQUIPAMENTO", 
-    "AQUISICAO DE EQUIPAMENTO", "EXAME LABORATORI", "MERENDA",
+    "AQUISICAO DE EQUIPAMENTO", "EXAME LABORATORI", 
     "RECEITUARIO", "PRESTACAO DE SERVICO",
-    "ADESAO", "GASES MEDICINAIS"
+    "ADESAO", "GASES MEDICINAIS",
+    # NOVOS TERMOS BLOQUEADOS:
+    "CONSIGNACAO", "INTENCAO", "GENEROS ALIMENTICIOS", 
+    "ALIMENTACAO ESCOLAR", "PNAE", "COFFEE BREAK", 
+    "CAFE REGIONAL", "KIT LANCHE", "GELO", "AGUA MINERAL", 
+    "SEGURANCA PUBLICA", "VIDEOMONITORAMENTO", "MERENDA"
 ]
 
-# --- 3. WHITELIST GLOBAL ---
+# --- 3. WHITELIST GLOBAL (Termos de Saúde/Gestão) ---
 WHITELIST_GLOBAL = [
     "REMEDIO", "FARMACO", 
     "HIPERTENSIV", "INJETAV", "ONCOLOGIC", "ANALGESIC", 
     "ANTI-INFLAMAT", "ANTIBIOTIC", "ANTIDEPRESSIV", 
-    "ANSIOLITIC", "DIABETIC", "GLICEMIC", "MEDICAMENT CONTROLAD"
+    "ANSIOLITIC", "DIABETIC", "GLICEMIC", "MEDICAMENT CONTROLAD",
+    # NOVOS TERMOS GLOBAIS:
+    "ATENCAO BASICA", "RENAME", "REMUME", "MAC", 
+    "VIGILANCIA EM SAUDE", "ASSISTENCIA FARMACEUTICA", "GESTAO DO SUS"
 ]
 
 # --- 4. WHITELIST REGIONAL (Nordeste) ---
 WHITELIST_NE = [
     "FRALDA", "ABSORVENTE", "SORO",
-    "MATERIAL PENSO", "MATERIAL MEDICO-HOSPITALAR", 
     "DIETA ENTERAL", "DIETA", "FORMULA", "PROTEIC", 
-    "CALORIC", "GAZE", "ATADURA"
+    "CALORIC", "GAZE", "ATADURA",
+    # NOVOS TERMOS NE:
+    "MATERIAL PENSO", "MMH"
 ]
 
+# --- FUNÇÕES AUXILIARES ---
 def normalize(texto):
     if not texto: return ""
     return ''.join(c for c in unicodedata.normalize('NFD', str(texto)).upper()
                    if unicodedata.category(c) != 'Mn')
+
+# Carrega o CSV de Produtos para Memória
+catalogo_produtos = set()
+if os.path.exists(ARQCSV):
+    try:
+        # Tenta ler com diferentes encodings para evitar erro
+        encodings = ['utf-8', 'latin-1', 'cp1252']
+        content = None
+        for enc in encodings:
+            try:
+                with open(ARQCSV, 'r', encoding=enc) as f:
+                    content = f.read()
+                break
+            except UnicodeDecodeError: continue
+        
+        if content:
+            # Assume que pode ser separado por quebra de linha, ponto e virgula ou virgula
+            lines = content.splitlines()
+            for line in lines:
+                # Normaliza e limpa
+                termo = normalize(line.replace(';', ' ').replace(',', ' '))
+                if len(termo) > 2: # Ignora termos muito curtos (ex: "DE", "A")
+                    catalogo_produtos.add(termo)
+            print(f"📦 Catálogo CSV carregado: {len(catalogo_produtos)} termos.")
+        else:
+            print("⚠️ Erro: Não foi possível ler o CSV com nenhum encoding padrão.")
+    except Exception as e:
+        print(f"⚠️ Erro ao ler CSV: {e}")
+else:
+    print(f"⚠️ AVISO: Arquivo '{ARQCSV}' não encontrado. A validação por itens será ignorada (perigoso!).")
+
 
 BLACKLIST_NORM = [normalize(x) for x in BLACKLIST]
 WHITELIST_GLOBAL_NORM = [normalize(x) for x in WHITELIST_GLOBAL]
@@ -88,25 +130,45 @@ for preg in todos:
     uf = preg.get('uf', '').upper()
     if uf not in ESTADOS_ALVO: continue
 
-    # 3. Filtro Objeto
+    # 3. Filtro de Objeto (Bloqueio e Liberação Inicial)
     objeto_txt = preg.get('objeto', '')
     objeto_norm = normalize(objeto_txt)
-    aceitar = False
     
-    if any(t in objeto_norm for t in BLACKLIST_NORM): aceitar = False
-    elif any(t in objeto_norm for t in WHITELIST_GLOBAL_NORM): aceitar = True
-    elif uf in ESTADOS_NE and any(t in objeto_norm for t in WHITELIST_NE_NORM): aceitar = True
-    elif "MATERIAL DE LIMPEZA" in objeto_norm:
-        tem_alcool = False
-        for item in preg.get('itensraw', []):
-            d = normalize(item.get('descricao', ''))
-            if "ALCOOL" in d and "70" in d:
-                tem_alcool = True; break
-        if tem_alcool: aceitar = True
+    # 3.1: BLACKLIST (Mata imediatamente, exceto se for Dieta/Fórmula explícita)
+    if any(t in objeto_norm for t in BLACKLIST_NORM):
+        # Exceção de segurança: Se tiver DIETA ou FORMULA no objeto, ignora blacklist de alimento
+        if not ("DIETA" in objeto_norm or "FORMULA" in objeto_norm):
+            continue 
 
-    if not aceitar: continue
+    # 4. REGRA DE OURO: VALIDAÇÃO CRUZADA COM CSV (Check-in dos Itens)
+    # O pregão só entra se pelo menos 1 item bater com o CSV
+    raw_itens = preg.get('itensraw', [])
+    tem_item_compativel = False
+    
+    if len(catalogo_produtos) > 0:
+        for item in raw_itens:
+            desc_item = normalize(item.get('descricao', ''))
+            # Verifica se algum termo do CSV está CONTIDO na descrição do item
+            for termo_csv in catalogo_produtos:
+                if termo_csv in desc_item:
+                    tem_item_compativel = True
+                    break # Achou um item, salva o pregão
+            if tem_item_compativel: break
+    else:
+        # Se não tiver CSV (fallback), aceita se passou na whitelist do objeto
+        if any(t in objeto_norm for t in WHITELIST_GLOBAL_NORM): tem_item_compativel = True
+        elif uf in ESTADOS_NE and any(t in objeto_norm for t in WHITELIST_NE_NORM): tem_item_compativel = True
+        elif "MATERIAL DE LIMPEZA" in objeto_norm: # Regra do Álcool
+             for item in raw_itens:
+                d = normalize(item.get('descricao', ''))
+                if "ALCOOL" in d and "70" in d:
+                    tem_item_compativel = True; break
 
-    # 4. Processamento
+    # Se varreu todos os itens e nenhum bateu com o CSV, TCHAU!
+    if not tem_item_compativel:
+        continue
+
+    # 5. Processamento Final (Estrutura de Exibição)
     mapa_resultados = {}
     raw_res = preg.get('resultadosraw', [])
     if raw_res and isinstance(raw_res, list):
@@ -118,7 +180,6 @@ for preg in todos:
             }
             
     lista_itens = []
-    raw_itens = preg.get('itensraw', [])
     
     count_me_epp = 0
     total_validos = 0
@@ -128,29 +189,17 @@ for preg in todos:
             n_item = item.get('numeroItem')
             total_validos += 1
             
-            # --- LÓGICA OFICIAL: tipoBeneficioId ---
-            # 1=Exclusiva ME/EPP, 2=Subcontratação, 3=Cota Reservada -> SIM (Benefício)
-            # 4=Sem Benefício, 5=Não se Aplica -> NÃO (Amplo)
-            
-            cod_beneficio = 4 # Default: Amplo
-            
-            # Tenta pegar direto (padrão mais comum)
+            # Lógica Oficial tipoBeneficioId
+            cod_beneficio = 4 
             if 'tipoBeneficioId' in item:
                 cod_beneficio = item['tipoBeneficioId']
-            
-            # Fallback: Tenta pegar dentro do objeto tipoBeneficio (se existir)
             elif isinstance(item.get('tipoBeneficio'), dict):
                 cod_beneficio = item['tipoBeneficio'].get('value') or item['tipoBeneficio'].get('id', 4)
             
-            # Converte para int com segurança
-            try:
-                cod_beneficio = int(cod_beneficio)
-            except:
-                cod_beneficio = 4
+            try: cod_beneficio = int(cod_beneficio)
+            except: cod_beneficio = 4
 
-            # Aplica a regra do Manual
             is_me_epp = cod_beneficio in [1, 2, 3]
-            
             if is_me_epp: count_me_epp += 1
             
             res = mapa_resultados.get(n_item)
