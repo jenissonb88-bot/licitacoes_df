@@ -7,50 +7,54 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { background-color: #f4f7f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .card-licitacao { border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 20px; border: none; transition: 0.3s; }
-        .card-licitacao:hover { transform: scale(1.01); }
+        .card-licitacao { border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 20px; border: none; }
         .header-card { background-color: #004a99; color: white; padding: 12px 15px; border-radius: 12px 12px 0 0; }
         .badge-uf { background-color: #ffc107; color: #212529; font-weight: bold; padding: 3px 8px; border-radius: 4px; }
         
-        /* Classificações */
+        /* Badges e Cores */
         .badge-exclusivo { background-color: #198754; color: white; }
         .badge-parcial { background-color: #fd7e14; color: white; }
         .badge-amplo { background-color: #6c757d; color: white; }
-
-        /* Badges de Situação */
-        .status-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.85em; font-weight: 500; border: 1px solid; display: inline-block; }
-        .status-fracassado { background-color: #f8d7da; color: #842029; border-color: #f5c2c7; }
-        .status-deserto { background-color: #fff3cd; color: #664d03; border-color: #ffecb5; }
-        .status-cancelado { background-color: #e2e3e5; color: #41464b; border-color: #d3d6d8; }
-        .status-homologado { background-color: #cfe2ff; color: #084298; border-color: #b6d4fe; }
-        .status-aberto { background-color: #d1e7dd; color: #0f5132; border-color: #badbcc; }
 
         /* Estilos da Modal e Tabela */
         .modal-xl { max-width: 95%; }
         .table-itens { font-size: 0.85em; }
         .val-estimado { background-color: #fff9db; font-weight: bold; }
         .val-homologado { background-color: #e7f1ff; font-weight: bold; }
-        .header-fornecedor { background-color: #e9ecef; font-weight: bold; color: #004a99; padding: 8px !important; }
+        .val-total { background-color: #d1e7dd; font-weight: bold; color: #0f5132; }
+        
+        .header-fornecedor { background-color: #e9ecef; font-weight: bold; color: #004a99; }
+        .header-status { background-color: #f8f9fa; font-weight: bold; text-align: center; color: #495057; text-transform: uppercase; font-size: 0.8em; }
         .header-falhas { background-color: #f8d7da; font-weight: bold; color: #842029; text-align: center; }
 
         /* Paginação */
         .pagination-container { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 30px; padding-bottom: 50px; }
         .input-jump { width: 60px; text-align: center; }
+        
+        .filter-label { font-size: 0.75rem; font-weight: bold; color: #555; margin-bottom: 2px; display: block; }
     </style>
 </head>
 <body>
 
-<div class="container py-4">
+<div class="container-fluid px-4 py-4">
     <h2 class="mb-4 text-center">🔭 Monitor Sniper Pharma - Drogafonte</h2>
     
-    <div class="row mb-4 g-2">
-        <div class="col-md-8">
-            <input type="text" id="searchInput" class="form-control" placeholder="Buscar por órgão, objeto ou cidade...">
+    <div class="row g-2 mb-4 p-3 bg-white rounded shadow-sm">
+        <div class="col-md-2">
+            <label class="filter-label">DATA ENCERRAMENTO</label>
+            <input type="date" id="filterData" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-3">
+            <label class="filter-label">EDITAL / UASG</label>
+            <input type="text" id="filterEdital" class="form-control form-control-sm" placeholder="Ex: 00083/2025 ou 987123">
         </div>
         <div class="col-md-4">
-            <select id="filterUF" class="form-select">
-                <option value="">Todas as UFs</option>
-            </select>
+            <label class="filter-label">ÓRGÃO / UNIDADE COMPRADORA</label>
+            <input type="text" id="filterOrgao" class="form-control form-control-sm" placeholder="Nome da Prefeitura ou Secretaria">
+        </div>
+        <div class="col-md-3">
+            <label class="filter-label">CIDADE / UF</label>
+            <input type="text" id="filterLoc" class="form-control form-control-sm" placeholder="Cidade ou Estado">
         </div>
     </div>
 
@@ -72,12 +76,11 @@
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title" id="modalTitle">Detalhes da Licitação</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <h5 class="modal-title" id="modalTitle">Detalhes</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body" id="modalBody">
-                </div>
-            <div class="modal-footer bg-light">
+            <div class="modal-body" id="modalBody"></div>
+            <div class="modal-footer">
                 <a id="linkPncp" href="#" target="_blank" class="btn btn-primary">Abrir no Portal PNCP</a>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
             </div>
@@ -97,14 +100,12 @@ async function loadData() {
     try {
         const response = await fetch('pregacoes_pharma_limpos.json.gz');
         const blob = await response.blob();
-        const ds = new DecompressionStream('gzip');
-        const text = await new Response(blob.stream().pipeThrough(ds)).text();
+        const text = await new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
         allData = JSON.parse(text);
         allData.sort((a, b) => new Date(b.data_enc) - new Date(a.data_enc));
         filteredData = [...allData];
-        setupFilters();
         renderMonitor();
-    } catch (e) { console.error("Erro ao carregar:", e); }
+    } catch (e) { console.error("Erro:", e); }
 }
 
 function renderMonitor() {
@@ -118,17 +119,17 @@ function renderMonitor() {
         div.innerHTML = `
             <div class="header-card d-flex justify-content-between">
                 <span><span class="badge badge-uf me-2">${preg.uf}</span> <strong>${preg.orgao}</strong></span>
-                <span class="small">${preg.edital}</span>
+                <span class="small">${preg.edital} | UASG: ${preg.uasg}</span>
             </div>
             <div class="card-body">
-                <p class="mb-1 text-muted small"><strong>Cidade:</strong> ${preg.cidade} | <strong>Abertura:</strong> ${new Date(preg.data_enc).toLocaleString()}</p>
+                <p class="mb-1 text-muted small"><strong>Cidade:</strong> ${preg.cidade} | <strong>Encerramento:</strong> ${new Date(preg.data_enc).toLocaleString()}</p>
                 <p class="mb-2"><strong>Objeto:</strong> ${preg.objeto}</p>
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <span class="badge badge-${preg.tipo_licitacao.toLowerCase()} me-2">${preg.tipo_licitacao}</span>
                         <span class="badge bg-light text-dark border">Itens: ${preg.itens.length}</span>
                     </div>
-                    <h5 class="mb-0 text-primary">R$ ${preg.valor_estimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</h5>
+                    <h5 class="mb-0 text-primary">Est: R$ ${preg.valor_estimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</h5>
                     <button class="btn btn-sm btn-outline-primary" onclick="showPopup('${preg.id}')">Ver Detalhes</button>
                 </div>
             </div>`;
@@ -142,45 +143,46 @@ function showPopup(id) {
     document.getElementById('modalTitle').innerText = `${preg.uf} - ${preg.orgao} (${preg.edital})`;
     document.getElementById('linkPncp').href = preg.link;
 
-    // Lógica de Agrupamento
-    const ganhos = {}; 
-    const falhas = [];
-
-    preg.itens.forEach(it => {
-        if (['FRACASSADO', 'DESERTO', 'CANCELADO'].includes(it.situacao)) {
-            falhas.push(it);
-        } else {
-            const forn = it.fornecedor || "AGUARDANDO RESULTADO";
-            if (!ganhos[forn]) ganhos[forn] = [];
-            ganhos[forn].push(it);
-        }
+    // 1. SEPARAÇÃO EM GRUPOS
+    const aguardando = preg.itens.filter(i => !i.fornecedor && !['FRACASSADO', 'DESERTO', 'CANCELADO'].includes(i.situacao));
+    const falhas = preg.itens.filter(i => ['FRACASSADO', 'DESERTO', 'CANCELADO'].includes(i.situacao));
+    
+    // 2. AGRUPAMENTO POR FORNECEDOR (Homologados)
+    const ganhos = {};
+    preg.itens.filter(i => i.fornecedor && !['FRACASSADO', 'DESERTO', 'CANCELADO'].includes(i.situacao)).forEach(it => {
+        if (!ganhos[it.fornecedor]) ganhos[it.fornecedor] = { itens: [], total: 0 };
+        ganhos[it.fornecedor].itens.push(it);
+        ganhos[it.fornecedor].total += (it.qtd * it.valHomologado);
     });
 
-    let html = `
-        <div class="mb-3 p-2 bg-light border-start border-4 border-primary">
-            <strong>Objeto Completo:</strong> ${preg.objeto}<br>
-            <strong>Unidade:</strong> ${preg.unidade} | <strong>UASG:</strong> ${preg.uasg}
-        </div>
-        <table class="table table-sm table-bordered table-itens">
-            <thead class="table-dark">
-                <tr>
-                    <th>Item</th><th>Descrição</th><th>Qtd/Un</th>
-                    <th class="text-center">Est. Unit</th><th class="text-center">Homologado</th>
-                    <th class="text-center">Situação</th>
-                </tr>
-            </thead>
-            <tbody>`;
+    let html = `<table class="table table-sm table-bordered table-itens">
+        <thead class="table-dark">
+            <tr>
+                <th>Item</th><th>Descrição</th><th>Qtd/Un</th>
+                <th class="text-center">Est. Unit</th><th class="text-center">Homol. Unit</th>
+                <th class="text-center">Total Homol.</th>
+            </tr>
+        </thead><tbody>`;
 
-    // Renderiza Ganhos por Fornecedor
-    for (const [fornecedor, itens] of Object.entries(ganhos)) {
-        html += `<tr><td colspan="6" class="header-fornecedor">🏢 FORNECEDOR: ${fornecedor}</td></tr>`;
-        itens.forEach(it => html += renderItemRow(it));
+    // EXIBIR PRIMEIRO: AGUARDANDO
+    if (aguardando.length) {
+        html += `<tr><td colspan="6" class="header-status">⏳ AGUARDANDO RESULTADO</td></tr>`;
+        aguardando.forEach(it => html += renderRow(it));
     }
 
-    // Renderiza Falhas
+    // EXIBIR DEPOIS: HOMOLOGADOS (Agrupados por Fornecedor)
+    for (const [forn, dados] of Object.entries(ganhos)) {
+        html += `<tr class="header-fornecedor">
+            <td colspan="5">🏢 FORNECEDOR: ${forn}</td>
+            <td class="text-center">Total: R$ ${dados.total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+        </tr>`;
+        dados.itens.forEach(it => html += renderRow(it));
+    }
+
+    // EXIBIR POR ÚLTIMO: FALHAS
     if (falhas.length) {
-        html += `<tr><td colspan="6" class="header-falhas">⚠️ ITENS FRACASSADOS / DESERTOS / CANCELADOS</td></tr>`;
-        falhas.forEach(it => html += renderItemRow(it, 'opacity-75 bg-light'));
+        html += `<tr><td colspan="6" class="header-falhas">⚠️ FRACASSADOS / DESERTOS / CANCELADOS</td></tr>`;
+        falhas.forEach(it => html += renderRow(it, 'opacity-75 bg-light'));
     }
 
     html += `</tbody></table>`;
@@ -188,38 +190,42 @@ function showPopup(id) {
     myModal.show();
 }
 
-function renderItemRow(it, css = '') {
+function renderRow(it, css = '') {
+    const total = it.valHomologado ? (it.qtd * it.valHomologado) : 0;
     return `<tr class="${css}">
         <td class="text-center">${it.n}</td>
         <td>${it.desc}</td>
         <td class="text-center">${it.qtd} ${it.un}</td>
         <td class="val-estimado text-center">R$ ${it.valUnit.toFixed(4)}</td>
-        <td class="val-homologado text-center">R$ ${it.valHomologado > 0 ? it.valHomologado.toFixed(4) : '---'}</td>
-        <td class="text-center"><span class="status-badge status-${it.situacao.toLowerCase()}">${it.situacao}</span></td>
+        <td class="val-homologado text-center">${it.valHomologado ? 'R$ '+it.valHomologado.toFixed(4) : '---'}</td>
+        <td class="val-total text-center">${total > 0 ? 'R$ '+total.toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '---'}</td>
     </tr>`;
 }
 
-// Filtros e Navegação
-function setupFilters() {
-    const ufs = [...new Set(allData.map(p => p.uf))].sort();
-    const select = document.getElementById('filterUF');
-    ufs.forEach(uf => select.add(new Option(uf, uf)));
+// LOGICA DE FILTROS COMBINADOS
+function filtrar() {
+    const dataVal = document.getElementById('filterData').value;
+    const editalVal = document.getElementById('filterEdital').value.toUpperCase();
+    const orgaoVal = document.getElementById('filterOrgao').value.toUpperCase();
+    const locVal = document.getElementById('filterLoc').value.toUpperCase();
+
+    filteredData = allData.filter(p => {
+        const matchData = !dataVal || p.data_enc.includes(dataVal);
+        const matchEdital = !editalVal || p.edital.toUpperCase().includes(editalVal) || p.uasg.includes(editalVal);
+        const matchOrgao = !orgaoVal || p.orgao.toUpperCase().includes(orgaoVal) || p.unidade.toUpperCase().includes(orgaoVal);
+        const matchLoc = !locVal || p.cidade.toUpperCase().includes(locVal) || p.uf.toUpperCase().includes(locVal);
+        return matchData && matchEdital && matchOrgao && matchLoc;
+    });
+    currentPage = 1;
+    renderMonitor();
 }
-document.getElementById('searchInput').oninput = function() {
-    const t = this.value.toUpperCase();
-    filteredData = allData.filter(p => p.orgao.toUpperCase().includes(t) || p.objeto.toUpperCase().includes(t) || p.cidade.toUpperCase().includes(t));
-    currentPage = 1; renderMonitor();
-};
-document.getElementById('filterUF').onchange = function() {
-    filteredData = this.value ? allData.filter(p => p.uf === this.value) : [...allData];
-    currentPage = 1; renderMonitor();
-};
+
+document.querySelectorAll('input').forEach(el => el.oninput = filtrar);
 document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
 document.getElementById('nextPage').onclick = () => { if(currentPage * itemsPerPage < filteredData.length) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
 document.getElementById('btnJump').onclick = () => {
     const val = parseInt(document.getElementById('jumpInput').value);
-    const max = Math.ceil(filteredData.length / itemsPerPage);
-    if(val >= 1 && val <= max) { currentPage = val; renderMonitor(); window.scrollTo(0,0); }
+    if(val >= 1 && val <= Math.ceil(filteredData.length / itemsPerPage)) { currentPage = val; renderMonitor(); window.scrollTo(0,0); }
 };
 
 loadData();
