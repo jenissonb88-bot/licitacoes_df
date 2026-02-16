@@ -7,12 +7,11 @@ from datetime import datetime
 ARQDADOS = 'dadosoportunidades.json.gz'
 ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'
 
-# --- CONFIGURAÇÕES ---
-# Whitelist: Salva sempre
-WHITELIST_OBJETO = ["FRALDA", "ABSORVENTE"]
+# --- 1. CONFIGURAÇÃO DE ESTADOS ---
+ESTADOS_NE = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
 
-# Blacklist: Descarta se tiver no objeto
-BLACKLIST_OBJETO = [
+# --- 2. BLACKLIST ---
+BLACKLIST = [
     "TRANSPORTE", "VEICULO", "MANUTENCAO", "LIMPEZA PREDIAL", 
     "AR CONDICIONADO", "OBRAS", "ENGENHARIA", "CONFECCAO", 
     "ESTANTE", "MOBILIARIO", "INFORMATICA", "COMPUTADOR",
@@ -20,7 +19,24 @@ BLACKLIST_OBJETO = [
     "ODONTOLOGICO", "ODONTO", "GENERO ALIMENTICIO", 
     "MATERIAL DE CONSTRUCAO", "MATERIAL ELETRICO", 
     "MATERIAL ESPORTIVO", "LOCACAO DE EQUIPAMENTO", 
-    "AQUISICAO DE EQUIPAMENTO", "EXAME LABORATORI", "MERENDA"
+    "AQUISICAO DE EQUIPAMENTO", "EXAME LABORATORI", "MERENDA",
+    "RECEITUARIO", "PRESTACAO DE SERVICO"
+]
+
+# --- 3. WHITELIST GLOBAL ---
+WHITELIST_GLOBAL = [
+    "REMEDIO", "FARMACO", 
+    "HIPERTENSIV", "INJETAV", "ONCOLOGIC", "ANALGESIC", 
+    "ANTI-INFLAMAT", "ANTIBIOTIC", "ANTIDEPRESSIV", 
+    "ANSIOLITIC", "DIABETIC", "GLICEMIC", "MEDICAMENT CONTROLAD"
+]
+
+# --- 4. WHITELIST REGIONAL (Nordeste) ---
+WHITELIST_NE = [
+    "FRALDA", "ABSORVENTE", "SORO",
+    "MATERIAL PENSO", "MATERIAL MEDICO-HOSPITALAR", 
+    "DIETA ENTERAL", "DIETA", "FORMULA", "PROTEIC", 
+    "CALORIC", "GAZE", "ATADURA"
 ]
 
 def normalize(texto):
@@ -28,12 +44,12 @@ def normalize(texto):
     return ''.join(c for c in unicodedata.normalize('NFD', str(texto)).upper()
                    if unicodedata.category(c) != 'Mn')
 
-WHITELIST_NORM = [normalize(x) for x in WHITELIST_OBJETO]
-BLACKLIST_NORM = [normalize(x) for x in BLACKLIST_OBJETO]
+BLACKLIST_NORM = [normalize(x) for x in BLACKLIST]
+WHITELIST_GLOBAL_NORM = [normalize(x) for x in WHITELIST_GLOBAL]
+WHITELIST_NE_NORM = [normalize(x) for x in WHITELIST_NE]
 
-print("🧹 LIMPEZA V6 - DADOS DETALHADOS (ME/EPP & FORNECEDORES)")
+print("🧹 LIMPEZA V9 - CÓDIGOS ME/EPP (1,2,3) + REGIONALIZAÇÃO")
 
-# Data de corte: 01/01/2026
 data_limite = datetime(2026, 1, 1, 0, 0, 0)
 
 if not os.path.exists(ARQDADOS):
@@ -51,7 +67,7 @@ for preg in todos:
     if id_preg in duplicatas: continue
     duplicatas.add(id_preg)
     
-    # 1. Filtro Data
+    # 1. Filtro de Data
     data_enc = preg.get('dataEnc', '')
     try:
         if data_enc:
@@ -60,97 +76,108 @@ for preg in todos:
                 continue
     except: pass
 
-    # 2. Filtros de Objeto (Whitelist/Blacklist/Limpeza)
+    # 2. Análise do Objeto (Regras)
     objeto_txt = preg.get('objeto', '')
     objeto_norm = normalize(objeto_txt)
-    manter = True 
+    uf = preg.get('uf', '').upper()
     
-    if any(t in objeto_norm for t in WHITELIST_NORM):
-        manter = True
+    aceitar = False
+    
+    if any(t in objeto_norm for t in BLACKLIST_NORM):
+        aceitar = False
+    elif any(t in objeto_norm for t in WHITELIST_GLOBAL_NORM):
+        aceitar = True
+    elif uf in ESTADOS_NE and any(t in objeto_norm for t in WHITELIST_NE_NORM):
+        aceitar = True
     elif "MATERIAL DE LIMPEZA" in objeto_norm:
-        # Regra do alcool
         tem_alcool = False
         for item in preg.get('itensraw', []):
             d = normalize(item.get('descricao', ''))
             if "ALCOOL" in d and "70" in d:
                 tem_alcool = True; break
-        if not tem_alcool: manter = False
-    elif any(t in objeto_norm for t in BLACKLIST_NORM):
-        manter = False
+        if tem_alcool: aceitar = True
 
-    if not manter: continue
+    if not aceitar: continue
 
-    # 3. PROCESSAMENTO AVANÇADO DE ITENS E RESULTADOS
-    # Vamos criar um mapa de resultados para ligar ao item
-    resultados_map = {}
+    # 3. Processamento de Itens e Resultados
+    mapa_resultados = {}
     raw_res = preg.get('resultadosraw', [])
     if raw_res and isinstance(raw_res, list):
         for res in raw_res:
-            num_item = res.get('numeroItem')
-            resultados_map[num_item] = {
-                'nomeFornecedor': res.get('razaoSocial', 'Fornecedor Desconhecido'),
-                'valorHomologado': res.get('valorUnitarioHomologado', 0),
-                'situacao': 'HOMOLOGADO' # Se está na lista de resultados, foi adjudicado/homologado
+            n = res.get('numeroItem')
+            mapa_resultados[n] = {
+                'fornecedor': res.get('razaoSocial', 'Forn. Desconhecido'),
+                'valorHomologado': res.get('valorUnitarioHomologado', 0)
             }
-
+            
     lista_itens = []
     raw_itens = preg.get('itensraw', [])
     
-    tipo_licitacao = "AMPLO" # Default
-    cont_me_epp = 0
-    total_itens = 0
+    count_me_epp = 0
+    total_validos = 0
 
     if raw_itens and isinstance(raw_itens, list):
-        total_itens = len(raw_itens)
         for item in raw_itens:
             n_item = item.get('numeroItem')
+            total_validos += 1
             
-            # Checa ME/EPP (Campo 'temBeneficioMicroEpp' ou similar)
-            is_me_epp = item.get('temBeneficioMicroEpp', False)
-            if is_me_epp: cont_me_epp += 1
+            # --- LÓGICA DE BENEFÍCIO POR CÓDIGO ---
+            # Tenta pegar o objeto 'tipoBeneficio' ou o ID direto
+            cod_beneficio = 4 # Default: Sem benefício
+            
+            tb_obj = item.get('tipoBeneficio')
+            if isinstance(tb_obj, dict):
+                cod_beneficio = tb_obj.get('value', 4)
+            elif 'tipoBeneficioId' in item:
+                cod_beneficio = item.get('tipoBeneficioId', 4)
+            
+            # Garante que é inteiro para comparação
+            try:
+                cod_beneficio = int(cod_beneficio)
+            except:
+                cod_beneficio = 4 # Fallback
+            
+            # Regra: 1, 2, 3 = SIM (ME/EPP) | 4, 5 = NÃO (Amplo)
+            is_me_epp = cod_beneficio in [1, 2, 3]
+            
+            if is_me_epp: count_me_epp += 1
+            # ----------------------------------------
+            
+            res = mapa_resultados.get(n_item)
+            
+            sit_final = "EM_ANDAMENTO"
+            forn_final = None
+            val_final = item.get('valorUnitarioEstimado', 0)
+            
+            if res:
+                sit_final = "HOMOLOGADO"
+                forn_final = res['fornecedor']
+                val_final = res['valorHomologado']
+            else:
+                st = str(item.get('situacaoCompraItemName', '')).upper()
+                if "CANCELADO" in st or "ANULADO" in st: sit_final = "CANCELADO"
+                elif "FRACASSADO" in st or "DESERTO" in st: sit_final = "DESERTO"
 
-            # Checa se tem resultado
-            dados_res = resultados_map.get(n_item)
-            
-            situacao_item = "EM_ANDAMENTO"
-            fornecedor = None
-            val_hom = 0
-            
-            status_raw = str(item.get('situacaoCompraItemName', '')).upper()
-            
-            if dados_res:
-                situacao_item = "HOMOLOGADO"
-                fornecedor = dados_res['nomeFornecedor']
-                val_hom = dados_res['valorHomologado']
-            elif "CANCELADO" in status_raw or "ANULADO" in status_raw:
-                situacao_item = "CANCELADO"
-            elif "FRACASSADO" in status_raw or "DESERTO" in status_raw:
-                situacao_item = "DESERTO"
-            
             lista_itens.append({
                 'n': n_item,
                 'desc': item.get('descricao', ''),
                 'qtd': item.get('quantidade', 0),
                 'un': item.get('unidadeMedida', ''),
                 'valUnit': item.get('valorUnitarioEstimado', 0),
-                'me_epp': is_me_epp,
-                'situacao': situacao_item,
-                'fornecedor': fornecedor,
-                'valHomologado': val_hom
+                'me_epp': is_me_epp, # Agora baseado no código
+                'situacao': sit_final,
+                'fornecedor': forn_final,
+                'valHomologado': val_final if sit_final == 'HOMOLOGADO' else 0
             })
 
-    # Define etiqueta do processo (AMPLO, EXCLUSIVO, PARCIAL)
-    if total_itens > 0:
-        if cont_me_epp == total_itens:
-            tipo_licitacao = "EXCLUSIVO"
-        elif cont_me_epp > 0:
-            tipo_licitacao = "PARCIAL"
-        else:
-            tipo_licitacao = "AMPLO"
+    tipo_lic = "AMPLO"
+    if total_validos > 0:
+        if count_me_epp == total_validos: tipo_lic = "EXCLUSIVO"
+        elif count_me_epp > 0: tipo_lic = "PARCIAL"
 
     limpos.append({
         'id': id_preg,
-        'uf': preg.get('uf', ''),
+        'uf': uf,
         'cidade': preg.get('cidade', ''),
         'orgao': preg.get('orgao', ''),
         'unidade': preg.get('unidadeCompradora', ''),
@@ -159,16 +186,16 @@ for preg in todos:
         'valor_estimado': round(preg.get('valorGlobalApi', 0), 2),
         'data_pub': preg.get('dataPub', ''),
         'data_enc': data_enc,
-        'objeto': objeto_txt[:250],
+        'objeto': objeto_txt[:300],
         'link': preg.get('link', ''),
-        'tipo_licitacao': tipo_licitacao, # Campo Novo
+        'tipo_licitacao': tipo_lic,
         'itens': lista_itens,
         'resultados_count': len(raw_res)
     })
 
-print(f"📊 Processados: {len(limpos)} pregões ativos.")
+print(f"📊 Processados: {len(limpos)}")
 
 with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f:
     json.dump(limpos, f, ensure_ascii=False)
 
-print("🎉 LIMPEZA CONCLUÍDA!")
+print("🎉 LIMPEZA OK!")
