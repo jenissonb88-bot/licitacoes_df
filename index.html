@@ -9,35 +9,42 @@
         :root { --blue-df: #004a99; --green-df: #198754; --red-df: #dc3545; --yellow-df: #ffc107; }
         body { background-color: #f0f2f5; font-family: 'Segoe UI', system-ui, sans-serif; color: #333; font-size: 0.92rem; }
         
+        /* CABEÇALHO DO CARD (AJUSTADO: MAIOR E COM NEGRITO SELETIVO) */
+        .header-card { 
+            background: linear-gradient(90deg, #002d5a 0%, #004a99 100%); 
+            color: white; 
+            padding: 12px 20px; 
+            border-radius: 10px 10px 0 0; 
+            font-size: 1.05rem; /* Aumentado conforme solicitado */
+        }
+        .header-bold { font-weight: 700; }
+        .header-normal { font-weight: 400; opacity: 0.9; }
+
+        .badge-uf-header { background-color: #000; color: #fff; font-weight: 800; padding: 2px 8px; border-radius: 4px; margin-right: 5px; }
+
         /* TARJAS DE STATUS DO PREGÃO */
         .badge-status-master { font-size: 1rem !important; padding: 8px 16px !important; border-radius: 6px !important; letter-spacing: 0.5px; }
         .badge-amplo { background-color: var(--green-df) !important; color: white !important; font-weight: bold !important; } 
         .badge-exclusivo { background-color: var(--red-df) !important; color: white !important; font-weight: bold !important; } 
         .badge-parcial { background-color: var(--yellow-df) !important; color: #212529 !important; font-weight: bold !important; } 
 
-        /* CORES SIM/NÃO - EXCLUSIVIDADE */
         .benef-sim { color: var(--red-df) !important; font-weight: bold !important; }
         .benef-nao { color: var(--green-df) !important; font-weight: bold !important; }
 
-        /* CARDS E FILTROS */
         .card-licitacao { border-radius: 10px; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; }
-        .header-card { background: linear-gradient(90deg, #002d5a 0%, #004a99 100%); color: white; padding: 10px 18px; border-radius: 10px 10px 0 0; }
         .filter-box { background: white; padding: 15px; border-radius: 10px; border: 1px solid #e0e6ed; }
         .filter-label { font-size: 0.65rem; font-weight: 800; color: var(--blue-df); margin-bottom: 2px; display: block; text-transform: uppercase; }
         
-        /* TABELA E VALORES */
         .table-itens { font-size: 0.82em; }
-        .val-estimado { background-color: #fffdf2; color: #856404; font-weight: 400 !important; }
-        .val-homologado { background-color: #f2f7ff; color: #084298; font-weight: 400 !important; }
-        .val-total-item { color: #145a32; font-weight: 400 !important; }
+        .val-estimado { background-color: #fffdf2; color: #856404; }
+        .val-homologado { background-color: #f2f7ff; color: #084298; }
         
-        /* DESTAQUE DE QUANTIDADE E VALORES */
         .txt-itens-count { font-size: 1.25rem !important; font-weight: 800; color: #444; display: block; margin-top: 5px; }
-        .total-fornecedor-destaque { font-weight: 900 !important; font-size: 1rem; color: #000; }
-        
         .header-fornecedor { background-color: #f8f9fa; color: var(--blue-df); }
         .header-status-aguardando { background-color: #fff9db; font-weight: bold; color: #856404; text-align: center; }
         .header-falhas { background-color: #fdf2f2; font-weight: bold; color: #a94442; text-align: center; }
+        
+        .pagination-container { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 20px; padding-bottom: 40px; }
     </style>
 </head>
 <body>
@@ -56,27 +63,27 @@
             </div>
             <div class="col-md-2">
                 <label class="filter-label">EDITAL / UASG</label>
-                <input type="text" id="filterEdital" class="form-control form-control-sm" placeholder="Ex: 00083/2025">
+                <input type="text" id="filterEdital" class="form-control form-control-sm" placeholder="Busca rápida...">
             </div>
             <div class="col-md-5">
                 <label class="filter-label">ÓRGÃO / UNIDADE COMPRADORA</label>
-                <input type="text" id="filterOrgao" class="form-control form-control-sm" placeholder="Nome da Prefeitura">
+                <input type="text" id="filterOrgao" class="form-control form-control-sm" placeholder="Nome da Prefeitura ou Secretaria">
             </div>
             <div class="col-md-3">
                 <label class="filter-label">CIDADE / UF</label>
-                <input type="text" id="filterLoc" class="form-control form-control-sm" placeholder="Vitória de Santo Antão / PE">
+                <input type="text" id="filterLoc" class="form-control form-control-sm" placeholder="Cidade ou UF">
             </div>
         </div>
     </div>
 
     <div id="monitor-content"></div>
 
-    <div class="d-flex justify-content-center align-items-center gap-2 py-4">
+    <div class="pagination-container">
         <button class="btn btn-sm btn-primary px-3" id="prevPage">Anterior</button>
         <span id="pageInfo" class="fw-bold px-2 small">Página 1</span>
         <button class="btn btn-sm btn-primary px-3" id="nextPage">Próxima</button>
-        <div class="d-flex align-items-center ms-3">
-            <span class="small me-2">Ir p/:</span>
+        <div class="ms-3 d-flex align-items-center">
+            <span class="small me-2">Pular para:</span>
             <input type="number" id="jumpInput" class="form-control form-control-sm text-center" style="width: 60px;">
             <button class="btn btn-dark btn-sm ms-1" id="btnJump">IR</button>
         </div>
@@ -104,7 +111,7 @@
 let allData = [];
 let filteredData = [];
 let currentPage = 1;
-const itemsPerPage = 15; // ALTERADO PARA 15
+const itemsPerPage = 15;
 const myModal = new bootstrap.Modal(document.getElementById('modalDetalhes'));
 
 async function loadData() {
@@ -129,15 +136,17 @@ function renderMonitor() {
         div.className = 'card card-licitacao';
         const sClass = `badge-${p.tipo_licitacao.toLowerCase()}`;
         
-        // LÓGICA DE SIGILO
         const valorDisplay = (p.valor_estimado === 0 || p.valor_estimado === 0.00) 
             ? '<span class="text-danger fw-bold">Sigiloso</span>' 
             : `R$ ${p.valor_estimado.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 
+        // CABEÇALHO COM A NOVA ESTRUTURA E NEGRITO SELETIVO
         div.innerHTML = `
-            <div class="header-card d-flex justify-content-between align-items-center py-2">
-                <span class="small"><span class="badge badge-uf me-2">${p.uf}</span> <strong>${p.orgao}</strong></span>
-                <span class="small opacity-75" style="font-size: 0.75rem;">${p.edit || p.edital}</span>
+            <div class="header-card">
+                <span class="badge-uf-header">${p.uf}</span>
+                <span class="header-bold">${p.uasg} - ${p.orgao} - </span>
+                <span class="header-normal">${p.unidade || 'Unidade não informada'}</span>
+                <span class="header-bold"> - Edital nº ${p.edit || p.edital}</span>
             </div>
             <div class="card-body py-2">
                 <div class="row align-items-center">
@@ -152,7 +161,7 @@ function renderMonitor() {
                         <div class="mt-1 mb-2">
                             <span class="txt-itens-count">Itens: ${p.itens.length}</span>
                         </div>
-                        <button class="btn btn-sm btn-primary w-100 fw-bold" style="font-size: 0.75rem;" onclick="showPopup('${p.id}')">VER DETALHES</button>
+                        <button class="btn btn-sm btn-primary w-100 fw-bold shadow-sm" style="font-size: 0.75rem;" onclick="showPopup('${p.id}')">VER DETALHES</button>
                     </div>
                 </div>
             </div>`;
@@ -200,7 +209,7 @@ function showPopup(id) {
     for (const [forn, d] of Object.entries(ganhos)) {
         html += `<tr class="header-fornecedor">
             <td colspan="6" class="p-2">🏢 FORNECEDOR: <strong>${forn}</strong></td>
-            <td class="text-center total-fornecedor-destaque">TOTAL: R$ ${d.total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+            <td class="text-center fw-bold" style="font-size: 1rem;">TOTAL: R$ ${d.total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
         </tr>`;
         d.itens.forEach(it => html += renderRow(it));
     }
@@ -225,7 +234,7 @@ function renderRow(it, css = '') {
         <td class="text-center">${it.qtd} ${it.un}</td>
         <td class="val-estimado text-center">R$ ${it.valUnit.toFixed(4)}</td>
         <td class="val-homologado text-center">${it.valHomologado > 0 ? 'R$ '+it.valHomologado.toFixed(4) : '---'}</td>
-        <td class="val-total-item text-center">${total > 0 ? 'R$ '+total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '---'}</td>
+        <td class="val-total-item text-center">${total > 0 ? 'R$ '+total.toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '---'}</td>
     </tr>`;
 }
 
@@ -249,8 +258,7 @@ document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { curr
 document.getElementById('nextPage').onclick = () => { if(currentPage * itemsPerPage < filteredData.length) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
 document.getElementById('btnJump').onclick = () => {
     const v = parseInt(document.getElementById('jumpInput').value);
-    const m = Math.ceil(filteredData.length / itemsPerPage);
-    if(v >= 1 && v <= m) { currentPage = v; renderMonitor(); window.scrollTo(0,0); }
+    if(v >= 1 && v <= Math.ceil(filteredData.length / itemsPerPage)) { currentPage = v; renderMonitor(); window.scrollTo(0,0); }
 };
 
 loadData();
