@@ -7,39 +7,41 @@ from datetime import datetime
 ARQDADOS = 'dadosoportunidades.json.gz'
 ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'
 
-print("🧹 LIMPEZA V11 - GEOGRAFIA COMPLETA + FILTRO ADESÃO")
+print("🧹 LIMPEZA V13 - GASES MEDICINAIS NA BLACKLIST")
 
 # --- 1. DEFINIÇÃO GEOGRÁFICA ---
 
 # Grupo 1: Nordeste (NE)
 ESTADOS_NE = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
 
-# Grupo 2: Outros Estados Monitorados (Sudeste + Centro-Oeste + AM/PA/TO)
+# Grupo 2: Outros Estados Monitorados
 ESTADOS_OUTROS = [
     'ES', 'RJ', 'SP', 'MG',         # Sudeste
     'GO', 'MT', 'MS', 'DF',         # Centro-Oeste
     'AM', 'PA', 'TO'                # Norte Selecionado
 ]
 
-# Lista TOTAL de estados permitidos (Qualquer coisa fora disso será descartada)
+# Lista TOTAL de estados permitidos
 ESTADOS_ALVO = ESTADOS_NE + ESTADOS_OUTROS
 
-# --- 2. BLACKLIST ---
+# --- 2. BLACKLIST (Itens proibidos) ---
 BLACKLIST = [
     "TRANSPORTE", "VEICULO", "MANUTENCAO", "LIMPEZA PREDIAL", 
     "AR CONDICIONADO", "OBRAS", "ENGENHARIA", "CONFECCAO", 
     "ESTANTE", "MOBILIARIO", "INFORMATICA", "COMPUTADOR",
-    "TONER", "CARTUCHO", "VETERINARIO", "ANIMAIS", "RACAO",
-    "ODONTOLOGICO", "ODONTO", "GENERO ALIMENTICIO", 
+    "TONER", "CARTUCHO", "ANIMAIS", "RACAO",
+    "GENERO ALIMENTICIO", 
     "MATERIAL DE CONSTRUCAO", "MATERIAL ELETRICO", 
     "MATERIAL ESPORTIVO", "LOCACAO DE EQUIPAMENTO", 
     "AQUISICAO DE EQUIPAMENTO", "EXAME LABORATORI", "MERENDA",
     "RECEITUARIO", "PRESTACAO DE SERVICO",
-    # Item solicitado:
-    "ADESAO" 
+    "ADESAO",
+    # ADICIONADO:
+    "GASES MEDICINAIS"
 ]
 
 # --- 3. WHITELIST GLOBAL (Vale para todos os ESTADOS_ALVO) ---
+# REMOVIDO: GASES MEDICINAIS
 WHITELIST_GLOBAL = [
     "REMEDIO", "FARMACO", 
     "HIPERTENSIV", "INJETAV", "ONCOLOGIC", "ANALGESIC", 
@@ -91,27 +93,26 @@ for preg in todos:
                 continue
     except: pass
 
-    # 2. Filtro Geográfico (Primeira barreira)
+    # 2. Filtro Geográfico
     uf = preg.get('uf', '').upper()
     if uf not in ESTADOS_ALVO:
-        # Se for do Sul (RS, SC, PR) ou outros do Norte (RO, RR, AC, AP), descarta.
         continue
 
-    # 3. Análise do Objeto (Regras de Palavras)
+    # 3. Análise do Objeto
     objeto_txt = preg.get('objeto', '')
     objeto_norm = normalize(objeto_txt)
     
     aceitar = False
     
-    # Verifica Blacklist
+    # Verifica Blacklist (Prioridade Máxima - Exclui Gases aqui)
     if any(t in objeto_norm for t in BLACKLIST_NORM):
         aceitar = False
     
-    # Verifica Whitelist Global (Vale para NE + Sudeste + CO + AM/PA/TO)
+    # Verifica Whitelist Global
     elif any(t in objeto_norm for t in WHITELIST_GLOBAL_NORM):
         aceitar = True
         
-    # Verifica Whitelist Regional (Só vale para NE)
+    # Verifica Whitelist Regional
     elif uf in ESTADOS_NE and any(t in objeto_norm for t in WHITELIST_NE_NORM):
         aceitar = True
         
