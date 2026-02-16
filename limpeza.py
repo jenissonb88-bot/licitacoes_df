@@ -9,7 +9,7 @@ ARQDADOS = 'dadosoportunidades.json.gz'
 ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'
 ARQCSV = 'Exportar Dados.csv'
 
-print("🧹 LIMPEZA V19 - AJUSTE TERMOS NE")
+print("🧹 LIMPEZA V20 - GEO-BLOCK + ME/EPP FIX")
 
 def normalize(texto):
     if not texto: return ""
@@ -27,14 +27,13 @@ if os.path.exists(ARQCSV):
             try:
                 with open(ARQCSV, 'r', encoding=enc) as f:
                     leitor = csv.reader(f)
-                    next(leitor, None) # Pula cabeçalho
+                    next(leitor, None) 
                     for linha in leitor:
                         if not linha: continue
-                        # Colunas: 0 (Descrição), 1 (Fármaco), 5 (Nomes Técnicos)
                         termos = []
-                        if len(linha) > 1: termos.append(linha[1])
-                        if len(linha) > 5: termos.append(linha[5])
-                        if len(linha) > 0: termos.append(linha[0])
+                        if len(linha) > 1: termos.append(linha[1]) # Fármaco
+                        if len(linha) > 5: termos.append(linha[5]) # Nome Tec
+                        if len(linha) > 0: termos.append(linha[0]) # Descrição
 
                         for t in termos:
                             t_norm = normalize(t.strip())
@@ -47,15 +46,12 @@ if os.path.exists(ARQCSV):
             except: continue
     except: pass
 
-if not csv_ativo: print(f"⚠️ AVISO: CSV não carregado.")
-
-# --- 2. CONFIGURAÇÃO DE ESTADOS ---
+# --- 2. CONFIGURAÇÕES ---
 ESTADOS_NE = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
 ESTADOS_OUTROS = ['ES', 'RJ', 'SP', 'MG', 'GO', 'MT', 'MS', 'DF', 'AM', 'PA', 'TO']
 ESTADOS_ALVO = ESTADOS_NE + ESTADOS_OUTROS
 
-# --- 3. LISTAS DE FILTRO ---
-BLACKLIST_RAW = [
+BLACKLIST_NORM = [normalize(x) for x in [
     "TRANSPORTE", "VEICULO", "MANUTENCAO", "LIMPEZA PREDIAL", 
     "AR CONDICIONADO", "OBRAS", "ENGENHARIA", "CONFECCAO", 
     "ESTANTE", "MOBILIARIO", "INFORMATICA", "COMPUTADOR",
@@ -69,33 +65,24 @@ BLACKLIST_RAW = [
     "ALIMENTACAO ESCOLAR", "PNAE", "COFFEE BREAK", 
     "CAFE REGIONAL", "KIT LANCHE", "GELO", "AGUA MINERAL", 
     "SEGURANCA PUBLICA", "VIDEOMONITORAMENTO", "MERENDA"
-]
+]]
 
-WHITELIST_GLOBAL_RAW = [
-    "REMEDIO", "FARMACO", 
-    "HIPERTENSIV", "INJETAV", "ONCOLOGIC", "ANALGESIC", 
-    "ANTI-INFLAMAT", "ANTIBIOTIC", "ANTIDEPRESSIV", 
-    "ANSIOLITIC", "DIABETIC", "GLICEMIC", "MEDICAMENT CONTROLAD",
-    "ATENCAO BASICA", "RENAME", "REMUME", "MAC", 
-    "VIGILANCIA EM SAUDE", "ASSISTENCIA FARMACEUTICA", "GESTAO DO SUS"
-]
+WHITELIST_GLOBAL_NORM = [normalize(x) for x in [
+    "REMEDIO", "FARMACO", "HIPERTENSIV", "INJETAV", "ONCOLOGIC", "ANALGESIC", 
+    "ANTI-INFLAMAT", "ANTIBIOTIC", "ANTIDEPRESSIV", "ANSIOLITIC", "DIABETIC", 
+    "GLICEMIC", "MEDICAMENT CONTROLAD", "ATENCAO BASICA", "RENAME", "REMUME", 
+    "MAC", "VIGILANCIA EM SAUDE", "ASSISTENCIA FARMACEUTICA", "GESTAO DO SUS"
+]]
 
-WHITELIST_NE_RAW = [
-    "FRALDA", "ABSORVENTE", "SORO",
-    "DIETA ENTERAL", "DIETA", "FORMULA", "PROTEIC", 
-    "CALORIC", "GAZE", "ATADURA",
-    "MATERIAL PENSO", "MMH", "MATERIAL MEDICO-HOSPITALAR"
-]
+WHITELIST_NE_NORM = [normalize(x) for x in [
+    "FRALDA", "ABSORVENTE", "SORO", "DIETA ENTERAL", "DIETA", "FORMULA", 
+    "PROTEIC", "CALORIC", "GAZE", "ATADURA", "MATERIAL PENSO", "MMH", 
+    "MATERIAL MEDICO-HOSPITALAR"
+]]
 
-BLACKLIST_NORM = [normalize(x) for x in BLACKLIST_RAW]
-WHITELIST_GLOBAL_NORM = [normalize(x) for x in WHITELIST_GLOBAL_RAW]
-WHITELIST_NE_NORM = [normalize(x) for x in WHITELIST_NE_RAW]
-
-# DATA DE CORTE: 01/01/2026
-data_limite = datetime(2026, 1, 1, 0, 0, 0)
+data_limite = datetime(2026, 1, 1, 0, 0, 0) # Data Corte
 
 if not os.path.exists(ARQDADOS): print("❌ Base não encontrada."); exit()
-
 with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f: todos = json.load(f)
 
 limpos = []
@@ -114,42 +101,71 @@ for preg in todos:
     uf = preg.get('uf', '').upper()
     if uf not in ESTADOS_ALVO: continue
 
-    # Filtro Objeto
     obj_norm = normalize(preg.get('objeto', ''))
+    
+    # Blacklist (Exceto Dietas)
     if any(t in obj_norm for t in BLACKLIST_NORM):
         if not ("DIETA" in obj_norm or "FORMULA" in obj_norm): continue
 
-    # Validação (Item CSV ou Objeto Whitelist)
+    # --- VALIDAÇÃO (Regra Endurecida) ---
     aprovado = False
+    
+    # Checagem de Objeto (Global e Regional)
+    obj_is_global = any(t in obj_norm for t in WHITELIST_GLOBAL_NORM)
+    obj_is_ne = any(t in obj_norm for t in WHITELIST_NE_NORM)
+    
+    # Checagem de Item (CSV)
+    item_match_csv = False
     raw_itens = preg.get('itensraw', [])
-
     if csv_ativo and len(catalogo_produtos) > 0:
         for item in raw_itens:
             if any(t in normalize(item.get('descricao', '')) for t in catalogo_produtos):
-                aprovado = True; break
-        # Fallback se não achar item
-        if not aprovado:
-            if any(t in obj_norm for t in WHITELIST_GLOBAL_NORM): aprovado = True
-            elif uf in ESTADOS_NE and any(t in obj_norm for t in WHITELIST_NE_NORM): aprovado = True
+                item_match_csv = True; break
+
+    # DECISÃO FINAL:
+    if uf in ESTADOS_NE:
+        # No Nordeste, aceita se bater qualquer um (Objeto ou Item)
+        if obj_is_global or obj_is_ne or item_match_csv: aprovado = True
     else:
-        # Sem CSV
-        if any(t in obj_norm for t in WHITELIST_GLOBAL_NORM): aprovado = True
-        elif uf in ESTADOS_NE and any(t in obj_norm for t in WHITELIST_NE_NORM): aprovado = True
-        elif "MATERIAL DE LIMPEZA" in obj_norm:
-             for item in raw_itens:
-                if "ALCOOL" in normalize(item.get('descricao', '')) and "70" in normalize(item.get('descricao', '')):
-                    aprovado = True; break
+        # Fora do NE (Sudeste/CO/Norte), EXIGE que o Objeto seja GLOBAL
+        # (Isso elimina "Materiais Hospitalares" genéricos se não estiverem na Global)
+        if obj_is_global:
+            # Se o objeto é bom, aceita (com ou sem CSV)
+            aprovado = True
+        # Se quiser ser ainda mais rígido e exigir CSV para fora do NE, descomente abaixo:
+        # elif item_match_csv and obj_is_global: aprovado = True
+    
+    # Fallback Álcool
+    if not aprovado and "MATERIAL DE LIMPEZA" in obj_norm:
+         for item in raw_itens:
+            if "ALCOOL" in normalize(item.get('descricao', '')) and "70" in normalize(item.get('descricao', '')):
+                aprovado = True; break
 
     if not aprovado: continue
 
-    # Montagem
+    # Processamento de Itens
     mapa_resultados = {r['numeroItem']: r for r in preg.get('resultadosraw', [])}
     lista_itens = []
     count_me = 0
     
     for item in raw_itens:
-        bid = item.get('tipoBeneficioId') or (item.get('tipoBeneficio') or {}).get('value', 4)
-        is_me = int(bid) in [1, 2, 3] if str(bid).isdigit() else False
+        # Lógica ME/EPP Refinada
+        # Tenta pegar value numérico de várias fontes
+        bid = 4 # Default Amplo
+        
+        # Fonte 1: ID direto
+        if item.get('tipoBeneficioId') is not None:
+            bid = item.get('tipoBeneficioId')
+        # Fonte 2: Objeto
+        elif isinstance(item.get('tipoBeneficio'), dict):
+            bid = item['tipoBeneficio'].get('value')
+        
+        try:
+            bid = int(bid)
+            is_me = bid in [1, 2, 3]
+        except:
+            is_me = False # Em caso de dúvida, não marca
+            
         if is_me: count_me += 1
         
         res = mapa_resultados.get(item['numeroItem'])
