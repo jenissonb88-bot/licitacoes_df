@@ -9,7 +9,7 @@ ARQDADOS = 'dadosoportunidades.json.gz'
 ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'
 ARQCSV = 'Exportar Dados.csv'
 
-print("🧹 LIMPEZA V23 - VÍNCULO ITEM-RESULTADO BLINDADO")
+print("🧹 LIMPEZA V24 - LEITOR SLIM -> SAÍDA WEB PADRÃO")
 
 def normalize(texto):
     if not texto: return ""
@@ -31,9 +31,9 @@ if os.path.exists(ARQCSV):
                     for linha in leitor:
                         if not linha: continue
                         termos = []
-                        if len(linha) > 1: termos.append(linha[1]) # Fármaco
-                        if len(linha) > 5: termos.append(linha[5]) # Nome Tec
-                        if len(linha) > 0: termos.append(linha[0]) # Descrição
+                        if len(linha) > 1: termos.append(linha[1]) 
+                        if len(linha) > 5: termos.append(linha[5]) 
+                        if len(linha) > 0: termos.append(linha[0]) 
 
                         for t in termos:
                             t_norm = normalize(t.strip())
@@ -42,7 +42,6 @@ if os.path.exists(ARQCSV):
                 csv_ativo = True
                 print(f"📦 Catálogo CSV carregado: {len(catalogo_produtos)} termos.")
                 break
-            except UnicodeDecodeError: continue
             except: continue
     except: pass
 
@@ -92,112 +91,108 @@ for preg in todos:
     if preg['id'] in duplicatas: continue
     duplicatas.add(preg['id'])
     
+    # Mapeamento Chaves Curtas (V3.0) -> Variáveis
+    p_dt_enc = preg.get('dt_enc') or preg.get('dataEnc')
+    p_uf = preg.get('uf') or ''
+    p_obj = preg.get('obj') or preg.get('objeto') or ''
+    p_itens = preg.get('itens') or [] # Já vem limpo na V3.0
+    
+    # Filtro Data
     try:
-        if datetime.fromisoformat(preg.get('dataEnc','').replace('Z','+00:00')).replace(tzinfo=None) < data_limite: continue
+        if datetime.fromisoformat(p_dt_enc.replace('Z','+00:00')).replace(tzinfo=None) < data_limite: continue
     except: pass
 
-    uf = preg.get('uf', '').upper()
-    if uf not in ESTADOS_ALVO: continue
+    # Filtro Geo
+    if p_uf.upper() not in ESTADOS_ALVO: continue
 
-    obj_norm = normalize(preg.get('objeto', ''))
+    obj_norm = normalize(p_obj)
     
+    # Filtro Blacklist
     if any(t in obj_norm for t in BLACKLIST_NORM):
         if not ("DIETA" in obj_norm or "FORMULA" in obj_norm): continue
 
+    # --- VALIDAÇÃO ---
     aprovado = False
+    
+    # 1. Verifica Objeto
     obj_is_global = any(t in obj_norm for t in WHITELIST_GLOBAL_NORM)
     obj_is_ne = any(t in obj_norm for t in WHITELIST_NE_NORM)
-    item_match_csv = False
     
-    raw_itens = preg.get('itensraw', [])
+    # 2. Verifica Itens (CSV)
+    item_match_csv = False
     if csv_ativo and len(catalogo_produtos) > 0:
-        for item in raw_itens:
-            if any(t in normalize(item.get('descricao', '')) for t in catalogo_produtos):
+        for item in p_itens:
+            # item['d'] é 'descricao' na versão Slim
+            desc = item.get('d') or item.get('descricao') or ''
+            if any(t in normalize(desc) for t in catalogo_produtos):
                 item_match_csv = True; break
 
-    if uf in ESTADOS_NE:
+    # 3. Decisão
+    if p_uf.upper() in ESTADOS_NE:
         if obj_is_global or obj_is_ne or item_match_csv: aprovado = True
     else:
         if obj_is_global: aprovado = True
     
     if not aprovado and "MATERIAL DE LIMPEZA" in obj_norm:
-         for item in raw_itens:
-            if "ALCOOL" in normalize(item.get('descricao', '')) and "70" in normalize(item.get('descricao', '')):
+         for item in p_itens:
+            desc = item.get('d') or item.get('descricao') or ''
+            if "ALCOOL" in normalize(desc) and "70" in normalize(desc):
                 aprovado = True; break
 
     if not aprovado: continue
 
-    # --- PROCESSAMENTO BLINDADO DE RESULTADOS ---
-    mapa_resultados = {}
-    for r in preg.get('resultadosraw', []):
-        try:
-            # Garante que a chave seja INTEIRO para bater com o item
-            n = int(r.get('numeroItem'))
-            mapa_resultados[n] = r
-        except: pass
+    # --- MONTAGEM PARA O HTML (Formato Legado) ---
+    # Aqui transformamos o formato Slim de volta no formato que o HTML entende
     
-    lista_itens = []
+    lista_itens_final = []
     count_me = 0
     
-    for item in raw_itens:
-        bid = 4 
-        raw_val = item.get('tipoBeneficio')
-        if isinstance(raw_val, dict): bid = raw_val.get('value') or raw_val.get('id')
-        elif isinstance(raw_val, int): bid = raw_val
-        elif item.get('tipoBeneficioId') is not None: bid = item.get('tipoBeneficioId')
-
-        try:
-            bid_int = int(bid)
-            is_me = bid_int in [1, 3] 
-        except: is_me = False 
-            
+    for item in p_itens:
+        # Recupera dados Slim
+        bid = item.get('benef')
+        is_me = False
+        try: is_me = int(bid) in [1, 3]
+        except: pass
         if is_me: count_me += 1
         
-        # Vínculo Blindado
-        res = None
-        try:
-            n_item_int = int(item.get('numeroItem'))
-            res = mapa_resultados.get(n_item_int)
-        except: pass
+        # Recupera dados de resultado injetados
+        sit = item.get('sit', 'ABERTO')
         
-        situacao_txt = "EM_ANDAMENTO"
-        sit_compra = str(item.get('situacaoCompraItemName', '')).upper()
-        
-        if res:
-            situacao_txt = "HOMOLOGADO"
-        elif "CANCELADO" in sit_compra or "ANULADO" in sit_compra:
-            situacao_txt = "CANCELADO"
-        elif "FRACASSADO" in sit_compra:
-            situacao_txt = "FRACASSADO"
-        elif "DESERTO" in sit_compra:
-            situacao_txt = "DESERTO"
-
-        lista_itens.append({
-            'n': item.get('numeroItem'),
-            'desc': item.get('descricao', ''),
-            'qtd': float(item.get('quantidade', 0)),
-            'un': item.get('unidadeMedida', ''),
-            'valUnit': float(item.get('valorUnitarioEstimado', 0)),
+        # Reconstrói objeto para HTML
+        lista_itens_final.append({
+            'n': item.get('n'),
+            'desc': item.get('d'),
+            'qtd': float(item.get('q', 0)),
+            'un': item.get('u'),
+            'valUnit': float(item.get('v_est', 0)),
             'me_epp': is_me,
-            'situacao': situacao_txt,
-            'fornecedor': res.get('razaoSocial') if res else None,
-            'valHomologado': float(res.get('valorUnitarioHomologado', 0)) if res else 0
+            'situacao': sit,
+            'fornecedor': item.get('res_forn'), # Só existe se tiver resultado
+            'valHomologado': float(item.get('res_val', 0))
         })
 
     tipo = "AMPLO"
-    if lista_itens:
-        if count_me == len(lista_itens): tipo = "EXCLUSIVO"
+    if lista_itens_final:
+        if count_me == len(lista_itens_final): tipo = "EXCLUSIVO"
         elif count_me > 0: tipo = "PARCIAL"
 
+    # Salva no formato que o HTML espera
     limpos.append({
-        'id': preg['id'], 'uf': uf, 'cidade': preg.get('cidade', ''),
-        'orgao': preg.get('orgao', ''), 'unidade': preg.get('unidadeCompradora', ''),
-        'uasg': preg.get('uasg', ''), 'edital': preg.get('editaln', ''),
-        'valor_estimado': round(preg.get('valorGlobalApi', 0), 2),
-        'data_enc': preg.get('dataEnc', ''), 'objeto': obj_norm[:300], 
-        'link': preg.get('link', ''), 'tipo_licitacao': tipo, 'itens': lista_itens
+        'id': preg['id'], 
+        'uf': p_uf, 
+        'cidade': preg.get('cid') or preg.get('cidade'),
+        'orgao': preg.get('org') or preg.get('orgao'), 
+        'unidade': preg.get('unid_nome') or preg.get('unidadeCompradora'),
+        'uasg': preg.get('uasg'), 
+        'edital': preg.get('edit') or preg.get('editaln'),
+        'valor_estimado': round(float(preg.get('val_tot') or preg.get('valorGlobalApi') or 0), 2),
+        'data_enc': p_dt_enc, 
+        'objeto': p_obj[:300], 
+        'link': preg.get('link'), 
+        'tipo_licitacao': tipo, 
+        'itens': lista_itens_final
     })
 
-print(f"✅ APROVADOS: {len(limpos)}")
+print(f"✅ FINAL WEB: {len(limpos)} pregões exportados.")
 with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f:
     json.dump(limpos, f, ensure_ascii=False)
