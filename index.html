@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sniper Pharma - Monitor V8 (Histórico)</title>
+    <title>Sniper Pharma - Monitor V11 (Itens + Sigiloso)</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -36,26 +36,37 @@
         .me-epp-sim { color: #dc3545; font-weight: 800; } 
         .me-epp-nao { color: #ccc; font-weight: 400; }
 
+        /* Estilo Sigiloso */
+        .badge-sigiloso { background-color: #e9ecef; color: #6c757d; border: 1px solid #ced4da; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; }
+
         #loading-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(255,255,255,0.95); z-index: 9999;
+            background: rgba(255,255,255,0.98); z-index: 9999;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
         
         .sort-icon { float: right; margin-left: 5px; opacity: 0.5; }
         .active-sort { opacity: 1; color: #48c774; }
+        .error-box { max-width: 500px; text-align: center; padding: 20px; border-radius: 10px; background: #fff; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
     </style>
 </head>
 <body>
 
 <div id="loading-overlay">
-    <div class="spinner-border text-primary" role="status" id="spinner"></div>
-    <div class="mt-3 text-secondary fw-bold" id="loading-msg">Carregando dados...</div>
-    <button class="btn btn-sm btn-primary mt-3 d-none" id="btn-retry" onclick="location.reload()">Tentar Novamente</button>
+    <div id="spinner-container">
+        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
+        <div class="mt-3 text-secondary fw-bold fs-5" id="loading-msg">Iniciando sistema...</div>
+    </div>
+    <div id="error-container" class="error-box d-none">
+        <i class="fas fa-exclamation-circle text-danger fa-4x mb-3"></i>
+        <h4 class="text-danger">Atenção</h4>
+        <p id="error-msg" class="text-muted mb-4"></p>
+        <button class="btn btn-primary" onclick="location.reload()">Tentar Novamente</button>
+    </div>
 </div>
 
 <div class="header-bar d-flex justify-content-between align-items-center sticky-top">
-    <div class="fw-bold fs-5"><i class="fas fa-crosshairs me-2"></i>SNIPER PHARMA V8</div>
+    <div class="fw-bold fs-5"><i class="fas fa-crosshairs me-2"></i>SNIPER PHARMA V11</div>
     <div class="d-flex align-items-center gap-3">
         <div class="form-check form-switch text-white">
             <input class="form-check-input" type="checkbox" id="chkOcultarVencidos" onchange="render()">
@@ -68,15 +79,29 @@
 <div class="container-fluid py-3">
     <div class="card card-table p-3 mb-3">
         <div class="row g-2">
-            <div class="col-md-2"><input id="fUf" class="form-control form-control-sm" placeholder="UF" onkeyup="render()"></div>
-            <div class="col-md-4"><input id="fOrgao" class="form-control form-control-sm" placeholder="Cidade ou Órgão" onkeyup="render()"></div>
-            <div class="col-md-4"><input id="fObjeto" class="form-control form-control-sm" placeholder="Palavra no Objeto" onkeyup="render()"></div>
             <div class="col-md-2">
+                <label class="form-label small mb-0 text-muted">Data Enc.</label>
+                <input type="date" id="fDataEnc" class="form-control form-control-sm" onchange="render()">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0 text-muted">UASG / Edital</label>
+                <input id="fUasgEdital" class="form-control form-control-sm" placeholder="Ex: 12345 ou 90/2026" onkeyup="render()">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-0 text-muted">Cidade / UF</label>
+                <input id="fCidadeUf" class="form-control form-control-sm" placeholder="Ex: Recife ou PE" onkeyup="render()">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-0 text-muted">Órgão / Unidade</label>
+                <input id="fOrgaoUnid" class="form-control form-control-sm" placeholder="Nome do Órgão" onkeyup="render()">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0 text-muted">Tipo</label>
                 <select id="fTipo" class="form-select form-select-sm" onchange="render()">
-                    <option value="">Todos os Tipos</option>
-                    <option value="AMPLO">Amplo (Verde)</option>
-                    <option value="EXCLUSIVO">Exclusivo ME/EPP (Vermelho)</option>
-                    <option value="PARCIAL">Parcial (Amarelo)</option>
+                    <option value="">Todos</option>
+                    <option value="AMPLO">Amplo</option>
+                    <option value="EXCLUSIVO">Exclusivo</option>
+                    <option value="PARCIAL">Parcial</option>
                 </select>
             </div>
         </div>
@@ -92,7 +117,7 @@
                         <th onclick="ordenar('orgao')">Órgão / Unidade / Local <i id="icon-orgao" class="fas fa-sort sort-icon"></i></th>
                         <th style="width: 100px;">Edital</th>
                         <th>Objeto</th>
-                        <th class="text-end" style="width: 120px;" onclick="ordenar('valor')">Valor Est. <i id="icon-valor" class="fas fa-sort sort-icon"></i></th>
+                        <th class="text-end" style="width: 130px;" onclick="ordenar('valor')">Valor Est. <i id="icon-valor" class="fas fa-sort sort-icon"></i></th>
                         <th class="text-center" style="width: 80px;">Ação</th>
                     </tr>
                 </thead>
@@ -133,8 +158,8 @@
     let pagina = 1;
     const ITENS_POR_PAG = 20;
     
-    // Estado da Ordenação
-    let ordemAtual = { campo: 'data_enc', direcao: 'asc' }; // Z-A na lógica invertida
+    // Ordenação Padrão: Datas Futuras -> Passadas
+    let ordemAtual = { campo: 'data_enc', direcao: 'asc' }; 
 
     const fmtBrl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
     const fmtData = d => d ? new Date(d).toLocaleDateString('pt-BR') : '--';
@@ -143,7 +168,7 @@
         try {
             updateLoading("Baixando arquivo de dados...");
             const res = await fetch(`${FILE_URL}?v=${Date.now()}`);
-            if(!res.ok) throw new Error("Arquivo não encontrado.");
+            if(!res.ok) throw new Error("Arquivo de dados não encontrado.");
             
             const blob = await res.blob();
             const arrayBuffer = await blob.arrayBuffer();
@@ -153,20 +178,19 @@
             try { text = pako.ungzip(new Uint8Array(arrayBuffer), {to:'string'}); }
             catch { text = await new Response(blob).text(); }
             
-            updateLoading("Processando JSON...");
+            updateLoading("Lendo JSON...");
             try { dadosOriginais = JSON.parse(text); } 
-            catch { throw new Error("JSON inválido."); }
+            catch { throw new Error("JSON corrompido."); }
 
             if (!Array.isArray(dadosOriginais)) dadosOriginais = [];
-            
-            // Renderiza com a ordenação padrão (Z-A)
+
             ordenar('data_enc', true);
             
             document.getElementById('loading-overlay').style.display = 'none';
 
         } catch (e) {
             console.error(e);
-            showError(`Erro: ${e.message}`);
+            showError(e.message);
         }
     };
 
@@ -176,10 +200,9 @@
     }
 
     function showError(msg) {
-        document.getElementById('spinner').style.display = 'none';
-        const el = document.getElementById('loading-msg');
-        el.innerHTML = `<div class="text-danger mb-2"><i class="fas fa-exclamation-triangle fa-2x"></i></div>${msg}`;
-        document.getElementById('btn-retry').classList.remove('d-none');
+        document.getElementById('spinner-container').classList.add('d-none');
+        document.getElementById('error-container').classList.remove('d-none');
+        document.getElementById('error-msg').innerHTML = msg;
     }
 
     function ordenar(campo, force = false) {
@@ -191,78 +214,63 @@
                 ordemAtual.direcao = 'asc';
             }
         }
-
         document.querySelectorAll('.sort-icon').forEach(i => i.className = 'fas fa-sort sort-icon');
         const icon = document.getElementById(`icon-${campo}`);
         if(icon) {
-            icon.className = `fas fa-sort-${ordemAtual.direcao === 'asc' ? 'up' : 'down'} sort-icon active-sort`;
+            const dirIcon = ordemAtual.direcao === 'asc' ? 'down' : 'up'; 
+            icon.className = `fas fa-sort-${dirIcon} sort-icon active-sort`;
         }
-
         render();
     }
 
     function render() {
-        const uf = document.getElementById('fUf').value.toUpperCase();
-        const org = document.getElementById('fOrgao').value.toUpperCase();
-        const obj = document.getElementById('fObjeto').value.toUpperCase();
-        const tipo = document.getElementById('fTipo').value;
+        const fData = document.getElementById('fDataEnc').value;
+        const fUasgEdital = document.getElementById('fUasgEdital').value.toUpperCase();
+        const fCidadeUf = document.getElementById('fCidadeUf').value.toUpperCase();
+        const fOrgaoUnid = document.getElementById('fOrgaoUnid').value.toUpperCase();
+        const fTipo = document.getElementById('fTipo').value;
         const ocultarVencidos = document.getElementById('chkOcultarVencidos').checked;
         const hoje = new Date();
 
-        // 1. Filtragem
         dadosFiltrados = dadosOriginais.filter(d => {
             const dataObj = d.data_enc ? new Date(d.data_enc) : null;
-            
-            // Filtro de Vencidos (Só aplica se checkbox estiver marcado)
             if (ocultarVencidos && dataObj && dataObj < hoje) return false;
-
-            const fullLocal = ((d.cidade || '') + ' ' + (d.orgao || '')).toUpperCase();
-            return ((d.uf || '').toUpperCase().includes(uf) && 
-                    fullLocal.includes(org) && 
-                    (d.objeto || '').toUpperCase().includes(obj) &&
-                    (tipo === "" || d.tipo_licitacao === tipo));
+            if (fData && d.data_enc && !d.data_enc.startsWith(fData)) return false;
+            const txtUasgEdital = ((d.uasg || '') + ' ' + (d.edital || '')).toUpperCase();
+            if (fUasgEdital && !txtUasgEdital.includes(fUasgEdital)) return false;
+            const txtCidadeUf = ((d.cidade || '') + ' ' + (d.uf || '')).toUpperCase();
+            if (fCidadeUf && !txtCidadeUf.includes(fCidadeUf)) return false;
+            const txtOrgaoUnid = ((d.orgao || '') + ' ' + (d.unidade || '')).toUpperCase();
+            if (fOrgaoUnid && !txtOrgaoUnid.includes(fOrgaoUnid)) return false;
+            if (fTipo && d.tipo_licitacao !== fTipo) return false;
+            return true;
         });
 
-        // 2. Ordenação
+        // Ordenação
         dadosFiltrados.sort((a, b) => {
             let valA, valB;
-
             switch (ordemAtual.campo) {
                 case 'data_enc':
-                    // Para ordenar Z-A (Futuro -> Passado) como padrão:
-                    // Se for data nula, joga pro passado distante
                     valA = a.data_enc ? new Date(a.data_enc).getTime() : 0;
                     valB = b.data_enc ? new Date(b.data_enc).getTime() : 0;
-                    
-                    // Inversão padrão para Data: Mais novo primeiro
                     if (ordemAtual.direcao === 'asc') return valB - valA; 
                     else return valA - valB;
-                    
                 case 'valor':
-                    valA = a.valor_estimado || 0;
-                    valB = b.valor_estimado || 0;
-                    break;
+                    valA = a.valor_estimado || 0; valB = b.valor_estimado || 0; 
+                    if (valA < valB) return ordemAtual.direcao === 'asc' ? -1 : 1;
+                    else return ordemAtual.direcao === 'asc' ? 1 : -1;
                 case 'orgao':
-                    valA = (a.orgao || '').toLowerCase();
-                    valB = (b.orgao || '').toLowerCase();
-                    break;
+                    valA = (a.orgao || '').toLowerCase(); valB = (b.orgao || '').toLowerCase();
+                    if (valA < valB) return ordemAtual.direcao === 'asc' ? -1 : 1;
+                    else return ordemAtual.direcao === 'asc' ? 1 : -1;
                 case 'tipo':
-                    valA = (a.tipo_licitacao || '').toLowerCase();
-                    valB = (b.tipo_licitacao || '').toLowerCase();
-                    break;
-                default:
-                    valA = 0; valB = 0;
-            }
-
-            // Ordenação padrão para strings/numeros
-            if (ordemAtual.campo !== 'data_enc') {
-                if (valA < valB) return ordemAtual.direcao === 'asc' ? -1 : 1;
-                if (valA > valB) return ordemAtual.direcao === 'asc' ? 1 : -1;
-                return 0;
+                    valA = (a.tipo_licitacao || '').toLowerCase(); valB = (b.tipo_licitacao || '').toLowerCase();
+                    if (valA < valB) return ordemAtual.direcao === 'asc' ? -1 : 1;
+                    else return ordemAtual.direcao === 'asc' ? 1 : -1;
+                default: return 0;
             }
         });
 
-        // 3. Paginação
         const totalPaginas = Math.ceil(dadosFiltrados.length / ITENS_POR_PAG) || 1;
         if(pagina > totalPaginas) pagina = totalPaginas;
         if(pagina < 1) pagina = 1;
@@ -276,16 +284,25 @@
         lote.forEach(d => {
             const dataObj = d.data_enc ? new Date(d.data_enc) : null;
             let corData = 'text-dark';
-            
             if (dataObj) {
                 const diffHoras = (dataObj - hoje) / 36e5; 
-                if (diffHoras < 0) corData = 'text-decoration-line-through text-muted'; // Vencido
-                else if (diffHoras < 48) corData = 'text-danger fw-bold'; // Urgente
+                if (diffHoras < 0) corData = 'text-decoration-line-through text-muted';
+                else if (diffHoras < 48) corData = 'text-danger fw-bold';
             }
 
             let classeTipo = 'tipo-amplo'; 
             if(d.tipo_licitacao === 'EXCLUSIVO') classeTipo = 'tipo-exclusivo';
             if(d.tipo_licitacao === 'PARCIAL') classeTipo = 'tipo-parcial';
+
+            // --- LÓGICA NOVA: SIGILOSO + QTD ITENS ---
+            const qtdItens = d.itens ? d.itens.length : 0;
+            let displayValor;
+
+            if (!d.valor_estimado || parseFloat(d.valor_estimado) === 0) {
+                displayValor = '<span class="badge-sigiloso"><i class="fas fa-eye-slash me-1"></i>Sigiloso</span>';
+            } else {
+                displayValor = `<span class="fw-bold text-success">${fmtBrl.format(d.valor_estimado)}</span>`;
+            }
 
             tbody.innerHTML += `
                 <tr>
@@ -298,7 +315,14 @@
                     </td>
                     <td>${d.edital || '-'}</td>
                     <td><div class="text-truncate" style="max-width:350px" title="${d.objeto}">${d.objeto}</div></td>
-                    <td class="text-end fw-bold text-success">${fmtBrl.format(d.valor_estimado || 0)}</td>
+                    
+                    <td class="text-end align-middle">
+                        <div>${displayValor}</div>
+                        <div class="small text-muted mt-1" style="font-size:0.75rem;">
+                            <i class="fas fa-box-open me-1"></i>${qtdItens} itens
+                        </div>
+                    </td>
+
                     <td class="text-center">
                         <button class="btn btn-sm btn-outline-primary" onclick="verDetalhes('${d.id}')"><i class="fas fa-list"></i></button>
                         <a href="${d.link}" target="_blank" class="btn btn-sm btn-outline-dark"><i class="fas fa-external-link-alt"></i></a>
@@ -307,7 +331,6 @@
             `;
         });
 
-        // Atualiza controles
         document.getElementById('pagAtual').innerText = pagina;
         document.getElementById('pagTotal').innerText = totalPaginas;
         document.getElementById('totalReg').innerText = dadosOriginais.length;
@@ -322,21 +345,17 @@
     function verDetalhes(id) {
         const lic = dadosOriginais.find(d => d.id === id);
         if(!lic) return;
-
         const itens = lic.itens || [];
         const grupos = { 'EM_ANDAMENTO': [], 'HOMOLOGADO': {}, 'OUTROS': [] };
 
         itens.forEach(it => {
             const sit = (it.situacao || 'EM_ANDAMENTO');
             if (sit === 'HOMOLOGADO') {
-                const forn = it.fornecedor || 'Fornecedor Não Identificado';
+                const forn = it.fornecedor || 'Forn. Desconhecido';
                 if (!grupos.HOMOLOGADO[forn]) grupos.HOMOLOGADO[forn] = [];
                 grupos.HOMOLOGADO[forn].push(it);
-            } else if (sit === 'EM_ANDAMENTO') {
-                grupos.EM_ANDAMENTO.push(it);
-            } else {
-                grupos.OUTROS.push(it);
-            }
+            } else if (sit === 'EM_ANDAMENTO') grupos.EM_ANDAMENTO.push(it);
+            else grupos.OUTROS.push(it);
         });
 
         let html = `
@@ -353,7 +372,6 @@
                 const txtMeEpp = it.me_epp ? '<span class="me-epp-sim">SIM</span>' : '<span class="me-epp-nao">NÃO</span>';
                 const valShow = mostrarValHom ? (it.valHomologado || 0) : (it.valUnit || 0);
                 const total = (it.qtd || 0) * valShow;
-                
                 let descSit = '';
                 if(it.situacao === 'CANCELADO') descSit = '<span class="badge bg-danger ms-1">CANCELADO</span>';
                 if(it.situacao === 'DESERTO') descSit = '<span class="badge bg-warning text-dark ms-1">DESERTO</span>';
@@ -368,63 +386,24 @@
                         <td class="text-center">${it.un}</td>
                         <td class="text-end">${fmtBrl.format(valShow)}</td>
                         <td class="text-end fw-bold">${fmtBrl.format(total)}</td>
-                    </tr>
-                `;
+                    </tr>`;
             });
-            return `
-                <div class="table-responsive mb-3">
-                    <table class="table table-sm table-bordered table-itens mb-0">
-                        <thead>
-                            <tr>
-                                <th style="width:50px">Item</th>
-                                <th style="width:50px">ME/EPP</th>
-                                <th>Descrição</th>
-                                <th style="width:70px">Qtd</th>
-                                <th style="width:60px">Un</th>
-                                <th style="width:110px">${mostrarValHom ? 'Val. Final' : 'Val. Est.'}</th>
-                                <th style="width:110px">Total</th>
-                            </tr>
-                        </thead>
-                        <tbody>${trs}</tbody>
-                    </table>
-                </div>
-            `;
+            return `<div class="table-responsive mb-3"><table class="table table-sm table-bordered table-itens mb-0">
+                <thead><tr><th style="width:50px">Item</th><th style="width:50px">ME/EPP</th><th>Descrição</th><th style="width:70px">Qtd</th><th style="width:60px">Un</th><th style="width:110px">${mostrarValHom ? 'Val. Final' : 'Val. Est.'}</th><th style="width:110px">Total</th></tr></thead>
+                <tbody>${trs}</tbody></table></div>`;
         };
 
         if (Object.keys(grupos.HOMOLOGADO).length > 0) {
             html += `<h6 class="mt-4 border-bottom pb-2">✅ Itens Homologados / Adjudicados</h6>`;
             for (const [fornecedor, lista] of Object.entries(grupos.HOMOLOGADO)) {
-                html += `
-                    <div class="card mb-3 shadow-sm border-dark">
-                        <div class="group-header bg-fornecedor">
-                            <span><i class="fas fa-truck me-2"></i> ${fornecedor}</span>
-                            <span class="badge bg-white text-dark">${lista.length} itens</span>
-                        </div>
-                        <div class="card-body p-0">${gerarTabela(lista, true)}</div>
-                    </div>`;
+                html += `<div class="card mb-3 shadow-sm border-dark"><div class="group-header bg-fornecedor"><span><i class="fas fa-truck me-2"></i> ${fornecedor}</span><span class="badge bg-white text-dark">${lista.length} itens</span></div><div class="card-body p-0">${gerarTabela(lista, true)}</div></div>`;
             }
         }
-
         if (grupos.EM_ANDAMENTO.length > 0) {
-            html += `
-                <div class="card mb-3 border-success shadow-sm mt-4">
-                    <div class="group-header bg-andamento">
-                        <span><i class="fas fa-clock me-2"></i> Em Andamento / Aberto</span>
-                        <span class="badge bg-white text-dark">${grupos.EM_ANDAMENTO.length} itens</span>
-                    </div>
-                    <div class="card-body p-0">${gerarTabela(grupos.EM_ANDAMENTO, false)}</div>
-                </div>`;
+            html += `<div class="card mb-3 border-success shadow-sm mt-4"><div class="group-header bg-andamento"><span><i class="fas fa-clock me-2"></i> Em Andamento</span><span class="badge bg-white text-dark">${grupos.EM_ANDAMENTO.length} itens</span></div><div class="card-body p-0">${gerarTabela(grupos.EM_ANDAMENTO, false)}</div></div>`;
         }
-
         if (grupos.OUTROS.length > 0) {
-            html += `
-                <div class="card mb-3 border-danger shadow-sm mt-4">
-                    <div class="group-header bg-fracassado">
-                        <span><i class="fas fa-times-circle me-2"></i> Fracassados / Desertos / Cancelados</span>
-                        <span class="badge bg-white text-dark">${grupos.OUTROS.length} itens</span>
-                    </div>
-                    <div class="card-body p-0">${gerarTabela(grupos.OUTROS, false)}</div>
-                </div>`;
+            html += `<div class="card mb-3 border-danger shadow-sm mt-4"><div class="group-header bg-fracassado"><span><i class="fas fa-times-circle me-2"></i> Outros Status</span><span class="badge bg-white text-dark">${grupos.OUTROS.length} itens</span></div><div class="card-body p-0">${gerarTabela(grupos.OUTROS, false)}</div></div>`;
         }
 
         document.getElementById('modalBody').innerHTML = html;
