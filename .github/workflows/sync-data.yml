@@ -48,61 +48,62 @@ jobs:
 
         if [ "${{ github.event_name }}" == "schedule" ]; then
           if [ "$DAY_OF_MONTH" == "01" ] || [ "$DAY_OF_MONTH" == "16" ]; then
+            # Quinzenalmente faz varredura ampla
             echo "START_DATE=2026-01-01" >> $GITHUB_ENV
             echo "END_DATE=$TODAY" >> $GITHUB_ENV
             echo "MODE=full_scan" >> $GITHUB_ENV
           else
-            START_3DAYS=$(date -d "3 days ago" +'%Y-%m-%d')
-            echo "START_DATE=$START_3DAYS" >> $GITHUB_ENV
+            # Diariamente olha os ultimos 5 dias para garantir
+            START_5DAYS=$(date -d "5 days ago" +'%Y-%m-%d')
+            echo "START_DATE=$START_5DAYS" >> $GITHUB_ENV
             echo "END_DATE=$TODAY" >> $GITHUB_ENV
             echo "MODE=daily_update" >> $GITHUB_ENV
           fi
         else
+          # Manual
           INPUT_DATE="${{ inputs.target_date }}"
           echo "START_DATE=$INPUT_DATE" >> $GITHUB_ENV
           echo "END_DATE=$INPUT_DATE" >> $GITHUB_ENV 
           echo "MODE=${{ inputs.mode }}" >> $GITHUB_ENV
         fi
 
-    # --- 2. EXECUÇÃO ---
-    - name: Run app.py
+    # --- 2. EXECUÇÃO DOS ROBÔS ---
+    - name: Run app.py (Coleta)
       run: python app.py --start "$START_DATE" --end "$END_DATE"
 
-    - name: Run limpeza.py
+    - name: Run limpeza.py (Filtro e Tratamento)
       run: python limpeza.py
 
-    # --- 3. COMMIT E PUSH (ESTRATÉGIA ANTI-CONFLITO) ---
+    # --- 3. COMMIT E PUSH (ESTRATÉGIA ANTI-AMNÉSIA) ---
     - name: Commit results
       run: |
         git config user.name "Sniper Pharma Bot"
         git config user.email "sniper@pharma.bot"
         
-        echo "🔄 Resolvendo conflitos preventivamente..."
+        echo "🔄 Preparando envio dos dados acumulados..."
         
-        # 1. Baixa o histórico mais recente do servidor
-        git fetch origin main
-        
-        # 2. Reseta o histórico local para igualar ao servidor (sem apagar os arquivos gerados pelo Python)
-        # O --mixed mantém os arquivos na pasta (Work Tree) mas limpa o Stage
-        git reset --mixed origin/main
-        
-        # 3. Agora adicionamos nossos arquivos recém-gerados como a "versão final"
-        if [ ! -f checkpoint.txt ]; then echo "$START_DATE" > checkpoint.txt; fi
-        
-        if [ -d "dados" ]; then git add dados/ || true; fi
-        git add checkpoint.txt || true
+        # 1. Adiciona os arquivos gerados no Stage
+        git add dadosoportunidades.json.gz || true
         git add pregacoes_pharma_limpos.json.gz || true
+        git add checkpoint.txt || true
         
-        # 4. Verifica se tem mudança e commita
+        # 2. Verifica se tem algo novo
         if ! git diff --staged --quiet; then
-          git commit -m "Sniper $START_DATE | Mode: $MODE"
-          echo "⬆️ Enviando dados (Fast-Forward)..."
-          git push origin main
+          git commit -m "Sniper Data: $START_DATE | Mode: $MODE"
+          
+          # 3. TRUQUE PARA EVITAR CONFLITO:
+          # Puxa as alterações do servidor, mas se tiver conflito no binário,
+          # dizemos ao Git para preferir a NOSSA versão (que tem os dados acumulados).
+          git pull --rebase -Xours origin main || git pull --rebase -Xours origin master
+          
+          # 4. Envia
+          git push
+          echo "✅ Dados salvos com sucesso!"
         else
-          echo "✨ Nenhuma alteração nova para enviar."
+          echo "✨ Nenhuma alteração nova encontrada."
         fi
 
-    # --- 4. LOOP ---
+    # --- 4. LOOP (SE FOR MANUAL) ---
     - name: Trigger Próximo Dia
       if: inputs.mode == 'manual_loop'
       env:
