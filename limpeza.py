@@ -9,7 +9,7 @@ ARQDADOS = 'dadosoportunidades.json.gz'
 ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'
 ARQCSV = 'Exportar Dados.csv'
 
-print("🧹 LIMPEZA V22 - CORREÇÃO ESTRUTURAL ME/EPP + RESULTADOS")
+print("🧹 LIMPEZA V23 - VÍNCULO ITEM-RESULTADO BLINDADO")
 
 def normalize(texto):
     if not texto: return ""
@@ -105,11 +105,10 @@ for preg in todos:
         if not ("DIETA" in obj_norm or "FORMULA" in obj_norm): continue
 
     aprovado = False
-    
     obj_is_global = any(t in obj_norm for t in WHITELIST_GLOBAL_NORM)
     obj_is_ne = any(t in obj_norm for t in WHITELIST_NE_NORM)
-    
     item_match_csv = False
+    
     raw_itens = preg.get('itensraw', [])
     if csv_ativo and len(catalogo_produtos) > 0:
         for item in raw_itens:
@@ -128,11 +127,11 @@ for preg in todos:
 
     if not aprovado: continue
 
-    # --- PROCESSAMENTO DOS ITENS E RESULTADOS ---
-    # Cria mapa de resultados indexado pelo numeroItem (convertido para int para garantir match)
+    # --- PROCESSAMENTO BLINDADO DE RESULTADOS ---
     mapa_resultados = {}
     for r in preg.get('resultadosraw', []):
         try:
+            # Garante que a chave seja INTEIRO para bater com o item
             n = int(r.get('numeroItem'))
             mapa_resultados[n] = r
         except: pass
@@ -141,35 +140,25 @@ for preg in todos:
     count_me = 0
     
     for item in raw_itens:
-        # Lógica ME/EPP Corrigida para Inteiro Direto
-        bid = 4 # Default Amplo
-        
+        bid = 4 
         raw_val = item.get('tipoBeneficio')
-        
-        # Se for um dicionário (estrutura antiga/rara)
-        if isinstance(raw_val, dict):
-             bid = raw_val.get('value') or raw_val.get('id')
-        # Se for um inteiro direto (estrutura nova/comum)
-        elif isinstance(raw_val, int):
-             bid = raw_val
-        # Se for None, tenta o ID
-        elif item.get('tipoBeneficioId') is not None:
-             bid = item.get('tipoBeneficioId')
+        if isinstance(raw_val, dict): bid = raw_val.get('value') or raw_val.get('id')
+        elif isinstance(raw_val, int): bid = raw_val
+        elif item.get('tipoBeneficioId') is not None: bid = item.get('tipoBeneficioId')
 
         try:
             bid_int = int(bid)
-            # Códigos 1 (Exclusivo) e 3 (Cota Reservada) são benefícios claros
             is_me = bid_int in [1, 3] 
-        except:
-            is_me = False 
+        except: is_me = False 
             
         if is_me: count_me += 1
         
-        # Link com Resultado
+        # Vínculo Blindado
+        res = None
         try:
             n_item_int = int(item.get('numeroItem'))
             res = mapa_resultados.get(n_item_int)
-        except: res = None
+        except: pass
         
         situacao_txt = "EM_ANDAMENTO"
         sit_compra = str(item.get('situacaoCompraItemName', '')).upper()
@@ -201,19 +190,12 @@ for preg in todos:
         elif count_me > 0: tipo = "PARCIAL"
 
     limpos.append({
-        'id': preg['id'], 
-        'uf': uf, 
-        'cidade': preg.get('cidade', ''),
-        'orgao': preg.get('orgao', ''), 
-        'unidade': preg.get('unidadeCompradora', ''),
-        'uasg': preg.get('uasg', ''), 
-        'edital': preg.get('editaln', ''),
+        'id': preg['id'], 'uf': uf, 'cidade': preg.get('cidade', ''),
+        'orgao': preg.get('orgao', ''), 'unidade': preg.get('unidadeCompradora', ''),
+        'uasg': preg.get('uasg', ''), 'edital': preg.get('editaln', ''),
         'valor_estimado': round(preg.get('valorGlobalApi', 0), 2),
-        'data_enc': preg.get('dataEnc', ''), 
-        'objeto': obj_norm[:300], 
-        'link': preg.get('link', ''), 
-        'tipo_licitacao': tipo, 
-        'itens': lista_itens
+        'data_enc': preg.get('dataEnc', ''), 'objeto': obj_norm[:300], 
+        'link': preg.get('link', ''), 'tipo_licitacao': tipo, 'itens': lista_itens
     })
 
 print(f"✅ APROVADOS: {len(limpos)}")
