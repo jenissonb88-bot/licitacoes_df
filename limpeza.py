@@ -9,7 +9,7 @@ ARQDADOS = 'dadosoportunidades.json.gz'
 ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'
 ARQCSV = 'Exportar Dados.csv'
 
-print("🧹 LIMPEZA V21 - ME/EPP CORRIGIDO + DADOS DE RESULTADO")
+print("🧹 LIMPEZA V22 - CORREÇÃO ESTRUTURAL ME/EPP + RESULTADOS")
 
 def normalize(texto):
     if not texto: return ""
@@ -92,7 +92,6 @@ for preg in todos:
     if preg['id'] in duplicatas: continue
     duplicatas.add(preg['id'])
     
-    # Filtros Básicos
     try:
         if datetime.fromisoformat(preg.get('dataEnc','').replace('Z','+00:00')).replace(tzinfo=None) < data_limite: continue
     except: pass
@@ -102,11 +101,9 @@ for preg in todos:
 
     obj_norm = normalize(preg.get('objeto', ''))
     
-    # Blacklist (com exceção de Dietas)
     if any(t in obj_norm for t in BLACKLIST_NORM):
         if not ("DIETA" in obj_norm or "FORMULA" in obj_norm): continue
 
-    # --- VALIDAÇÃO ---
     aprovado = False
     
     obj_is_global = any(t in obj_norm for t in WHITELIST_GLOBAL_NORM)
@@ -122,7 +119,6 @@ for preg in todos:
     if uf in ESTADOS_NE:
         if obj_is_global or obj_is_ne or item_match_csv: aprovado = True
     else:
-        # Fora do NE, exige objeto Global (mais restrito)
         if obj_is_global: aprovado = True
     
     if not aprovado and "MATERIAL DE LIMPEZA" in obj_norm:
@@ -133,37 +129,48 @@ for preg in todos:
     if not aprovado: continue
 
     # --- PROCESSAMENTO DOS ITENS E RESULTADOS ---
-    # Cria mapa de resultados indexado pelo numeroItem
-    mapa_resultados = {r['numeroItem']: r for r in preg.get('resultadosraw', [])}
+    # Cria mapa de resultados indexado pelo numeroItem (convertido para int para garantir match)
+    mapa_resultados = {}
+    for r in preg.get('resultadosraw', []):
+        try:
+            n = int(r.get('numeroItem'))
+            mapa_resultados[n] = r
+        except: pass
     
     lista_itens = []
     count_me = 0
     
     for item in raw_itens:
-        # Lógica ME/EPP Reforçada
+        # Lógica ME/EPP Corrigida para Inteiro Direto
         bid = 4 # Default Amplo
         
-        # Tenta pegar do ID direto
-        if item.get('tipoBeneficioId') is not None:
-            bid = item.get('tipoBeneficioId')
-        # Tenta pegar do objeto
-        elif isinstance(item.get('tipoBeneficio'), dict):
-            bid = item['tipoBeneficio'].get('value')
+        raw_val = item.get('tipoBeneficio')
         
-        # Converte para int com segurança
+        # Se for um dicionário (estrutura antiga/rara)
+        if isinstance(raw_val, dict):
+             bid = raw_val.get('value') or raw_val.get('id')
+        # Se for um inteiro direto (estrutura nova/comum)
+        elif isinstance(raw_val, int):
+             bid = raw_val
+        # Se for None, tenta o ID
+        elif item.get('tipoBeneficioId') is not None:
+             bid = item.get('tipoBeneficioId')
+
         try:
             bid_int = int(bid)
-            # Códigos 1, 2 e 3 são ME/EPP
-            is_me = bid_int in [1, 2, 3]
+            # Códigos 1 (Exclusivo) e 3 (Cota Reservada) são benefícios claros
+            is_me = bid_int in [1, 3] 
         except:
             is_me = False 
             
         if is_me: count_me += 1
         
-        # Busca resultado se houver
-        res = mapa_resultados.get(item['numeroItem'])
+        # Link com Resultado
+        try:
+            n_item_int = int(item.get('numeroItem'))
+            res = mapa_resultados.get(n_item_int)
+        except: res = None
         
-        # Define Situação
         situacao_txt = "EM_ANDAMENTO"
         sit_compra = str(item.get('situacaoCompraItemName', '')).upper()
         
@@ -177,7 +184,7 @@ for preg in todos:
             situacao_txt = "DESERTO"
 
         lista_itens.append({
-            'n': item['numeroItem'],
+            'n': item.get('numeroItem'),
             'desc': item.get('descricao', ''),
             'qtd': float(item.get('quantidade', 0)),
             'un': item.get('unidadeMedida', ''),
