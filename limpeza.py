@@ -9,7 +9,7 @@ ARQDADOS = 'dadosoportunidades.json.gz'
 ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'
 ARQCSV = 'Exportar Dados.csv'
 
-print("🧹 LIMPEZA V20 - GEO-BLOCK + ME/EPP FIX")
+print("🧹 LIMPEZA V21 - ME/EPP CORRIGIDO + DADOS DE RESULTADO")
 
 def normalize(texto):
     if not texto: return ""
@@ -80,7 +80,7 @@ WHITELIST_NE_NORM = [normalize(x) for x in [
     "MATERIAL MEDICO-HOSPITALAR"
 ]]
 
-data_limite = datetime(2026, 1, 1, 0, 0, 0) # Data Corte
+data_limite = datetime(2026, 1, 1, 0, 0, 0)
 
 if not os.path.exists(ARQDADOS): print("❌ Base não encontrada."); exit()
 with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f: todos = json.load(f)
@@ -92,29 +92,26 @@ for preg in todos:
     if preg['id'] in duplicatas: continue
     duplicatas.add(preg['id'])
     
-    # Filtro Data
+    # Filtros Básicos
     try:
         if datetime.fromisoformat(preg.get('dataEnc','').replace('Z','+00:00')).replace(tzinfo=None) < data_limite: continue
     except: pass
 
-    # Filtro Geo
     uf = preg.get('uf', '').upper()
     if uf not in ESTADOS_ALVO: continue
 
     obj_norm = normalize(preg.get('objeto', ''))
     
-    # Blacklist (Exceto Dietas)
+    # Blacklist (com exceção de Dietas)
     if any(t in obj_norm for t in BLACKLIST_NORM):
         if not ("DIETA" in obj_norm or "FORMULA" in obj_norm): continue
 
-    # --- VALIDAÇÃO (Regra Endurecida) ---
+    # --- VALIDAÇÃO ---
     aprovado = False
     
-    # Checagem de Objeto (Global e Regional)
     obj_is_global = any(t in obj_norm for t in WHITELIST_GLOBAL_NORM)
     obj_is_ne = any(t in obj_norm for t in WHITELIST_NE_NORM)
     
-    # Checagem de Item (CSV)
     item_match_csv = False
     raw_itens = preg.get('itensraw', [])
     if csv_ativo and len(catalogo_produtos) > 0:
@@ -122,20 +119,12 @@ for preg in todos:
             if any(t in normalize(item.get('descricao', '')) for t in catalogo_produtos):
                 item_match_csv = True; break
 
-    # DECISÃO FINAL:
     if uf in ESTADOS_NE:
-        # No Nordeste, aceita se bater qualquer um (Objeto ou Item)
         if obj_is_global or obj_is_ne or item_match_csv: aprovado = True
     else:
-        # Fora do NE (Sudeste/CO/Norte), EXIGE que o Objeto seja GLOBAL
-        # (Isso elimina "Materiais Hospitalares" genéricos se não estiverem na Global)
-        if obj_is_global:
-            # Se o objeto é bom, aceita (com ou sem CSV)
-            aprovado = True
-        # Se quiser ser ainda mais rígido e exigir CSV para fora do NE, descomente abaixo:
-        # elif item_match_csv and obj_is_global: aprovado = True
+        # Fora do NE, exige objeto Global (mais restrito)
+        if obj_is_global: aprovado = True
     
-    # Fallback Álcool
     if not aprovado and "MATERIAL DE LIMPEZA" in obj_norm:
          for item in raw_itens:
             if "ALCOOL" in normalize(item.get('descricao', '')) and "70" in normalize(item.get('descricao', '')):
@@ -143,43 +132,60 @@ for preg in todos:
 
     if not aprovado: continue
 
-    # Processamento de Itens
+    # --- PROCESSAMENTO DOS ITENS E RESULTADOS ---
+    # Cria mapa de resultados indexado pelo numeroItem
     mapa_resultados = {r['numeroItem']: r for r in preg.get('resultadosraw', [])}
+    
     lista_itens = []
     count_me = 0
     
     for item in raw_itens:
-        # Lógica ME/EPP Refinada
-        # Tenta pegar value numérico de várias fontes
+        # Lógica ME/EPP Reforçada
         bid = 4 # Default Amplo
         
-        # Fonte 1: ID direto
+        # Tenta pegar do ID direto
         if item.get('tipoBeneficioId') is not None:
             bid = item.get('tipoBeneficioId')
-        # Fonte 2: Objeto
+        # Tenta pegar do objeto
         elif isinstance(item.get('tipoBeneficio'), dict):
             bid = item['tipoBeneficio'].get('value')
         
+        # Converte para int com segurança
         try:
-            bid = int(bid)
-            is_me = bid in [1, 2, 3]
+            bid_int = int(bid)
+            # Códigos 1, 2 e 3 são ME/EPP
+            is_me = bid_int in [1, 2, 3]
         except:
-            is_me = False # Em caso de dúvida, não marca
+            is_me = False 
             
         if is_me: count_me += 1
         
+        # Busca resultado se houver
         res = mapa_resultados.get(item['numeroItem'])
         
+        # Define Situação
+        situacao_txt = "EM_ANDAMENTO"
+        sit_compra = str(item.get('situacaoCompraItemName', '')).upper()
+        
+        if res:
+            situacao_txt = "HOMOLOGADO"
+        elif "CANCELADO" in sit_compra or "ANULADO" in sit_compra:
+            situacao_txt = "CANCELADO"
+        elif "FRACASSADO" in sit_compra:
+            situacao_txt = "FRACASSADO"
+        elif "DESERTO" in sit_compra:
+            situacao_txt = "DESERTO"
+
         lista_itens.append({
             'n': item['numeroItem'],
             'desc': item.get('descricao', ''),
-            'qtd': item.get('quantidade', 0),
+            'qtd': float(item.get('quantidade', 0)),
             'un': item.get('unidadeMedida', ''),
-            'valUnit': item.get('valorUnitarioEstimado', 0),
+            'valUnit': float(item.get('valorUnitarioEstimado', 0)),
             'me_epp': is_me,
-            'situacao': "HOMOLOGADO" if res else "EM_ANDAMENTO",
+            'situacao': situacao_txt,
             'fornecedor': res.get('razaoSocial') if res else None,
-            'valHomologado': res.get('valorUnitarioHomologado', 0) if res else 0
+            'valHomologado': float(res.get('valorUnitarioHomologado', 0)) if res else 0
         })
 
     tipo = "AMPLO"
@@ -188,12 +194,19 @@ for preg in todos:
         elif count_me > 0: tipo = "PARCIAL"
 
     limpos.append({
-        'id': preg['id'], 'uf': uf, 'cidade': preg.get('cidade', ''),
-        'orgao': preg.get('orgao', ''), 'unidade': preg.get('unidadeCompradora', ''),
-        'uasg': preg.get('uasg', ''), 'edital': preg.get('editaln', ''),
+        'id': preg['id'], 
+        'uf': uf, 
+        'cidade': preg.get('cidade', ''),
+        'orgao': preg.get('orgao', ''), 
+        'unidade': preg.get('unidadeCompradora', ''),
+        'uasg': preg.get('uasg', ''), 
+        'edital': preg.get('editaln', ''),
         'valor_estimado': round(preg.get('valorGlobalApi', 0), 2),
-        'data_enc': preg.get('dataEnc', ''), 'objeto': obj_norm[:300], 
-        'link': preg.get('link', ''), 'tipo_licitacao': tipo, 'itens': lista_itens
+        'data_enc': preg.get('dataEnc', ''), 
+        'objeto': obj_norm[:300], 
+        'link': preg.get('link', ''), 
+        'tipo_licitacao': tipo, 
+        'itens': lista_itens
     })
 
 print(f"✅ APROVADOS: {len(limpos)}")
