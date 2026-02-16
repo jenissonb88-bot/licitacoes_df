@@ -9,29 +9,31 @@
         body { background-color: #f4f7f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         .card-licitacao { border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 20px; border: none; }
         .header-card { background-color: #004a99; color: white; padding: 12px 15px; border-radius: 12px 12px 0 0; }
-        .badge-uf { background-color: #ffc107; color: #212529; font-weight: bold; padding: 3px 8px; border-radius: 4px; }
+        .badge-uf { background-color: #000; color: #fff; font-weight: bold; padding: 3px 8px; border-radius: 4px; }
         
-        /* Badges e Cores */
-        .badge-exclusivo { background-color: #198754; color: white; }
-        .badge-parcial { background-color: #fd7e14; color: white; }
-        .badge-amplo { background-color: #6c757d; color: white; }
+        /* TARJAS DE STATUS DO PREGÃO */
+        .badge-amplo { background-color: #198754; color: white; font-weight: bold; padding: 5px 12px; } 
+        .badge-exclusivo { background-color: #dc3545; color: white; font-weight: bold; padding: 5px 12px; } 
+        .badge-parcial { background-color: #ffc107; color: #212529; font-weight: bold; padding: 5px 12px; } 
+
+        /* CORES DA EXCLUSIVIDADE DO ITEM */
+        .benef-sim { color: #dc3545; font-weight: bold; } /* Vermelho: SIM (Exclusivo) */
+        .benef-nao { color: #198754; font-weight: bold; } /* Verde: NÃO (Amplo) */
 
         /* Estilos da Modal e Tabela */
         .modal-xl { max-width: 95%; }
         .table-itens { font-size: 0.85em; }
-        .val-estimado { background-color: #fff9db; font-weight: bold; }
-        .val-homologado { background-color: #e7f1ff; font-weight: bold; }
+        .val-estimado { background-color: #fff9db; font-weight: bold; color: #856404; }
+        .val-homologado { background-color: #e7f1ff; font-weight: bold; color: #084298; }
         .val-total { background-color: #d1e7dd; font-weight: bold; color: #0f5132; }
         
         .header-fornecedor { background-color: #e9ecef; font-weight: bold; color: #004a99; }
-        .header-status { background-color: #f8f9fa; font-weight: bold; text-align: center; color: #495057; text-transform: uppercase; font-size: 0.8em; }
-        .header-falhas { background-color: #f8d7da; font-weight: bold; color: #842029; text-align: center; }
+        .header-status-aguardando { background-color: #fff3cd; font-weight: bold; text-align: center; color: #856404; font-size: 0.85em; }
+        .header-falhas { background-color: #f8d7da; font-weight: bold; color: #842029; text-align: center; font-size: 0.85em; }
 
-        /* Paginação */
         .pagination-container { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 30px; padding-bottom: 50px; }
-        .input-jump { width: 60px; text-align: center; }
-        
-        .filter-label { font-size: 0.75rem; font-weight: bold; color: #555; margin-bottom: 2px; display: block; }
+        .input-jump { width: 65px; text-align: center; }
+        .filter-label { font-size: 0.72rem; font-weight: bold; color: #004a99; margin-bottom: 2px; display: block; text-transform: uppercase; }
     </style>
 </head>
 <body>
@@ -39,7 +41,7 @@
 <div class="container-fluid px-4 py-4">
     <h2 class="mb-4 text-center">🔭 Monitor Sniper Pharma - Drogafonte</h2>
     
-    <div class="row g-2 mb-4 p-3 bg-white rounded shadow-sm">
+    <div class="row g-2 mb-4 p-3 bg-white rounded shadow-sm border">
         <div class="col-md-2">
             <label class="filter-label">DATA ENCERRAMENTO</label>
             <input type="date" id="filterData" class="form-control form-control-sm">
@@ -76,12 +78,12 @@
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title" id="modalTitle">Detalhes</h5>
+                <h5 class="modal-title" id="modalTitle">Detalhes da Licitação</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="modalBody"></div>
-            <div class="modal-footer">
-                <a id="linkPncp" href="#" target="_blank" class="btn btn-primary">Abrir no Portal PNCP</a>
+            <div class="modal-footer bg-light">
+                <a id="linkPncp" href="#" target="_blank" class="btn btn-primary fw-bold">Abrir no Portal PNCP</a>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
             </div>
         </div>
@@ -93,7 +95,7 @@
 let allData = [];
 let filteredData = [];
 let currentPage = 1;
-const itemsPerPage = 10;
+const itemsPerPage = 12;
 const myModal = new bootstrap.Modal(document.getElementById('modalDetalhes'));
 
 async function loadData() {
@@ -105,7 +107,7 @@ async function loadData() {
         allData.sort((a, b) => new Date(b.data_enc) - new Date(a.data_enc));
         filteredData = [...allData];
         renderMonitor();
-    } catch (e) { console.error("Erro:", e); }
+    } catch (e) { console.error("Erro no carregamento:", e); }
 }
 
 function renderMonitor() {
@@ -116,6 +118,8 @@ function renderMonitor() {
     items.forEach(preg => {
         const div = document.createElement('div');
         div.className = 'card card-licitacao';
+        const statusClass = `badge-${preg.tipo_licitacao.toLowerCase()}`;
+        
         div.innerHTML = `
             <div class="header-card d-flex justify-content-between">
                 <span><span class="badge badge-uf me-2">${preg.uf}</span> <strong>${preg.orgao}</strong></span>
@@ -126,16 +130,17 @@ function renderMonitor() {
                 <p class="mb-2"><strong>Objeto:</strong> ${preg.objeto}</p>
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <span class="badge badge-${preg.tipo_licitacao.toLowerCase()} me-2">${preg.tipo_licitacao}</span>
+                        <span class="badge ${statusClass} me-2">${preg.tipo_licitacao}</span>
                         <span class="badge bg-light text-dark border">Itens: ${preg.itens.length}</span>
                     </div>
                     <h5 class="mb-0 text-primary">Est: R$ ${preg.valor_estimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</h5>
-                    <button class="btn btn-sm btn-outline-primary" onclick="showPopup('${preg.id}')">Ver Detalhes</button>
+                    <button class="btn btn-sm btn-outline-primary fw-bold" onclick="showPopup('${preg.id}')">VER DETALHES</button>
                 </div>
             </div>`;
         content.appendChild(div);
     });
-    document.getElementById('pageInfo').innerText = `Página ${currentPage} de ${Math.ceil(filteredData.length / itemsPerPage)}`;
+    const totalPages = Math.ceil(filteredData.length / itemsPerPage) || 1;
+    document.getElementById('pageInfo').innerText = `Página ${currentPage} de ${totalPages}`;
 }
 
 function showPopup(id) {
@@ -143,45 +148,45 @@ function showPopup(id) {
     document.getElementById('modalTitle').innerText = `${preg.uf} - ${preg.orgao} (${preg.edital})`;
     document.getElementById('linkPncp').href = preg.link;
 
-    // 1. SEPARAÇÃO EM GRUPOS
     const aguardando = preg.itens.filter(i => !i.fornecedor && !['FRACASSADO', 'DESERTO', 'CANCELADO'].includes(i.situacao));
     const falhas = preg.itens.filter(i => ['FRACASSADO', 'DESERTO', 'CANCELADO'].includes(i.situacao));
-    
-    // 2. AGRUPAMENTO POR FORNECEDOR (Homologados)
     const ganhos = {};
+
     preg.itens.filter(i => i.fornecedor && !['FRACASSADO', 'DESERTO', 'CANCELADO'].includes(i.situacao)).forEach(it => {
         if (!ganhos[it.fornecedor]) ganhos[it.fornecedor] = { itens: [], total: 0 };
         ganhos[it.fornecedor].itens.push(it);
         ganhos[it.fornecedor].total += (it.qtd * it.valHomologado);
     });
 
-    let html = `<table class="table table-sm table-bordered table-itens">
-        <thead class="table-dark">
-            <tr>
-                <th>Item</th><th>Descrição</th><th>Qtd/Un</th>
-                <th class="text-center">Est. Unit</th><th class="text-center">Homol. Unit</th>
-                <th class="text-center">Total Homol.</th>
-            </tr>
-        </thead><tbody>`;
+    let html = `
+        <div class="alert alert-secondary p-2 small mb-3">
+            <strong>ÓRGÃO:</strong> ${preg.orgao} | <strong>UNIDADE:</strong> ${preg.unidade}<br>
+            <strong>OBJETO:</strong> ${preg.objeto}
+        </div>
+        <table class="table table-sm table-bordered table-itens">
+            <thead class="table-dark">
+                <tr>
+                    <th class="text-center">Item</th><th>Descrição</th><th class="text-center">Exclusivo ME/EPP?</th>
+                    <th class="text-center">Qtd/Un</th><th class="text-center">Est. Unit</th>
+                    <th class="text-center">Homol. Unit</th><th class="text-center">Total Item</th>
+                </tr>
+            </thead><tbody>`;
 
-    // EXIBIR PRIMEIRO: AGUARDANDO
     if (aguardando.length) {
-        html += `<tr><td colspan="6" class="header-status">⏳ AGUARDANDO RESULTADO</td></tr>`;
+        html += `<tr><td colspan="7" class="header-status-aguardando">⏳ ITENS AGUARDANDO RESULTADO</td></tr>`;
         aguardando.forEach(it => html += renderRow(it));
     }
 
-    // EXIBIR DEPOIS: HOMOLOGADOS (Agrupados por Fornecedor)
     for (const [forn, dados] of Object.entries(ganhos)) {
         html += `<tr class="header-fornecedor">
-            <td colspan="5">🏢 FORNECEDOR: ${forn}</td>
-            <td class="text-center">Total: R$ ${dados.total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+            <td colspan="6">🏢 FORNECEDOR: ${forn}</td>
+            <td class="text-center">Soma: R$ ${dados.total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
         </tr>`;
         dados.itens.forEach(it => html += renderRow(it));
     }
 
-    // EXIBIR POR ÚLTIMO: FALHAS
     if (falhas.length) {
-        html += `<tr><td colspan="6" class="header-falhas">⚠️ FRACASSADOS / DESERTOS / CANCELADOS</td></tr>`;
+        html += `<tr><td colspan="7" class="header-falhas">⚠️ ITENS FRACASSADOS / DESERTOS / CANCELADOS</td></tr>`;
         falhas.forEach(it => html += renderRow(it, 'opacity-75 bg-light'));
     }
 
@@ -192,32 +197,36 @@ function showPopup(id) {
 
 function renderRow(it, css = '') {
     const total = it.valHomologado ? (it.qtd * it.valHomologado) : 0;
+    
+    // REGRA SOLICITADA: SIM (Vermelho) para Exclusivo | NÃO (Verde) para Amplo
+    const isExclusivo = it.me_epp || [1, 2, 3].includes(parseInt(it.benef));
+    const benefTxt = isExclusivo ? 'SIM' : 'NÃO';
+    const benefClass = isExclusivo ? 'benef-sim' : 'benef-nao';
+
     return `<tr class="${css}">
-        <td class="text-center">${it.n}</td>
+        <td class="text-center fw-bold">${it.n}</td>
         <td>${it.desc}</td>
+        <td class="text-center ${benefClass}">${benefTxt}</td>
         <td class="text-center">${it.qtd} ${it.un}</td>
         <td class="val-estimado text-center">R$ ${it.valUnit.toFixed(4)}</td>
-        <td class="val-homologado text-center">${it.valHomologado ? 'R$ '+it.valHomologado.toFixed(4) : '---'}</td>
+        <td class="val-homologado text-center">${it.valHomologado > 0 ? 'R$ '+it.valHomologado.toFixed(4) : '---'}</td>
         <td class="val-total text-center">${total > 0 ? 'R$ '+total.toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '---'}</td>
     </tr>`;
 }
 
-// LOGICA DE FILTROS COMBINADOS
 function filtrar() {
-    const dataVal = document.getElementById('filterData').value;
-    const editalVal = document.getElementById('filterEdital').value.toUpperCase();
-    const orgaoVal = document.getElementById('filterOrgao').value.toUpperCase();
-    const locVal = document.getElementById('filterLoc').value.toUpperCase();
+    const d = document.getElementById('filterData').value;
+    const e = document.getElementById('filterEdital').value.toUpperCase();
+    const o = document.getElementById('filterOrgao').value.toUpperCase();
+    const l = document.getElementById('filterLoc').value.toUpperCase();
 
     filteredData = allData.filter(p => {
-        const matchData = !dataVal || p.data_enc.includes(dataVal);
-        const matchEdital = !editalVal || p.edital.toUpperCase().includes(editalVal) || p.uasg.includes(editalVal);
-        const matchOrgao = !orgaoVal || p.orgao.toUpperCase().includes(orgaoVal) || p.unidade.toUpperCase().includes(orgaoVal);
-        const matchLoc = !locVal || p.cidade.toUpperCase().includes(locVal) || p.uf.toUpperCase().includes(locVal);
-        return matchData && matchEdital && matchOrgao && matchLoc;
+        return (!d || p.data_enc.includes(d)) &&
+               (!e || p.edital.includes(e) || p.uasg.includes(e)) &&
+               (!o || p.orgao.toUpperCase().includes(o) || p.unidade.toUpperCase().includes(o)) &&
+               (!l || p.cidade.toUpperCase().includes(l) || p.uf.toUpperCase().includes(l));
     });
-    currentPage = 1;
-    renderMonitor();
+    currentPage = 1; renderMonitor();
 }
 
 document.querySelectorAll('input').forEach(el => el.oninput = filtrar);
@@ -225,7 +234,8 @@ document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { curr
 document.getElementById('nextPage').onclick = () => { if(currentPage * itemsPerPage < filteredData.length) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
 document.getElementById('btnJump').onclick = () => {
     const val = parseInt(document.getElementById('jumpInput').value);
-    if(val >= 1 && val <= Math.ceil(filteredData.length / itemsPerPage)) { currentPage = val; renderMonitor(); window.scrollTo(0,0); }
+    const max = Math.ceil(filteredData.length / itemsPerPage);
+    if(val >= 1 && val <= max) { currentPage = val; renderMonitor(); window.scrollTo(0,0); }
 };
 
 loadData();
