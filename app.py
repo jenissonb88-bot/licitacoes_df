@@ -13,7 +13,7 @@ import time
 
 # Configurações
 ARQDADOS = 'dadosoportunidades.json.gz'
-MAXWORKERS = 5  # Aumentei levemente para agilizar a busca extra
+MAXWORKERS = 5
 
 def normalize(t):
     return ''.join(c for c in unicodedata.normalize('NFD', str(t) or '').upper()
@@ -26,8 +26,7 @@ def formatar_data_pncp(data_obj):
 
 def criar_sessao():
     s = requests.Session()
-    # Retry mais agressivo para garantir que pegue o resultado
-    retries = Retry(total=8, backoff_factor=0.5, status_forcelist=[429, 500, 502, 503, 504])
+    retries = Retry(total=5, backoff_factor=0.5, status_forcelist=[429, 500, 502, 503, 504])
     s.mount('https://', HTTPAdapter(max_retries=retries))
     return s
 
@@ -52,7 +51,6 @@ def buscar_todos_resultados(session, cnpj, ano, seq):
     while True:
         url = f'https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/resultados'
         try:
-            # Timeout maior para resultados, pois é onde costuma falhar
             r = session.get(url, params={'pagina': pag, 'tamanhoPagina': 50}, timeout=20)
             if r.status_code != 200: break
             dados = r.json()
@@ -81,80 +79,111 @@ def e_pharma(lic):
     
     return any(t in obj_norm for t in termos_gatilho)
 
-def precisa_processar_profundo(lic_nova, lic_banco):
-    """
-    Decide se devemos gastar tempo baixando itens e resultados.
-    """
-    # 1. Se não temos no banco, PRECISA baixar.
-    if not lic_banco: 
-        return True
-    
-    # 2. Se a data de atualização do PNCP mudou, PRECISA baixar.
-    dt_atual = lic_banco.get('dataAtualizacaoPncp')
-    dt_nova = lic_nova.get('dataAtualizacaoPncp') or lic_nova.get('dataAtualizacao')
-    if dt_nova and dt_atual and dt_nova != dt_atual:
-        return True
-
-    # 3. REGRA DE OURO (CORREÇÃO DE RESULTADOS):
-    # Se já temos no banco, mas NÃO TEMOS RESULTADOS salvos,
-    # FORÇAMOS uma nova busca para ver se saiu algo novo.
-    resultados_salvos = lic_banco.get('resultadosraw', [])
-    if not resultados_salvos:
-        # Só força se não for muito antigo (ex: dataEnc existe)
-        return True
-        
-    return False
-
 def processar_licitacao(lic_resumo, session, banco):
     try:
         id_lic = f"{lic_resumo['orgaoEntidade']['cnpj']}{lic_resumo['anoCompra']}{lic_resumo['sequencialCompra']}"
         lic_banco = banco.get(id_lic)
 
-        # Filtro rápido de objeto
+        # Filtro de interesse
         if not e_pharma(lic_resumo): return None
 
-        # Verifica se precisamos gastar API call
-        if not precisa_processar_profundo(lic_resumo, lic_banco):
-            return None # Pula, já temos atualizado
+        # Verificação de Atualização (Data ou Falta de Itens)
+        precisa_baixar = False
+        if not lic_banco: 
+            precisa_baixar = True
+        else:
+            dt_atual = lic_banco.get('dt_upd_pncp')
+            dt_nova = lic_resumo.get('dataAtualizacaoPncp') or lic_resumo.get('dataAtualizacao')
+            if dt_nova and dt_atual and dt_nova != dt_atual:
+                precisa_baixar = True
+            # Se já existe mas não tem itens (erro anterior), baixa de novo
+            elif not lic_banco.get('itens'):
+                precisa_baixar = True
 
-        # Se chegou aqui, vamos baixar tudo
+        if not precisa_baixar: return None
+
+        # --- BAIXANDO DADOS ---
         cnpj = lic_resumo['orgaoEntidade']['cnpj']
         ano = lic_resumo['anoCompra']
         seq = lic_resumo['sequencialCompra']
+        
+        # 1. Busca Itens Brutos
+        itens_raw = buscar_todos_itens(session, cnpj, ano, seq)
+        if not itens_raw: return None
+
+        # 2. Busca Resultados Brutos
+        resultados_raw = buscar_todos_resultados(session, cnpj, ano, seq)
+        
+        # 3. Mapeia Resultados para acesso rápido (Dict por numeroItem)
+        mapa_res = {}
+        for r in resultados_raw:
+            try: mapa_res[int(r['numeroItem'])] = r
+            except: pass
+
+        # 4. CONSTRUÇÃO DA LISTA OTIMIZADA (AQUI ESTÁ A MÁGICA DA REDUÇÃO)
+        itens_limpos = []
+        for item in itens_raw:
+            try:
+                num = int(item.get('numeroItem'))
+                
+                # Tratamento ME/EPP na fonte
+                bid = 4
+                if item.get('tipoBeneficioId') is not None: bid = item.get('tipoBeneficioId')
+                elif isinstance(item.get('tipoBeneficio'), dict): bid = item['tipoBeneficio'].get('value')
+                elif isinstance(item.get('tipoBeneficio'), int): bid = item.get('tipoBeneficio')
+                
+                # Dados do Resultado (se houver)
+                res_match = mapa_res.get(num)
+                sit_txt = str(item.get('situacaoCompraItemName', '')).upper()
+                
+                status_final = "ABERTO" # Default
+                if res_match: status_final = "HOMOLOGADO"
+                elif "CANCELADO" in sit_txt: status_final = "CANCELADO"
+                elif "FRACASSADO" in sit_txt: status_final = "FRACASSADO"
+                elif "DESERTO" in sit_txt: status_final = "DESERTO"
+
+                # Objeto Item Magro
+                item_obj = {
+                    'n': num,
+                    'd': item.get('descricao', ''),
+                    'q': float(item.get('quantidade', 0)),
+                    'u': item.get('unidadeMedida', ''),
+                    'v_est': float(item.get('valorUnitarioEstimado', 0)),
+                    'benef': bid, # Salva o código cru (1, 2, 3, 4)
+                    'sit': status_final
+                }
+
+                # Se tem resultado, adiciona dados do vencedor no próprio item
+                if res_match:
+                    item_obj['res_forn'] = res_match.get('razaoSocial')
+                    item_obj['res_val'] = float(res_match.get('valorUnitarioHomologado', 0))
+
+                itens_limpos.append(item_obj)
+            except: continue
+
+        # 5. Monta o Objeto Final do Pregão (Sem RAW data)
         unid = lic_resumo.get('unidadeOrgao', {})
         
-        # Estrutura
         dados_tratados = {
             'id': id_lic,
-            'dataPub': lic_resumo.get('dataPublicacaoPncp'),
-            'dataEnc': lic_resumo.get('dataEncerramentoProposta'),
-            'dataAtualizacaoPncp': lic_resumo.get('dataAtualizacao'),
+            'dt_pub': lic_resumo.get('dataPublicacaoPncp'),
+            'dt_enc': lic_resumo.get('dataEncerramentoProposta'),
+            'dt_upd_pncp': lic_resumo.get('dataAtualizacao'),
             'uf': unid.get('ufSigla'),
-            'cidade': unid.get('municipioNome'),
-            'orgao': lic_resumo['orgaoEntidade']['razaoSocial'],
-            'unidadeCompradora': unid.get('nomeUnidade', 'Não Informada'),
-            'objeto': lic_resumo.get('objetoCompra') or lic_resumo.get('objeto', ''),
-            'editaln': f"{str(lic_resumo.get('numeroCompra', '')).zfill(5)}/{ano}",
+            'cid': unid.get('municipioNome'),
+            'org': lic_resumo['orgaoEntidade']['razaoSocial'],
+            'unid_nome': unid.get('nomeUnidade', 'Não Informada'),
+            'obj': lic_resumo.get('objetoCompra') or lic_resumo.get('objeto', ''),
+            'edit': f"{str(lic_resumo.get('numeroCompra', '')).zfill(5)}/{ano}",
             'uasg': unid.get('codigoUnidade', '---'),
             'link': f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
-            'valorGlobalApi': float(lic_resumo.get('valorTotalEstimado') or 0),
-            'itensraw': [],
-            'resultadosraw': [],
-            'ultimaAtualizacao': datetime.now().isoformat()
+            'val_tot': float(lic_resumo.get('valorTotalEstimado') or 0),
+            'itens': itens_limpos, # Lista otimizada
+            'timestamp': datetime.now().isoformat()
         }
         
-        # Busca Itens
-        itensraw = buscar_todos_itens(session, cnpj, ano, seq)
-        if not itensraw: return None
-        dados_tratados['itensraw'] = itensraw
-        
-        # Busca Resultados (AGORA OBRIGATÓRIO TENTAR SEMPRE QUE ENTRAR AQUI)
-        resultadosraw = buscar_todos_resultados(session, cnpj, ano, seq)
-        dados_tratados['resultadosraw'] = resultadosraw
-        
         return dados_tratados
-    except Exception as e:
-        return None
+    except: return None
 
 def buscar_dia_completo(session, data_obj, banco):
     if isinstance(data_obj, date):
@@ -180,32 +209,23 @@ def buscar_dia_completo(session, data_obj, banco):
             total_paginas = dados.get('totalPaginas', pag) or 999
             
             if not lics: break
-            
-            # Filtra só pharma antes de processar threads
             pharma_lics = [l for l in lics if e_pharma(l)]
             
             with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
-                # Passamos o banco para dentro da função para decidir lá se baixa ou não
                 futuros = [exe.submit(processar_licitacao, l, session, banco) for l in pharma_lics]
-                
                 for futuro in concurrent.futures.as_completed(futuros):
                     try:
                         res = futuro.result()
                         if res:
-                            # Se retornou algo, é porque baixou dados novos/atualizados
                             banco[res['id']] = res
                             total_capturados += 1
-                            
-                            n_res = len(res['resultadosraw'])
-                            status = "ATUALIZADO"
-                            if n_res > 0: status += " COM RESULTADOS"
-                            
-                            print(f"✅ {status}: {res['uf']} - {res['editaln']} (Itens: {len(res['itensraw'])} | Res: {n_res})")
+                            # Conta quantos tem resultado
+                            n_com_res = sum(1 for i in res['itens'] if i.get('sit') == 'HOMOLOGADO')
+                            print(f"✅ SALVO: {res['uf']} - {res['edit']} (Itens: {len(res['itens'])} | Homol: {n_com_res})")
                     except: pass
 
             if len(lics) < 50 or pag >= total_paginas: break
             pag += 1
-            # Pausa suave
             time.sleep(0.5)
         except Exception as e:
             print(f"Erro paginação: {e}")
@@ -214,7 +234,7 @@ def buscar_dia_completo(session, data_obj, banco):
     return total_capturados
 
 if __name__ == '__main__':
-    print(f"🚀 SNIPER PHARMA V-APP 2.3 (Resultados Agressivos)")
+    print(f"🚀 SNIPER PHARMA V3.0 (Slim & Fast)")
     parser = argparse.ArgumentParser()
     parser.add_argument('--start', type=str); parser.add_argument('--end', type=str)
     args = parser.parse_args()
@@ -222,15 +242,13 @@ if __name__ == '__main__':
     session = criar_sessao()
     banco = {}
     
-    # Carrega banco existente (Tenta recuperar dados anteriores)
     if os.path.exists(ARQDADOS):
         try:
             with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
                 d = json.load(f)
                 banco = {i['id']: i for i in (d if isinstance(d, list) else [])}
             print(f"📦 Carregados do Cache: {len(banco)}")
-        except: 
-            print("⚠️ Cache ilegível ou vazio, iniciando do zero.")
+        except: pass
 
     datas = []
     if args.start and args.end:
@@ -247,7 +265,7 @@ if __name__ == '__main__':
         total += buscar_dia_completo(session, dia, banco)
 
     if total > 0 or datas:
-        print("\n💾 Salvando...")
+        print("\n💾 Salvando (Comprimido)...")
         if "/" in ARQDADOS: os.makedirs(os.path.dirname(ARQDADOS), exist_ok=True)
         with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
             json.dump(list(banco.values()), f, ensure_ascii=False)
