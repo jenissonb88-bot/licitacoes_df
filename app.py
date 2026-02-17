@@ -19,14 +19,17 @@ ARQ_CATALOGO = 'Exportar Dados.csv'
 MAXWORKERS = 10 
 DATA_CORTE_FIXA = datetime(2025, 12, 1)
 
+# --- GEOGRAFIA ---
 NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
-EXT_ESTADOS = ['ES', 'RJ', 'SP', 'MG', 'GO', 'MT', 'MS', 'DF', 'AM', 'PA', 'TO']
+
+# BLOQUEIO TOTAL (Nem perde tempo baixando)
+ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
 
 def normalize(t):
     if not t: return ""
     return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
 
-# --- CARREGAMENTO DO CATÁLOGO (MIRA LASER) ---
+# --- CARREGAMENTO DO CATÁLOGO ---
 CATALOGO_TERMOS = set()
 if os.path.exists(ARQ_CATALOGO):
     try:
@@ -52,7 +55,14 @@ if os.path.exists(ARQ_CATALOGO):
             except Exception: break
     except: print("⚠️ Aviso: Não foi possível ler o catálogo CSV.")
 
-# --- VETOS (OS MUROS DE CONTENÇÃO) ---
+# --- LISTAS DE PALAVRAS-CHAVE ---
+
+# 1. ITENS UNIVERSAIS NE (Passam por cima de tudo no Nordeste)
+TERMOS_UNIVERSAIS_NE = [
+    "FRALDA", "ABSORVENTE", "ALCOOL 70", "ALCOOL ETILICO", "ALCOOL GEL", "ALCOOL EM GEL"
+]
+
+# 2. VETOS (Muros de Contenção)
 VETOS_ALIMENTACAO = [normalize(x) for x in [
     "ALIMENTACAO ESCOLAR", "GENEROS ALIMENTICIOS", "MERENDA", "PNAE", "PERECIVEIS", 
     "HORTIFRUTI", "CARNES", "PANIFICACAO", "CESTAS BASICAS", "LANCHE", "REFEICOES", 
@@ -61,7 +71,7 @@ VETOS_ALIMENTACAO = [normalize(x) for x in [
 
 VETOS_EDUCACAO = [normalize(x) for x in [
     "MATERIAL ESCOLAR", "PEDAGOGICO", "DIDATICO", "BRINQUEDOS", "LIVROS", 
-    "TRANSPORTE ESCOLAR", "KIT ALUNO", "REDE MUNICIPAL DE ENSINO", "SECRETARIA DE EDUCACAO"
+    "TRANSPORTE ESCOLAR", "KIT ALUNO", "REDE MUNICIPAL DE ENSINO"
 ]]
 
 VETOS_OPERACIONAL = [normalize(x) for x in [
@@ -76,21 +86,17 @@ VETOS_ADM = [normalize(x) for x in ["ADESAO", "INTENCAO", "IRP", "CREDENCIAMENTO
 
 TODOS_VETOS = VETOS_ALIMENTACAO + VETOS_EDUCACAO + VETOS_OPERACIONAL + VETOS_ADM
 
-# --- ALVOS (OS ÍMÃS) ---
-
-# 1. Medicamentos (Interesse Nacional - Passa em qualquer lugar)
+# 3. ALVOS PADRÃO
 WL_MEDICAMENTOS = [normalize(x) for x in [
     "MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOAL", 
     "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA", "ANTIBIOTICO"
 ]]
 
-# 2. Nutrição Clínica (Regionalizado NE)
 WL_NUTRI_CLINICA = [normalize(x) for x in [
     "NUTRICAO ENTERAL", "FORMULA INFANTIL", "SUPLEMENTO ALIMENTAR", 
     "DIETA ENTERAL", "DIETA PARENTERAL", "NUTRICAO CLINICA"
 ]]
 
-# 3. Materiais (Regionalizado NE)
 WL_MATERIAIS_NE = [normalize(x) for x in [
     "MATERIAL MEDIC", "INSUMO HOSPITALAR", "MMH", "SERINGA", "AGULHA", 
     "GAZE", "ATADURA", "SONDA", "CATETER", "EQUIPO", "LUVAS DE PROCEDIMENTO", "MASCARA CIRURGICA"
@@ -106,16 +112,23 @@ def criar_sessao():
 def veta_edital(obj_raw, uf):
     obj = normalize(obj_raw)
     
+    # SALVA-VIDAS UNIVERSAL NE:
+    # Se for do NE e tiver Fralda, Absorvente ou Álcool 70, IGNORA OS VETOS.
+    if uf in NE_ESTADOS:
+        if any(univ in obj for univ in TERMOS_UNIVERSAIS_NE):
+            return False # Não veta!
+
     # Valida Vetos Absolutos
     for v in TODOS_VETOS:
         if v in obj:
-            # Proteção para Dietas no NE: Salva se não for "Escolar"
+            # Proteção para Dietas no NE
             if "NUTRICAO" in v or "ALIMENT" in v:
                 if any(bom in obj for bom in WL_NUTRI_CLINICA) and "ESCOLAR" not in obj:
                     return False
             return True
             
     # Veto Contextual de Limpeza/Higiene
+    # Se tiver Álcool 70 (Universal NE), já passou pelo Salva-Vidas acima.
     if "LIMPEZA" in obj or "HIGIENE" in obj:
         if not any(x in obj for x in ["HOSPITALAR", "UBS", "SAUDE", "CLINICA"]):
             return True
@@ -138,6 +151,9 @@ def processar_licitacao(lic, session):
         if not isinstance(uo, dict): uo = {}
         uf = uo.get('ufSigla', '').upper()
         
+        # 1.1 VETO GEOGRÁFICO TOTAL (Economia de recurso)
+        if uf in ESTADOS_BLOQUEADOS: return ('VETADO', None, 0, 0)
+
         dt_enc_str = lic.get('dataEncerramentoProposta')
         if not dt_enc_str: return ('ERRO', None, 0, 0)
         dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
@@ -146,19 +162,23 @@ def processar_licitacao(lic, session):
         # 2. Aplicação dos Vetos
         if veta_edital(obj_raw, uf): return ('VETADO', None, 0, 0)
 
-        # 3. Análise de Interesse (Lógica 7.1)
+        # 3. Análise de Interesse
         obj_norm = normalize(obj_raw)
         tem_interesse = False
         
-        # A. Medicamentos: Passa em TODO BRASIL
-        if any(t in obj_norm for t in WL_MEDICAMENTOS):
+        # A. Universais NE (Fralda, Absorvente, Alcool 70) - Prioridade Máxima no NE
+        if uf in NE_ESTADOS and any(t in obj_norm for t in TERMOS_UNIVERSAIS_NE):
+            tem_interesse = True
+
+        # B. Medicamentos: Passa em TODO BRASIL (exceto bloqueados)
+        elif any(t in obj_norm for t in WL_MEDICAMENTOS):
             tem_interesse = True
             
-        # B. Nutrição e Materiais: Passa APENAS NO NORDESTE
+        # C. Nutrição e Materiais: Passa APENAS NO NORDESTE
         elif uf in NE_ESTADOS and any(t in obj_norm for t in WL_MATERIAIS_NE + WL_NUTRI_CLINICA):
             tem_interesse = True
             
-        # C. Termos Genéricos de Saúde: Passa para verificar itens (pode ter item de catálogo)
+        # D. Termos Genéricos de Saúde (Para verificar itens)
         elif "SAUDE" in obj_norm or "HOSPITAL" in obj_norm:
             tem_interesse = True
 
@@ -172,7 +192,6 @@ def processar_licitacao(lic, session):
         if r_itens.status_code != 200: return ('ERRO', None, 0, 0)
         
         resp_json = r_itens.json()
-        # Adaptador Universal para listas/dicts
         if isinstance(resp_json, dict): itens_raw = resp_json.get('data', [])
         elif isinstance(resp_json, list): itens_raw = resp_json
         else: return ('IGNORADO', None, 0, 0)
@@ -189,11 +208,11 @@ def processar_licitacao(lic, session):
             desc = it.get('descricao', '')
             desc_norm = normalize(desc)
             
-            # Filtro Individual de Item (Remove lixo óbvio dentro de edital bom)
+            # Filtro Individual de Item 
+            # (Remove lixo óbvio, mas deixa Fralda/Alcool se for o caso)
             if any(v in desc_norm for v in ["ARROZ", "FEIJAO", "CARNE", "PNEU", "GASOLINA", "RODA", "LIVRO", "COPO", "CAFE", "ACUCAR"]):
                 continue
 
-            # Verifica Catálogo (Salva-vidas para itens fora do padrão)
             if any(term in desc_norm for term in CATALOGO_TERMOS):
                 tem_item_catalogo = True
             
@@ -219,12 +238,11 @@ def processar_licitacao(lic, session):
                 'res_val': safe_float(res.get('valorUnitarioHomologado')) if res else 0.0
             })
 
-        # 5. Validação Final (A Regra de Ouro Geográfica)
         if not itens_limpos: return ('IGNORADO', None, 0, 0)
         
-        # Se for fora do NE (SP, MG, Sul, etc.)
+        # 5. Validação Final (A Regra de Ouro Geográfica)
         if uf not in NE_ESTADOS:
-            # Só aceita se tiver item do Catálogo OU palavra MEDICAMENTO explícita no objeto
+            # Fora do NE: Só Medicamento explícito ou Catálogo
             if not tem_item_catalogo and not any(m in obj_norm for m in WL_MEDICAMENTOS):
                  return ('IGNORADO', None, 0, 0)
 
