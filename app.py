@@ -52,7 +52,6 @@ def veta_edital(obj_raw, uf):
     return False
 
 def safe_float(val):
-    """Converte valores nulos ou inválidos para 0.0 de forma segura"""
     try:
         if val is None: return 0.0
         return float(val)
@@ -61,25 +60,22 @@ def safe_float(val):
 
 def processar_licitacao(lic, session):
     try:
-        # Blindagem 1: O objeto licitação deve ser um dicionário
-        if not isinstance(lic, dict): return ('ERRO_FMT', None, 0, 0)
+        # PONTO DE FALHA 1: Estrutura básica
+        if not isinstance(lic, dict): return ('ERRO_ESTRUTURA_LIC', str(type(lic)), 0, 0)
         
         obj_raw = lic.get('objetoCompra') or "Sem Objeto"
         
-        # Blindagem 2: Unidade Orgão pode vir nula ou incompleta
         uo = lic.get('unidadeOrgao')
         if not isinstance(uo, dict): uo = {}
         uf = uo.get('ufSigla', '').upper()
         
-        # Filtro de Data
         dt_enc_str = lic.get('dataEncerramentoProposta')
-        if not dt_enc_str: return ('ERRO_DATA', None, 0, 0)
+        if not dt_enc_str: return ('ERRO_DATA_NULA', obj_raw, 0, 0)
         dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
         if dt_enc < DATA_CORTE_FIXA: return ('IGNORADO_DATA', None, 0, 0)
 
         if veta_edital(obj_raw, uf): return ('VETADO', None, 0, 0)
 
-        # Filtro de Interesse
         obj_norm = normalize(obj_raw)
         tem_interesse = False
         if any(t in obj_norm for t in WL_GLOBAL_MEDS + WL_GENERICO_SAUDE):
@@ -89,62 +85,66 @@ def processar_licitacao(lic, session):
             
         if not tem_interesse: return ('IGNORADO_INTERESSE', None, 0, 0)
 
-        # Captura de Itens
+        # Captura Itens
         cnpj, ano, seq = lic['orgaoEntidade']['cnpj'], lic['anoCompra'], lic['sequencialCompra']
         url_itens = f'https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens'
-        r_itens = session.get(url_itens, params={'pagina': 1, 'tamanhoPagina': 100}, timeout=20)
         
-        if r_itens.status_code != 200: return ('ERRO_API', None, 0, 0)
-        
-        # Blindagem 3: Garantir que a resposta da API é um JSON válido e contém lista
         try:
+            r_itens = session.get(url_itens, params={'pagina': 1, 'tamanhoPagina': 100}, timeout=20)
+            if r_itens.status_code != 200: return ('ERRO_API_STATUS', f"Status {r_itens.status_code}", 0, 0)
+            
+            # PONTO DE FALHA 2: JSON inválido ou estrutura inesperada
             resp_json = r_itens.json()
+            if not isinstance(resp_json, dict): return ('ERRO_JSON_NAO_DICT', str(type(resp_json)), 0, 0)
+            
             itens_raw = resp_json.get('data', [])
-        except:
-            return ('ERRO_JSON_ITENS', None, 0, 0)
+            if itens_raw is None: itens_raw = [] # Proteção extra
+            
+            if not isinstance(itens_raw, list): return ('ERRO_DATA_NAO_LISTA', str(type(itens_raw)), 0, 0)
+            if not itens_raw: return ('IGNORADO_VAZIO', None, 0, 0)
 
-        if not isinstance(itens_raw, list) or not itens_raw: 
-            return ('IGNORADO_VAZIO', None, 0, 0)
+        except Exception as e:
+             return ('ERRO_REQ_ITENS', f"{obj_raw[:30]}... | {str(e)}", 0, 0)
 
         itens_limpos = []
         homologados = 0
+        
         for it in itens_raw:
-            # Blindagem 4: O item deve ser um dicionário. Se for lista, pula.
-            if not isinstance(it, dict): continue
+            try:
+                # PONTO DE FALHA 3: Item individual quebrado
+                if not isinstance(it, dict): continue
 
-            num = it.get('numeroItem')
-            res = None
-            
-            # Busca de Resultados (Vencedores)
-            if it.get('temResultado'):
-                try:
-                    r_res = session.get(f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num}/resultados", timeout=15)
-                    if r_res.status_code == 200:
-                        rl = r_res.json()
-                        # Blindagem 5: Resultado pode ser lista ou dict. Normalizar.
-                        if isinstance(rl, list):
-                            res = rl[0] if len(rl) > 0 else None
-                        elif isinstance(rl, dict):
-                            res = rl
-                        
-                        # Garantia final que res é um dict antes de usar .get()
-                        if not isinstance(res, dict): res = None
-                        
-                        if res: homologados += 1
-                except: pass
+                num = it.get('numeroItem')
+                res = None
+                
+                if it.get('temResultado'):
+                    try:
+                        r_res = session.get(f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num}/resultados", timeout=15)
+                        if r_res.status_code == 200:
+                            rl = r_res.json()
+                            if isinstance(rl, list):
+                                res = rl[0] if len(rl) > 0 else None
+                            elif isinstance(rl, dict):
+                                res = rl
+                            if not isinstance(res, dict): res = None
+                            if res: homologados += 1
+                    except: pass
 
-            # Extração segura de valores
-            itens_limpos.append({
-                'n': num, 
-                'd': it.get('descricao', ''), 
-                'q': safe_float(it.get('quantidade')),
-                'u': it.get('unidadeMedida', ''), 
-                'v_est': safe_float(it.get('valorUnitarioEstimado')),
-                'benef': it.get('tipoBeneficioId') or 4,
-                'sit': "HOMOLOGADO" if res else str(it.get('situacaoCompraItemName', 'ABERTO')).upper(),
-                'res_forn': (res.get('nomeRazaoSocialFornecedor') or res.get('razaoSocial')) if res else None,
-                'res_val': safe_float(res.get('valorUnitarioHomologado')) if res else 0.0
-            })
+                itens_limpos.append({
+                    'n': num, 
+                    'd': it.get('descricao', ''), 
+                    'q': safe_float(it.get('quantidade')),
+                    'u': it.get('unidadeMedida', ''), 
+                    'v_est': safe_float(it.get('valorUnitarioEstimado')),
+                    'benef': it.get('tipoBeneficioId') or 4,
+                    'sit': "HOMOLOGADO" if res else str(it.get('situacaoCompraItemName', 'ABERTO')).upper(),
+                    'res_forn': (res.get('nomeRazaoSocialFornecedor') or res.get('razaoSocial')) if res else None,
+                    'res_val': safe_float(res.get('valorUnitarioHomologado')) if res else 0.0
+                })
+            except Exception as e_it:
+                 # Se falhar um item, não derruba o edital, mas registra
+                 print(f"Erro no item: {str(e_it)}")
+                 continue
 
         dados_finais = {
             'id': f"{cnpj}{ano}{seq}", 'dt_enc': dt_enc_str, 'uf': uf, 
@@ -160,12 +160,15 @@ def processar_licitacao(lic, session):
         return ('CAPTURADO', dados_finais, len(itens_limpos), homologados)
 
     except Exception as e:
-        # Se mesmo com tudo isso der erro, retorna o erro sem quebrar o loop
-        return ('ERRO_FATAL', str(e), 0, 0)
+        # ESPIÃO: Retorna o erro exato
+        return ('ERRO_FATAL_GERAL', f"{obj_raw[:30]}... | {str(e)} | {traceback.format_exc()}", 0, 0)
 
 def buscar_periodo(session, banco, d_ini, d_fim):
     stats_geral = {'vetados': 0, 'capturados': 0, 'itens': 0, 'homologados': 0, 'sem_interesse': 0, 'erros': 0}
     
+    # LISTA DE ESPIIONAGEM
+    amostra_erros = []
+
     delta = d_fim - d_ini
     for i in range(delta.days + 1):
         dia = (d_ini + timedelta(days=i)).strftime('%Y%m%d')
@@ -196,7 +199,11 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                     elif str(status).startswith('IGNORADO'):
                         stats_pag['sem_interesse'] += 1
                     else: 
+                        # AQUI O ESPIÃO TRABALHA
                         stats_pag['erros'] += 1
+                        if len(amostra_erros) < 5:
+                            # Guarda o TIPO de erro e a MENSAGEM
+                            amostra_erros.append(f"[{status}] -> {dados_lic}")
             
             for k in stats_geral: stats_geral[k] += stats_pag[k]
             
@@ -206,14 +213,17 @@ def buscar_periodo(session, banco, d_ini, d_fim):
             pag += 1
 
     print("\n" + "="*50)
-    print("📊 RESUMÃO GERAL DA EXECUÇÃO")
+    print("📊 RESUMÃO GERAL")
     print("="*50)
     print(f"✅ PREGÕES COMPATÍVEIS:  {stats_geral['capturados']}")
     print(f"🚫 PREGÕES VETADOS:      {stats_geral['vetados']}")
-    print(f"📦 ITENS CAPTURADOS:     {stats_geral['itens']}")
-    print(f"🏆 ITENS HOMOLOGADOS:    {stats_geral['homologados']}")
-    print(f"👁️ SEM INTERESSE:        {stats_geral['sem_interesse']}")
     print(f"🔥 ERROS TÉCNICOS:       {stats_geral['erros']}")
+    
+    if amostra_erros:
+        print("\n🐛 AMOSTRA DE ERROS (O QUE O ESPIÃO PEGOU):")
+        for e in amostra_erros:
+            print(f"   🔴 {e}")
+            print("-" * 30)
     print("="*50 + "\n")
 
 if __name__ == '__main__':
