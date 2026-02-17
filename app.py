@@ -52,6 +52,7 @@ def veta_edital(obj_raw, uf):
     return False
 
 def safe_float(val):
+    """Converte valores nulos ou inválidos para 0.0 de forma segura"""
     try:
         if val is None: return 0.0
         return float(val)
@@ -60,15 +61,17 @@ def safe_float(val):
 
 def processar_licitacao(lic, session):
     try:
+        # Blindagem 1: O objeto licitação deve ser um dicionário
         if not isinstance(lic, dict): return ('ERRO_FMT', None, 0, 0)
         
         obj_raw = lic.get('objetoCompra') or "Sem Objeto"
         
-        # Proteção contra unidadeOrgao nula ou mal formatada
+        # Blindagem 2: Unidade Orgão pode vir nula ou incompleta
         uo = lic.get('unidadeOrgao')
         if not isinstance(uo, dict): uo = {}
         uf = uo.get('ufSigla', '').upper()
         
+        # Filtro de Data
         dt_enc_str = lic.get('dataEncerramentoProposta')
         if not dt_enc_str: return ('ERRO_DATA', None, 0, 0)
         dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
@@ -86,39 +89,51 @@ def processar_licitacao(lic, session):
             
         if not tem_interesse: return ('IGNORADO_INTERESSE', None, 0, 0)
 
-        # Captura Itens
+        # Captura de Itens
         cnpj, ano, seq = lic['orgaoEntidade']['cnpj'], lic['anoCompra'], lic['sequencialCompra']
         url_itens = f'https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens'
         r_itens = session.get(url_itens, params={'pagina': 1, 'tamanhoPagina': 100}, timeout=20)
         
         if r_itens.status_code != 200: return ('ERRO_API', None, 0, 0)
-        itens_raw = r_itens.json().get('data', [])
-        if not itens_raw: return ('IGNORADO_VAZIO', None, 0, 0)
+        
+        # Blindagem 3: Garantir que a resposta da API é um JSON válido e contém lista
+        try:
+            resp_json = r_itens.json()
+            itens_raw = resp_json.get('data', [])
+        except:
+            return ('ERRO_JSON_ITENS', None, 0, 0)
+
+        if not isinstance(itens_raw, list) or not itens_raw: 
+            return ('IGNORADO_VAZIO', None, 0, 0)
 
         itens_limpos = []
         homologados = 0
         for it in itens_raw:
-            # BLINDAGEM: Pula item se não for dicionário
+            # Blindagem 4: O item deve ser um dicionário. Se for lista, pula.
             if not isinstance(it, dict): continue
 
             num = it.get('numeroItem')
             res = None
+            
+            # Busca de Resultados (Vencedores)
             if it.get('temResultado'):
                 try:
                     r_res = session.get(f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num}/resultados", timeout=15)
                     if r_res.status_code == 200:
                         rl = r_res.json()
+                        # Blindagem 5: Resultado pode ser lista ou dict. Normalizar.
                         if isinstance(rl, list):
                             res = rl[0] if len(rl) > 0 else None
-                        else:
+                        elif isinstance(rl, dict):
                             res = rl
                         
-                        # BLINDAGEM: Garante que res seja dict
+                        # Garantia final que res é um dict antes de usar .get()
                         if not isinstance(res, dict): res = None
                         
                         if res: homologados += 1
                 except: pass
 
+            # Extração segura de valores
             itens_limpos.append({
                 'n': num, 
                 'd': it.get('descricao', ''), 
@@ -145,12 +160,12 @@ def processar_licitacao(lic, session):
         return ('CAPTURADO', dados_finais, len(itens_limpos), homologados)
 
     except Exception as e:
+        # Se mesmo com tudo isso der erro, retorna o erro sem quebrar o loop
         return ('ERRO_FATAL', str(e), 0, 0)
 
 def buscar_periodo(session, banco, d_ini, d_fim):
     stats_geral = {'vetados': 0, 'capturados': 0, 'itens': 0, 'homologados': 0, 'sem_interesse': 0, 'erros': 0}
-    erros_amostra = []
-
+    
     delta = d_fim - d_ini
     for i in range(delta.days + 1):
         dia = (d_ini + timedelta(days=i)).strftime('%Y%m%d')
@@ -178,28 +193,27 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                         if dados_lic: banco[dados_lic['id']] = dados_lic
                     elif status == 'VETADO':
                         stats_pag['vetados'] += 1
-                    elif status.startswith('IGNORADO'):
+                    elif str(status).startswith('IGNORADO'):
                         stats_pag['sem_interesse'] += 1
                     else: 
                         stats_pag['erros'] += 1
-                        # Guarda amostra do erro
-                        if len(erros_amostra) < 5 and dados_lic:
-                            erros_amostra.append(dados_lic) # dados_lic aqui é a msg de erro
             
             for k in stats_geral: stats_geral[k] += stats_pag[k]
+            
             print(f"   📄 Pág {pag}/{total_paginas}: 🎯 {stats_pag['capturados']} Caps | 🚫 {stats_pag['vetados']} Vetos | 👁️ {stats_pag['sem_interesse']} Ignorados | 🔥 {stats_pag['erros']} Erros")
             
             if pag >= total_paginas: break
             pag += 1
 
     print("\n" + "="*50)
-    print("📊 RESUMÃO GERAL")
+    print("📊 RESUMÃO GERAL DA EXECUÇÃO")
     print("="*50)
     print(f"✅ PREGÕES COMPATÍVEIS:  {stats_geral['capturados']}")
     print(f"🚫 PREGÕES VETADOS:      {stats_geral['vetados']}")
+    print(f"📦 ITENS CAPTURADOS:     {stats_geral['itens']}")
+    print(f"🏆 ITENS HOMOLOGADOS:    {stats_geral['homologados']}")
+    print(f"👁️ SEM INTERESSE:        {stats_geral['sem_interesse']}")
     print(f"🔥 ERROS TÉCNICOS:       {stats_geral['erros']}")
-    if erros_amostra:
-        print(f"\n🐛 AMOSTRA DE ERROS: {erros_amostra}")
     print("="*50 + "\n")
 
 if __name__ == '__main__':
