@@ -60,7 +60,6 @@ def safe_float(val):
 
 def processar_licitacao(lic, session):
     try:
-        # PONTO DE FALHA 1: Estrutura básica
         if not isinstance(lic, dict): return ('ERRO_ESTRUTURA_LIC', str(type(lic)), 0, 0)
         
         obj_raw = lic.get('objetoCompra') or "Sem Objeto"
@@ -93,25 +92,29 @@ def processar_licitacao(lic, session):
             r_itens = session.get(url_itens, params={'pagina': 1, 'tamanhoPagina': 100}, timeout=20)
             if r_itens.status_code != 200: return ('ERRO_API_STATUS', f"Status {r_itens.status_code}", 0, 0)
             
-            # PONTO DE FALHA 2: JSON inválido ou estrutura inesperada
             resp_json = r_itens.json()
-            if not isinstance(resp_json, dict): return ('ERRO_JSON_NAO_DICT', str(type(resp_json)), 0, 0)
             
-            itens_raw = resp_json.get('data', [])
-            if itens_raw is None: itens_raw = [] # Proteção extra
-            
-            if not isinstance(itens_raw, list): return ('ERRO_DATA_NAO_LISTA', str(type(itens_raw)), 0, 0)
+            # --- CORREÇÃO DEFINITIVA (ADAPTADOR UNIVERSAL) ---
+            if isinstance(resp_json, dict):
+                # Formato Novo/Padrão: {'data': [...]}
+                itens_raw = resp_json.get('data', [])
+            elif isinstance(resp_json, list):
+                # Formato Antigo/Direto: [...] (AQUI ESTAVAM OS 301 ERROS)
+                itens_raw = resp_json
+            else:
+                return ('ERRO_JSON_FORMATO_DESCONHECIDO', str(type(resp_json)), 0, 0)
+            # -------------------------------------------------
+
             if not itens_raw: return ('IGNORADO_VAZIO', None, 0, 0)
 
         except Exception as e:
-             return ('ERRO_REQ_ITENS', f"{obj_raw[:30]}... | {str(e)}", 0, 0)
+             return ('ERRO_REQ_ITENS', f"{str(e)}", 0, 0)
 
         itens_limpos = []
         homologados = 0
         
         for it in itens_raw:
             try:
-                # PONTO DE FALHA 3: Item individual quebrado
                 if not isinstance(it, dict): continue
 
                 num = it.get('numeroItem')
@@ -126,6 +129,7 @@ def processar_licitacao(lic, session):
                                 res = rl[0] if len(rl) > 0 else None
                             elif isinstance(rl, dict):
                                 res = rl
+                            
                             if not isinstance(res, dict): res = None
                             if res: homologados += 1
                     except: pass
@@ -141,10 +145,7 @@ def processar_licitacao(lic, session):
                     'res_forn': (res.get('nomeRazaoSocialFornecedor') or res.get('razaoSocial')) if res else None,
                     'res_val': safe_float(res.get('valorUnitarioHomologado')) if res else 0.0
                 })
-            except Exception as e_it:
-                 # Se falhar um item, não derruba o edital, mas registra
-                 print(f"Erro no item: {str(e_it)}")
-                 continue
+            except: continue
 
         dados_finais = {
             'id': f"{cnpj}{ano}{seq}", 'dt_enc': dt_enc_str, 'uf': uf, 
@@ -160,15 +161,11 @@ def processar_licitacao(lic, session):
         return ('CAPTURADO', dados_finais, len(itens_limpos), homologados)
 
     except Exception as e:
-        # ESPIÃO: Retorna o erro exato
-        return ('ERRO_FATAL_GERAL', f"{obj_raw[:30]}... | {str(e)} | {traceback.format_exc()}", 0, 0)
+        return ('ERRO_FATAL_GERAL', f"{str(e)}", 0, 0)
 
 def buscar_periodo(session, banco, d_ini, d_fim):
     stats_geral = {'vetados': 0, 'capturados': 0, 'itens': 0, 'homologados': 0, 'sem_interesse': 0, 'erros': 0}
     
-    # LISTA DE ESPIIONAGEM
-    amostra_erros = []
-
     delta = d_fim - d_ini
     for i in range(delta.days + 1):
         dia = (d_ini + timedelta(days=i)).strftime('%Y%m%d')
@@ -199,11 +196,7 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                     elif str(status).startswith('IGNORADO'):
                         stats_pag['sem_interesse'] += 1
                     else: 
-                        # AQUI O ESPIÃO TRABALHA
                         stats_pag['erros'] += 1
-                        if len(amostra_erros) < 5:
-                            # Guarda o TIPO de erro e a MENSAGEM
-                            amostra_erros.append(f"[{status}] -> {dados_lic}")
             
             for k in stats_geral: stats_geral[k] += stats_pag[k]
             
@@ -218,12 +211,6 @@ def buscar_periodo(session, banco, d_ini, d_fim):
     print(f"✅ PREGÕES COMPATÍVEIS:  {stats_geral['capturados']}")
     print(f"🚫 PREGÕES VETADOS:      {stats_geral['vetados']}")
     print(f"🔥 ERROS TÉCNICOS:       {stats_geral['erros']}")
-    
-    if amostra_erros:
-        print("\n🐛 AMOSTRA DE ERROS (O QUE O ESPIÃO PEGOU):")
-        for e in amostra_erros:
-            print(f"   🔴 {e}")
-            print("-" * 30)
     print("="*50 + "\n")
 
 if __name__ == '__main__':
