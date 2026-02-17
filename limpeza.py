@@ -7,8 +7,13 @@ from datetime import datetime
 # --- CONFIGURAÇÕES ---
 ARQDADOS = 'dadosoportunidades.json.gz'
 ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'
-# DATA DE CORTE RIGOROSA: Tudo antes disso será APAGADO do banco
+
+# 1. DATA DE CORTE RIGOROSA (Ano Novo, Vida Nova)
 DATA_CORTE_2026 = datetime(2026, 1, 1)
+
+# 2. BLOQUEIO GEOGRÁFICO (Estados onde não há atuação)
+# Sul (RS, SC, PR) + Extremos Norte (AP, AC, RO, RR)
+ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
 
 def normalize(t):
     if not t: return ""
@@ -18,44 +23,49 @@ if not os.path.exists(ARQDADOS):
     print("❌ Arquivo de dados não encontrado.")
     exit()
 
-print(f"🔄 Iniciando limpeza profunda (Corte: {DATA_CORTE_2026.strftime('%d/%m/%Y')})...")
+print(f"🔄 Iniciando Auditoria e Limpeza (Corte: {DATA_CORTE_2026.strftime('%d/%m/%Y')})...")
 
 with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f: 
     banco_bruto = json.load(f)
 
 inicial = len(banco_bruto)
-banco_filtrado_2026 = [] # Vai substituir o arquivo original
-web_data = [] # Vai para o site
+banco_filtrado_final = [] # Substituirá o arquivo original (sem lixo)
+web_data = [] # Irá para o site (formatado)
 
 for p in banco_bruto:
-    # 1. Filtro de Data (A Grande Faxina)
+    # --- FASE 1: TRIAGEM ELIMINATÓRIA ---
+    
+    # A. Validação de Data
     try:
-        # Usa a data de encerramento como referência principal
         data_str = p.get('dt_enc', '').replace('Z', '+00:00')
         dt = datetime.fromisoformat(data_str).replace(tzinfo=None)
-        
-        # SE FOR ANTES DE 2026, NÃO ENTRA NO NOVO BANCO (DELETA)
-        if dt < DATA_CORTE_2026: 
-            continue
-            
-    except: 
-        # Se não tem data válida, deleta por segurança
-        continue
+        if dt < DATA_CORTE_2026: continue # Lixo antigo
+    except: continue # Data inválida
 
-    # Se passou pelo filtro de data, adiciona ao novo banco limpo
-    banco_filtrado_2026.append(p)
+    # B. Validação Geográfica (O Muro Logístico)
+    uf = p.get('uf', '').upper()
+    if uf in ESTADOS_BLOQUEADOS:
+        continue # Fora da área de atuação
 
-    # 2. Formatação para o Web/Monitor
+    # --- FASE 2: ANÁLISE DE CONTEÚDO ---
+    
     itens_originais = p.get('itens', [])
-    if not itens_originais: continue # Edital vazio não vai pro site
+    if not itens_originais: continue # Edital vazio
 
     c_ex = 0
     itens_fmt = []
     
+    # Processa itens
     for it in itens_originais:
+        # Verifica se é ME/EPP (Benefício)
         is_ex = int(it.get('benef') or 4) in [1, 2, 3]
         if is_ex: c_ex += 1
         
+        # Filtro extra de segurança (caso o app.py tenha deixado passar algo muito estranho)
+        desc = normalize(it.get('d', ''))
+        if any(x in desc for x in ["PNEU", "LUBRIFICANTE", "ALIMENTACAO", "MERENDA"]):
+            continue
+
         itens_fmt.append({
             'n': it.get('n'), 
             'desc': it.get('d'), 
@@ -68,9 +78,20 @@ for p in banco_bruto:
             'me_epp': is_ex
         })
 
+    # C. Validação Final: Sobrou algum item útil?
+    if not itens_fmt: 
+        continue # Se todos os itens foram filtrados, joga o edital fora
+
+    # --- FASE 3: APROVAÇÃO ---
+    
+    # Se chegou aqui, o edital é bom.
+    # 1. Salva no banco "bruto" (mas agora limpo de verdade)
+    banco_filtrado_final.append(p)
+
+    # 2. Formata para o Monitor Web
     web_data.append({
         'id': p.get('id'), 
-        'uf': p.get('uf'), 
+        'uf': uf, 
         'uasg': p.get('uasg'), 
         'orgao': p.get('org'),
         'unidade': p.get('unid_nome'), 
@@ -84,23 +105,23 @@ for p in banco_bruto:
         'itens': itens_fmt
     })
 
-# Ordenação
+# Ordenação (Mais recentes primeiro)
 web_data.sort(key=lambda x: x['data_enc'], reverse=True)
 
-# 3. SALVAMENTO CRÍTICO
+# --- FASE 4: SOBRESCRITA DOS ARQUIVOS ---
 
-# A: Sobrescreve o banco original apenas com dados de 2026+
+# Salva o banco de dados mestre (Reduzido e Limpo)
 with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f: 
-    json.dump(banco_filtrado_2026, f, ensure_ascii=False)
+    json.dump(banco_filtrado_final, f, ensure_ascii=False)
 
-# B: Salva o arquivo do site
+# Salva o arquivo do site
 with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f: 
     json.dump(web_data, f, ensure_ascii=False)
 
-removidos = inicial - len(banco_filtrado_2026)
+removidos = inicial - len(banco_filtrado_final)
 
-print(f"✅ Processo Concluído!")
-print(f"   📉 Registros Brutos (Antes): {inicial}")
-print(f"   🗑️ Registros Antigos Deletados (<2026): {removidos}")
-print(f"   💾 Novo Banco de Dados (Salvo): {len(banco_filtrado_2026)}")
-print(f"   🌐 Registros para o Site: {len(web_data)}")
+print(f"✅ Auditoria Concluída!")
+print(f"   📉 Registros Originais: {inicial}")
+print(f"   🚫 Removidos (Data/Geo/Lixo): {removidos}")
+print(f"   💾 Banco de Dados Atualizado: {len(banco_filtrado_final)}")
+print(f"   🌐 Disponível no Monitor: {len(web_data)}")
