@@ -5,6 +5,7 @@ import unicodedata
 import gzip
 import argparse
 import sys
+import traceback
 from datetime import datetime, timedelta, date
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -51,7 +52,6 @@ def veta_edital(obj_raw, uf):
     return False
 
 def safe_float(val):
-    """Converte para float de forma segura, tratando None como 0.0"""
     try:
         if val is None: return 0.0
         return float(val)
@@ -59,20 +59,22 @@ def safe_float(val):
         return 0.0
 
 def processar_licitacao(lic, session):
-    # RETORNO: (STATUS, DADOS, QTD_ITENS, QTD_HOMOLOGADOS)
     try:
-        obj_raw = lic.get('objetoCompra') or "Sem Objeto"
-        uf = (lic.get('unidadeOrgao', {}).get('ufSigla') or '').upper()
+        if not isinstance(lic, dict): return ('ERRO_FMT', None, 0, 0)
         
-        # Filtro de Data
+        obj_raw = lic.get('objetoCompra') or "Sem Objeto"
+        
+        # Proteção contra unidadeOrgao nula ou mal formatada
+        uo = lic.get('unidadeOrgao')
+        if not isinstance(uo, dict): uo = {}
+        uf = uo.get('ufSigla', '').upper()
+        
         dt_enc_str = lic.get('dataEncerramentoProposta')
         if not dt_enc_str: return ('ERRO_DATA', None, 0, 0)
         dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
         if dt_enc < DATA_CORTE_FIXA: return ('IGNORADO_DATA', None, 0, 0)
 
-        # Veto Supremo
-        if veta_edital(obj_raw, uf):
-            return ('VETADO', None, 0, 0)
+        if veta_edital(obj_raw, uf): return ('VETADO', None, 0, 0)
 
         # Filtro de Interesse
         obj_norm = normalize(obj_raw)
@@ -84,7 +86,7 @@ def processar_licitacao(lic, session):
             
         if not tem_interesse: return ('IGNORADO_INTERESSE', None, 0, 0)
 
-        # Captura de Itens
+        # Captura Itens
         cnpj, ano, seq = lic['orgaoEntidade']['cnpj'], lic['anoCompra'], lic['sequencialCompra']
         url_itens = f'https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens'
         r_itens = session.get(url_itens, params={'pagina': 1, 'tamanhoPagina': 100}, timeout=20)
@@ -96,6 +98,9 @@ def processar_licitacao(lic, session):
         itens_limpos = []
         homologados = 0
         for it in itens_raw:
+            # BLINDAGEM: Pula item se não for dicionário
+            if not isinstance(it, dict): continue
+
             num = it.get('numeroItem')
             res = None
             if it.get('temResultado'):
@@ -103,30 +108,27 @@ def processar_licitacao(lic, session):
                     r_res = session.get(f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num}/resultados", timeout=15)
                     if r_res.status_code == 200:
                         rl = r_res.json()
-                        # Correção de Lista e Nulos
                         if isinstance(rl, list):
                             res = rl[0] if len(rl) > 0 else None
                         else:
                             res = rl
+                        
+                        # BLINDAGEM: Garante que res seja dict
+                        if not isinstance(res, dict): res = None
+                        
                         if res: homologados += 1
                 except: pass
-
-            # --- AQUI ESTAVA O ERRO CRÍTICO (BLINDAGEM APLICADA) ---
-            qtd = safe_float(it.get('quantidade'))
-            v_est = safe_float(it.get('valorUnitarioEstimado'))
-            res_val = safe_float(res.get('valorUnitarioHomologado')) if res else 0.0
-            # -------------------------------------------------------
 
             itens_limpos.append({
                 'n': num, 
                 'd': it.get('descricao', ''), 
-                'q': qtd,
+                'q': safe_float(it.get('quantidade')),
                 'u': it.get('unidadeMedida', ''), 
-                'v_est': v_est,
+                'v_est': safe_float(it.get('valorUnitarioEstimado')),
                 'benef': it.get('tipoBeneficioId') or 4,
                 'sit': "HOMOLOGADO" if res else str(it.get('situacaoCompraItemName', 'ABERTO')).upper(),
                 'res_forn': (res.get('nomeRazaoSocialFornecedor') or res.get('razaoSocial')) if res else None,
-                'res_val': res_val
+                'res_val': safe_float(res.get('valorUnitarioHomologado')) if res else 0.0
             })
 
         dados_finais = {
@@ -143,14 +145,12 @@ def processar_licitacao(lic, session):
         return ('CAPTURADO', dados_finais, len(itens_limpos), homologados)
 
     except Exception as e:
-        # Se ainda der erro, imprime para sabermos o que é
-        # print(f"ERRO FATAL: {str(e)}") 
-        return ('ERRO_CRASH', None, 0, 0)
+        return ('ERRO_FATAL', str(e), 0, 0)
 
 def buscar_periodo(session, banco, d_ini, d_fim):
-    # Estatísticas Detalhadas
     stats_geral = {'vetados': 0, 'capturados': 0, 'itens': 0, 'homologados': 0, 'sem_interesse': 0, 'erros': 0}
-    
+    erros_amostra = []
+
     delta = d_fim - d_ini
     for i in range(delta.days + 1):
         dia = (d_ini + timedelta(days=i)).strftime('%Y%m%d')
@@ -180,25 +180,26 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                         stats_pag['vetados'] += 1
                     elif status.startswith('IGNORADO'):
                         stats_pag['sem_interesse'] += 1
-                    else: # ERRO_CRASH, ERRO_API, ERRO_DATA
+                    else: 
                         stats_pag['erros'] += 1
+                        # Guarda amostra do erro
+                        if len(erros_amostra) < 5 and dados_lic:
+                            erros_amostra.append(dados_lic) # dados_lic aqui é a msg de erro
             
             for k in stats_geral: stats_geral[k] += stats_pag[k]
-
             print(f"   📄 Pág {pag}/{total_paginas}: 🎯 {stats_pag['capturados']} Caps | 🚫 {stats_pag['vetados']} Vetos | 👁️ {stats_pag['sem_interesse']} Ignorados | 🔥 {stats_pag['erros']} Erros")
             
             if pag >= total_paginas: break
             pag += 1
 
     print("\n" + "="*50)
-    print("📊 RESUMÃO GERAL DA EXECUÇÃO")
+    print("📊 RESUMÃO GERAL")
     print("="*50)
     print(f"✅ PREGÕES COMPATÍVEIS:  {stats_geral['capturados']}")
     print(f"🚫 PREGÕES VETADOS:      {stats_geral['vetados']}")
-    print(f"📦 ITENS CAPTURADOS:     {stats_geral['itens']}")
-    print(f"🏆 ITENS HOMOLOGADOS:    {stats_geral['homologados']}")
-    print(f"👁️ SEM INTERESSE:        {stats_geral['sem_interesse']}")
     print(f"🔥 ERROS TÉCNICOS:       {stats_geral['erros']}")
+    if erros_amostra:
+        print(f"\n🐛 AMOSTRA DE ERROS: {erros_amostra}")
     print("="*50 + "\n")
 
 if __name__ == '__main__':
