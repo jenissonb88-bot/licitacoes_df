@@ -21,9 +21,17 @@ DATA_CORTE_FIXA = datetime(2025, 12, 1)
 
 # --- GEOGRAFIA ---
 NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
-
-# BLOQUEIO TOTAL (Nem perde tempo baixando)
 ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
+
+# --- MAPEAMENTO OFICIAL PNCP (MANUAL) ---
+# 5.6. Situação do Item
+MAPA_SITUACAO = {
+    1: "EM ANDAMENTO",
+    2: "HOMOLOGADO",
+    3: "CANCELADO",
+    4: "DESERTO",
+    5: "FRACASSADO"
+}
 
 def normalize(t):
     if not t: return ""
@@ -56,13 +64,10 @@ if os.path.exists(ARQ_CATALOGO):
     except: print("⚠️ Aviso: Não foi possível ler o catálogo CSV.")
 
 # --- LISTAS DE PALAVRAS-CHAVE ---
-
-# 1. ITENS UNIVERSAIS NE (Passam por cima de tudo no Nordeste)
 TERMOS_UNIVERSAIS_NE = [
     "FRALDA", "ABSORVENTE", "ALCOOL 70", "ALCOOL ETILICO", "ALCOOL GEL", "ALCOOL EM GEL"
 ]
 
-# 2. VETOS (Muros de Contenção)
 VETOS_ALIMENTACAO = [normalize(x) for x in [
     "ALIMENTACAO ESCOLAR", "GENEROS ALIMENTICIOS", "MERENDA", "PNAE", "PERECIVEIS", 
     "HORTIFRUTI", "CARNES", "PANIFICACAO", "CESTAS BASICAS", "LANCHE", "REFEICOES", 
@@ -86,7 +91,6 @@ VETOS_ADM = [normalize(x) for x in ["ADESAO", "INTENCAO", "IRP", "CREDENCIAMENTO
 
 TODOS_VETOS = VETOS_ALIMENTACAO + VETOS_EDUCACAO + VETOS_OPERACIONAL + VETOS_ADM
 
-# 3. ALVOS PADRÃO
 WL_MEDICAMENTOS = [normalize(x) for x in [
     "MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOAL", 
     "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA", "ANTIBIOTICO"
@@ -112,23 +116,17 @@ def criar_sessao():
 def veta_edital(obj_raw, uf):
     obj = normalize(obj_raw)
     
-    # SALVA-VIDAS UNIVERSAL NE:
-    # Se for do NE e tiver Fralda, Absorvente ou Álcool 70, IGNORA OS VETOS.
     if uf in NE_ESTADOS:
         if any(univ in obj for univ in TERMOS_UNIVERSAIS_NE):
-            return False # Não veta!
+            return False 
 
-    # Valida Vetos Absolutos
     for v in TODOS_VETOS:
         if v in obj:
-            # Proteção para Dietas no NE
             if "NUTRICAO" in v or "ALIMENT" in v:
                 if any(bom in obj for bom in WL_NUTRI_CLINICA) and "ESCOLAR" not in obj:
                     return False
             return True
             
-    # Veto Contextual de Limpeza/Higiene
-    # Se tiver Álcool 70 (Universal NE), já passou pelo Salva-Vidas acima.
     if "LIMPEZA" in obj or "HIGIENE" in obj:
         if not any(x in obj for x in ["HOSPITALAR", "UBS", "SAUDE", "CLINICA"]):
             return True
@@ -141,9 +139,14 @@ def safe_float(val):
         return float(val)
     except: return 0.0
 
+def safe_int(val, default=4):
+    try:
+        if val is None: return default
+        return int(val)
+    except: return default
+
 def processar_licitacao(lic, session):
     try:
-        # 1. Validação Estrutural e Data
         if not isinstance(lic, dict): return ('ERRO', None, 0, 0)
         
         obj_raw = lic.get('objetoCompra') or "Sem Objeto"
@@ -151,7 +154,6 @@ def processar_licitacao(lic, session):
         if not isinstance(uo, dict): uo = {}
         uf = uo.get('ufSigla', '').upper()
         
-        # 1.1 VETO GEOGRÁFICO TOTAL (Economia de recurso)
         if uf in ESTADOS_BLOQUEADOS: return ('VETADO', None, 0, 0)
 
         dt_enc_str = lic.get('dataEncerramentoProposta')
@@ -159,32 +161,22 @@ def processar_licitacao(lic, session):
         dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
         if dt_enc < DATA_CORTE_FIXA: return ('IGNORADO', None, 0, 0)
 
-        # 2. Aplicação dos Vetos
         if veta_edital(obj_raw, uf): return ('VETADO', None, 0, 0)
 
-        # 3. Análise de Interesse
         obj_norm = normalize(obj_raw)
         tem_interesse = False
         
-        # A. Universais NE (Fralda, Absorvente, Alcool 70) - Prioridade Máxima no NE
         if uf in NE_ESTADOS and any(t in obj_norm for t in TERMOS_UNIVERSAIS_NE):
             tem_interesse = True
-
-        # B. Medicamentos: Passa em TODO BRASIL (exceto bloqueados)
         elif any(t in obj_norm for t in WL_MEDICAMENTOS):
             tem_interesse = True
-            
-        # C. Nutrição e Materiais: Passa APENAS NO NORDESTE
         elif uf in NE_ESTADOS and any(t in obj_norm for t in WL_MATERIAIS_NE + WL_NUTRI_CLINICA):
             tem_interesse = True
-            
-        # D. Termos Genéricos de Saúde (Para verificar itens)
         elif "SAUDE" in obj_norm or "HOSPITAL" in obj_norm:
             tem_interesse = True
 
         if not tem_interesse: return ('IGNORADO', None, 0, 0)
 
-        # 4. Captura e Análise de Itens
         cnpj, ano, seq = lic['orgaoEntidade']['cnpj'], lic['anoCompra'], lic['sequencialCompra']
         url_itens = f'https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens'
         
@@ -208,8 +200,6 @@ def processar_licitacao(lic, session):
             desc = it.get('descricao', '')
             desc_norm = normalize(desc)
             
-            # Filtro Individual de Item 
-            # (Remove lixo óbvio, mas deixa Fralda/Alcool se for o caso)
             if any(v in desc_norm for v in ["ARROZ", "FEIJAO", "CARNE", "PNEU", "GASOLINA", "RODA", "LIVRO", "COPO", "CAFE", "ACUCAR"]):
                 continue
 
@@ -217,32 +207,52 @@ def processar_licitacao(lic, session):
                 tem_item_catalogo = True
             
             num = it.get('numeroItem')
-            res = None
-            if it.get('temResultado'):
+            
+            # --- CORREÇÃO DE STATUS (MAPA OFICIAL) ---
+            sit_id = safe_int(it.get('situacaoCompraItem'), 1) # Padrão 1 (Em andamento)
+            sit_nome_api = it.get('situacaoCompraItemName', 'EM ANDAMENTO')
+            
+            # Prioriza o Mapa Oficial pelo ID. Se falhar, usa o nome da API.
+            status_final = MAPA_SITUACAO.get(sit_id, sit_nome_api).upper()
+            
+            res_fornecedor = None
+            res_valor = 0.0
+            
+            # Busca resultados se o status indicar que pode ter (2=Homologado) OU se a flag existir
+            if it.get('temResultado') or sit_id == 2:
                 try:
                     r_res = session.get(f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num}/resultados", timeout=15)
                     if r_res.status_code == 200:
                         rl = r_res.json()
-                        if isinstance(rl, list): res = rl[0] if len(rl) > 0 else None
-                        elif isinstance(rl, dict): res = rl
-                        if not isinstance(res, dict): res = None
-                        if res: homologados += 1
+                        if isinstance(rl, list) and len(rl) > 0:
+                            res_obj = rl[0]
+                            res_fornecedor = res_obj.get('nomeRazaoSocialFornecedor') or res_obj.get('razaoSocial')
+                            res_valor = safe_float(res_obj.get('valorUnitarioHomologado'))
+                            
+                            # Se achou fornecedor, confirma homologação
+                            if res_fornecedor and sit_id == 1:
+                                status_final = "HOMOLOGADO"
+                                homologados += 1
                 except: pass
+            
+            # Contagem de homologados baseada no status oficial
+            if sit_id == 2: homologados += 1
 
             itens_limpos.append({
-                'n': num, 'd': desc, 'q': safe_float(it.get('quantidade')),
-                'u': it.get('unidadeMedida', ''), 'v_est': safe_float(it.get('valorUnitarioEstimado')),
-                'benef': it.get('tipoBeneficioId') or 4,
-                'sit': "HOMOLOGADO" if res else str(it.get('situacaoCompraItemName', 'ABERTO')).upper(),
-                'res_forn': (res.get('nomeRazaoSocialFornecedor') or res.get('razaoSocial')) if res else None,
-                'res_val': safe_float(res.get('valorUnitarioHomologado')) if res else 0.0
+                'n': num, 
+                'd': desc, 
+                'q': safe_float(it.get('quantidade')),
+                'u': it.get('unidadeMedida', ''), 
+                'v_est': safe_float(it.get('valorUnitarioEstimado')),
+                'benef': safe_int(it.get('tipoBeneficioId'), 4),
+                'sit': status_final, 
+                'res_forn': res_fornecedor,
+                'res_val': res_valor
             })
 
         if not itens_limpos: return ('IGNORADO', None, 0, 0)
         
-        # 5. Validação Final (A Regra de Ouro Geográfica)
         if uf not in NE_ESTADOS:
-            # Fora do NE: Só Medicamento explícito ou Catálogo
             if not tem_item_catalogo and not any(m in obj_norm for m in WL_MEDICAMENTOS):
                  return ('IGNORADO', None, 0, 0)
 
