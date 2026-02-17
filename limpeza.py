@@ -5,9 +5,6 @@ import unicodedata
 import csv
 from datetime import datetime
 
-# ==============================================================================
-# ⚙️ CONFIGURAÇÕES
-# ==============================================================================
 ARQDADOS = 'dadosoportunidades.json.gz'          
 ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'     
 ARQ_CATALOGO = 'Exportar Dados.csv'              
@@ -16,22 +13,26 @@ DATA_CORTE_2026 = datetime(2026, 1, 1)
 NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
 ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
 
+# --- VETOS E PERMISSÕES ---
+
+# Termos que salvam tudo no NE (Ignoram vetos)
 TERMOS_UNIVERSAIS_NE = [
     "FRALDA", "ABSORVENTE", "ALCOOL 70", "ALCOOL ETILICO", "ALCOOL GEL", "ALCOOL EM GEL"
 ]
 
+# Vetos que matam o edital (Adicionado SONDAGEM e GEOLOGIA)
 VETOS_IMEDIATOS = [
-    "PRESTACAO DE SERVICO", "SERVICO ESPECIALIZADO", "LOCACAO", "INSTALACAO", 
+    "PRESTACAO DE SERVICO", "SERVICO DE ENGENHARIA", "LOCACAO", "INSTALACAO", 
     "MANUTENCAO", "UNIFORME", "TEXTIL", "REFORMA", "LIMPEZA PREDIAL", 
     "LAVANDERIA", "IMPRESSAO", "CONSULTORIA", "TREINAMENTO", "VIGILANCIA",
-    "PORTARIA", "RECEPCAO", "EVENTOS", "BUFFET", "COFFEE BREAK"
+    "PORTARIA", "RECEPCAO", "EVENTOS", "BUFFET", "COFFEE BREAK",
+    "SONDAGEM", "PERFURACAO", "GEOLOGIA", "TOPOGRAFIA", "PAVIMENTACAO"
 ]
 
 TERMOS_NE_MMH_NUTRI = [
     "MATERIAL MEDIC", "INSUMO HOSPITALAR", "MMH", "SERINGA", "AGULHA", "GAZE", 
     "ATADURA", "SONDA", "CATETER", "EQUIPO", "LUVAS", "MASCARA", 
-    "NUTRICAO ENTERAL", "FORMULA INFANTIL", "SUPLEMENTO", "DIETA", 
-    "NUTRICAO CLINICA", "NUTRICAO PARENTERAL"
+    "NUTRICAO ENTERAL", "FORMULA INFANTIL", "SUPLEMENTO", "DIETA", "NUTRICAO CLINICA"
 ]
 
 TERMOS_SALVAMENTO = ["MEDICAMENT", "FARMAC", "REMEDIO", "FARMACO", "DROGARIA"]
@@ -56,23 +57,26 @@ if os.path.exists(ARQ_CATALOGO):
                 break
             except: continue
         print(f"📚 Catálogo carregado: {len(CATALOGO)} produtos.")
-    except: print("⚠️ Aviso: Catálogo não encontrado.")
+    except: pass
 
 def analisar_pertinencia(edital):
-    obj_raw = edital.get('obj', '')
-    obj = normalize(obj_raw)
+    obj = normalize(edital.get('obj', ''))
     uf = edital.get('uf', '').upper()
     itens = edital.get('itens', [])
 
+    # 1. BLOQUEIO GEOGRÁFICO
     if uf in ESTADOS_BLOQUEADOS: return False
 
+    # 2. SALVA-VIDAS UNIVERSAL NE
     if uf in NE_ESTADOS:
         if any(univ in obj for univ in TERMOS_UNIVERSAIS_NE):
             return True
 
+    # 3. VETOS (Sondagem, Serviço, Obra, etc.)
     for veto in VETOS_IMEDIATOS:
         if veto in obj: return False
 
+    # 4. CONTEXTO (Medicina/Gases, Fórmula/Leite)
     if "MEDICINA" in obj or "MEDICO" in obj:
         if ("GASES" in obj or "OXIGENIO" in obj) and not any(s in obj for s in TERMOS_SALVAMENTO):
             return False
@@ -81,6 +85,7 @@ def analisar_pertinencia(edital):
         if not any(ctx in obj for ctx in CONTEXTO_SAUDE):
             return False
 
+    # 5. GEOGRAFIA VS ALVOS
     eh_do_nordeste = uf in NE_ESTADOS
     tem_termo_ne = any(t in obj for t in TERMOS_NE_MMH_NUTRI)
     tem_remedio_explicito = any(t in obj for t in TERMOS_SALVAMENTO)
@@ -88,6 +93,7 @@ def analisar_pertinencia(edital):
     if eh_do_nordeste and tem_termo_ne: return True
     if tem_remedio_explicito: return True
 
+    # 6. CATÁLOGO
     match_catalogo = 0
     if CATALOGO:
         for it in itens:
@@ -101,16 +107,12 @@ def analisar_pertinencia(edital):
 
     return False
 
-if not os.path.exists(ARQDADOS): 
-    print("❌ Arquivo de dados não encontrado.")
-    exit()
+if not os.path.exists(ARQDADOS): exit()
 
-print(f"🔄 Iniciando Auditoria Completa no Banco de Dados...")
-
+print("🔄 Iniciando Auditoria Final...")
 with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f: 
     banco_bruto = json.load(f)
 
-inicial = len(banco_bruto)
 banco_final = []
 web_data = []
 
@@ -123,22 +125,14 @@ for p in banco_bruto:
     if analisar_pertinencia(p):
         banco_final.append(p)
         itens_fmt = []
-        c_ex_total = 0
+        c_ex = 0
         
         for it in p.get('itens', []):
-            # CORREÇÃO ME/EPP RÍGIDA:
-            # 1 = Exclusiva ME/EPP
-            # 2 = Subcontratação ME/EPP
-            # 3 = Cota Reservada ME/EPP
-            # 4 = Sem Benefício, 5 = N/A
+            # CÓDIGOS OFICIAIS ME/EPP: 1, 2, 3 = Exclusivo
             benef_id = int(it.get('benef') or 4)
-            is_ex = benef_id in [1, 2, 3] # Todos esses códigos contam como exclusivo/beneficiado
+            is_ex = benef_id in [1, 2, 3]
+            if is_ex: c_ex += 1
             
-            if is_ex: c_ex_total += 1
-            
-            # Repassa a situação formatada pelo app.py
-            status_fmt = it.get('sit', 'ABERTO')
-
             itens_fmt.append({
                 'n': it.get('n'), 
                 'desc': it.get('d'), 
@@ -147,7 +141,7 @@ for p in banco_bruto:
                 'valUnit': it.get('v_est', 0),
                 'valHomologado': it.get('res_val', 0), 
                 'fornecedor': it.get('res_forn'),
-                'situacao': status_fmt, 
+                'situacao': it.get('sit', 'ABERTO'), 
                 'me_epp': is_ex
             })
             
@@ -163,16 +157,15 @@ for p in banco_bruto:
             'valor_estimado': p.get('val_tot', 0), 
             'data_enc': p.get('dt_enc'),
             'link': p.get('link'),
-            'tipo_licitacao': "EXCLUSIVO" if c_ex_total == len(itens_fmt) and len(itens_fmt) > 0 else "AMPLO",
+            'tipo_licitacao': "EXCLUSIVO" if c_ex == len(itens_fmt) and len(itens_fmt) > 0 else "AMPLO",
             'itens': itens_fmt
         })
 
 web_data.sort(key=lambda x: x['data_enc'], reverse=True)
 
-print("💾 Salvando alterações...")
+print("💾 Salvando...")
 with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f: 
     json.dump(banco_final, f, ensure_ascii=False)
 with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f: 
     json.dump(web_data, f, ensure_ascii=False)
-
-print(f"✅ Auditoria Concluída! Banco Limpo: {len(banco_final)} | Web: {len(web_data)}")
+print("✅ Concluído.")
