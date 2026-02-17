@@ -71,10 +71,14 @@ jobs:
     - name: Run app.py (Coleta)
       run: python app.py --start "$START_DATE" --end "$END_DATE"
 
-    - name: Run limpeza.py (Filtro e Tratamento)
+    # === O MÉDICO: AUDITORIA E CORREÇÃO ===
+    - name: Run atualiza.py (Correção de Status e ME/EPP)
+      run: python atualiza.py
+
+    - name: Run limpeza.py (Filtro e Tratamento Final)
       run: python limpeza.py
 
-    # --- 3. COMMIT E PUSH (CORREÇÃO DO ERRO 128) ---
+    # --- 3. COMMIT E PUSH ---
     - name: Commit results
       run: |
         git config user.name "Sniper Pharma Bot"
@@ -85,16 +89,13 @@ jobs:
         # 1. Adiciona os arquivos gerados no Stage
         git add dadosoportunidades.json.gz || true
         git add pregacoes_pharma_limpos.json.gz || true
-        # Removemos checkpoint.txt se não estiver usando, mas mantive por segurança
         git add checkpoint.txt || true 
         
         # 2. Verifica se tem algo novo para commitar
-        # O comando 'commit' só roda se houver mudanças, evitando erro de 'nothing to commit'
         git diff --staged --quiet || git commit -m "Sniper Data: $START_DATE | Mode: $MODE"
         
-        # 3. TRUQUE PARA EVITAR CONFLITO (AQUI ESTAVA O ERRO):
-        # Usamos --rebase -X theirs. 
-        # Isso diz: "Se o servidor tiver algo diferente, O MEU ARQUIVO (theirs/bot) GANHA".
+        # 3. TRUQUE PARA EVITAR CONFLITO:
+        # Puxa o servidor. Se houver conflito, 'theirs' (o que o bot gerou agora) VENCE.
         git pull origin main --rebase -X theirs
         
         # 4. Envia
@@ -110,7 +111,6 @@ jobs:
         CURRENT="${{ inputs.target_date }}"
         # Cálculo seguro de data +1 dia
         NEXT_DAY=$(date -d "$CURRENT + 1 day" +'%Y-%m-%d')
-        # Definimos o limite como a data de hoje (para não rodar no futuro)
         TODAY=$(date +'%Y-%m-%d')
         
         if [[ "$NEXT_DAY" < "$TODAY" ]] || [[ "$NEXT_DAY" == "$TODAY" ]]; then
