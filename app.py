@@ -51,43 +51,39 @@ def veta_edital(obj_raw, uf):
     return False
 
 def processar_licitacao(lic, session):
+    # RETORNO: (STATUS, DADOS, QTD_ITENS, QTD_HOMOLOGADOS)
     try:
         obj_raw = lic.get('objetoCompra') or "Sem Objeto"
         uf = (lic.get('unidadeOrgao', {}).get('ufSigla') or '').upper()
         
         # Filtro de Data
         dt_enc_str = lic.get('dataEncerramentoProposta')
-        if not dt_enc_str: return None
+        if not dt_enc_str: return ('ERRO', None, 0, 0)
         dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
-        if dt_enc < DATA_CORTE_FIXA: return None
+        if dt_enc < DATA_CORTE_FIXA: return ('IGNORADO', None, 0, 0)
 
         # Veto Supremo
         if veta_edital(obj_raw, uf):
-            print(f"   🚫 VETADO: {obj_raw[:50]}...")
-            return None
+            return ('VETADO', None, 0, 0)
 
         # Filtro de Interesse
         obj_norm = normalize(obj_raw)
-        
-        # Lógica de Interesse:
-        # 1. Medicamentos e Genéricos de Saúde = TODOS OS ESTADOS
-        # 2. Materiais e Dietas = APENAS NORDESTE
         tem_interesse = False
         if any(t in obj_norm for t in WL_GLOBAL_MEDS + WL_GENERICO_SAUDE):
             tem_interesse = True
         elif uf in NE_ESTADOS and any(t in obj_norm for t in WL_NE_MATS):
             tem_interesse = True
             
-        if not tem_interesse: return None
+        if not tem_interesse: return ('IGNORADO', None, 0, 0)
 
         # Captura de Itens
         cnpj, ano, seq = lic['orgaoEntidade']['cnpj'], lic['anoCompra'], lic['sequencialCompra']
         url_itens = f'https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens'
         r_itens = session.get(url_itens, params={'pagina': 1, 'tamanhoPagina': 100}, timeout=20)
         
-        if r_itens.status_code != 200: return None
+        if r_itens.status_code != 200: return ('ERRO', None, 0, 0)
         itens_raw = r_itens.json().get('data', [])
-        if not itens_raw: return None
+        if not itens_raw: return ('IGNORADO', None, 0, 0) # Sem itens = Ignorado técnico
 
         itens_limpos = []
         homologados = 0
@@ -99,12 +95,11 @@ def processar_licitacao(lic, session):
                     r_res = session.get(f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num}/resultados", timeout=15)
                     if r_res.status_code == 200:
                         rl = r_res.json()
-                        # --- CORREÇÃO CRÍTICA AQUI ---
+                        # Correção de Lista
                         if isinstance(rl, list):
                             res = rl[0] if len(rl) > 0 else None
                         else:
                             res = rl
-                        # -----------------------------
                         if res: homologados += 1
                 except: pass
 
@@ -117,9 +112,7 @@ def processar_licitacao(lic, session):
                 'res_val': float(res.get('valorUnitarioHomologado') or 0) if res else 0
             })
 
-        print(f"   ✅ CAPTURADO: {obj_raw[:50]}... | 📦 {len(itens_limpos)} itens | 🏆 {homologados} arrematados")
-        
-        return {
+        dados_finais = {
             'id': f"{cnpj}{ano}{seq}", 'dt_enc': dt_enc_str, 'uf': uf, 
             'uasg': lic['unidadeOrgao'].get('codigoUnidade', '---'),
             'org': lic['orgaoEntidade']['razaoSocial'], 'unid_nome': lic['unidadeOrgao'].get('nomeUnidade', '---'),
@@ -128,9 +121,15 @@ def processar_licitacao(lic, session):
             'link': f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}", 
             'val_tot': float(lic.get('valorTotalEstimado') or 0), 'itens': itens_limpos
         }
-    except: return None
+        
+        return ('CAPTURADO', dados_finais, len(itens_limpos), homologados)
+
+    except: return ('ERRO', None, 0, 0)
 
 def buscar_periodo(session, banco, d_ini, d_fim):
+    # Estatísticas Globais
+    stats_geral = {'vetados': 0, 'capturados': 0, 'itens': 0, 'homologados': 0, 'ignorados': 0}
+    
     delta = d_fim - d_ini
     for i in range(delta.days + 1):
         dia = (d_ini + timedelta(days=i)).strftime('%Y%m%d')
@@ -143,16 +142,45 @@ def buscar_periodo(session, banco, d_ini, d_fim):
             dados = r.json(); lics = dados.get('data', [])
             if not lics: break
             
-            print(f" 📄 Pág {pag}: Analisando {len(lics)} editais...")
+            total_paginas = dados.get('totalPaginas', 1)
             
+            # Estatísticas da Página
+            stats_pag = {'vetados': 0, 'capturados': 0, 'itens': 0, 'homologados': 0, 'ignorados': 0}
+
             with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
                 futuros = [exe.submit(processar_licitacao, l, session) for l in lics]
                 for f in concurrent.futures.as_completed(futuros):
-                    res = f.result()
-                    if res: banco[res['id']] = res
+                    status, dados_lic, qtd_i, qtd_h = f.result()
+                    
+                    if status == 'CAPTURADO':
+                        stats_pag['capturados'] += 1
+                        stats_pag['itens'] += qtd_i
+                        stats_pag['homologados'] += qtd_h
+                        if dados_lic: banco[dados_lic['id']] = dados_lic
+                    elif status == 'VETADO':
+                        stats_pag['vetados'] += 1
+                    else:
+                        stats_pag['ignorados'] += 1
             
-            if pag >= dados.get('totalPaginas', 1): break
+            # Atualiza Geral
+            for k in stats_geral: stats_geral[k] += stats_pag[k]
+
+            # IMPRIME RESUMO DA PÁGINA
+            print(f"   📄 Pág {pag}/{total_paginas}: 🎯 {stats_pag['capturados']} Caps ({stats_pag['itens']} Itens/{stats_pag['homologados']} Homol) | 🚫 {stats_pag['vetados']} Vetos | ⚠️ {stats_pag['ignorados']} Ignorados")
+            
+            if pag >= total_paginas: break
             pag += 1
+
+    # IMPRIME RESUMÃO GERAL
+    print("\n" + "="*50)
+    print("📊 RESUMÃO GERAL DA EXECUÇÃO")
+    print("="*50)
+    print(f"✅ PREGÕES COMPATÍVEIS:  {stats_geral['capturados']}")
+    print(f"🚫 PREGÕES VETADOS:      {stats_geral['vetados']}")
+    print(f"📦 ITENS CAPTURADOS:     {stats_geral['itens']}")
+    print(f"🏆 ITENS HOMOLOGADOS:    {stats_geral['homologados']}")
+    print(f"⚠️ IGNORADOS/OUTROS:     {stats_geral['ignorados']}")
+    print("="*50 + "\n")
 
 if __name__ == '__main__':
     if os.path.exists(ARQ_LOCK): sys.exit(0)
@@ -170,6 +198,5 @@ if __name__ == '__main__':
         buscar_periodo(session, banco, dt_start, dt_end)
         with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
             json.dump(list(banco.values()), f, ensure_ascii=False)
-        print(f"\n🏁 Fim da coleta. Total no banco: {len(banco)} registros.")
     finally:
         if os.path.exists(ARQ_LOCK): os.remove(ARQ_LOCK)
