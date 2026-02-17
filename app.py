@@ -50,6 +50,14 @@ def veta_edital(obj_raw, uf):
             if not any(r in obj for r in RESGATES_MEDICOS): return True
     return False
 
+def safe_float(val):
+    """Converte para float de forma segura, tratando None como 0.0"""
+    try:
+        if val is None: return 0.0
+        return float(val)
+    except:
+        return 0.0
+
 def processar_licitacao(lic, session):
     # RETORNO: (STATUS, DADOS, QTD_ITENS, QTD_HOMOLOGADOS)
     try:
@@ -58,9 +66,9 @@ def processar_licitacao(lic, session):
         
         # Filtro de Data
         dt_enc_str = lic.get('dataEncerramentoProposta')
-        if not dt_enc_str: return ('ERRO', None, 0, 0)
+        if not dt_enc_str: return ('ERRO_DATA', None, 0, 0)
         dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
-        if dt_enc < DATA_CORTE_FIXA: return ('IGNORADO', None, 0, 0)
+        if dt_enc < DATA_CORTE_FIXA: return ('IGNORADO_DATA', None, 0, 0)
 
         # Veto Supremo
         if veta_edital(obj_raw, uf):
@@ -74,16 +82,16 @@ def processar_licitacao(lic, session):
         elif uf in NE_ESTADOS and any(t in obj_norm for t in WL_NE_MATS):
             tem_interesse = True
             
-        if not tem_interesse: return ('IGNORADO', None, 0, 0)
+        if not tem_interesse: return ('IGNORADO_INTERESSE', None, 0, 0)
 
         # Captura de Itens
         cnpj, ano, seq = lic['orgaoEntidade']['cnpj'], lic['anoCompra'], lic['sequencialCompra']
         url_itens = f'https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens'
         r_itens = session.get(url_itens, params={'pagina': 1, 'tamanhoPagina': 100}, timeout=20)
         
-        if r_itens.status_code != 200: return ('ERRO', None, 0, 0)
+        if r_itens.status_code != 200: return ('ERRO_API', None, 0, 0)
         itens_raw = r_itens.json().get('data', [])
-        if not itens_raw: return ('IGNORADO', None, 0, 0) # Sem itens = Ignorado técnico
+        if not itens_raw: return ('IGNORADO_VAZIO', None, 0, 0)
 
         itens_limpos = []
         homologados = 0
@@ -95,7 +103,7 @@ def processar_licitacao(lic, session):
                     r_res = session.get(f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num}/resultados", timeout=15)
                     if r_res.status_code == 200:
                         rl = r_res.json()
-                        # Correção de Lista
+                        # Correção de Lista e Nulos
                         if isinstance(rl, list):
                             res = rl[0] if len(rl) > 0 else None
                         else:
@@ -103,13 +111,22 @@ def processar_licitacao(lic, session):
                         if res: homologados += 1
                 except: pass
 
+            # --- AQUI ESTAVA O ERRO CRÍTICO (BLINDAGEM APLICADA) ---
+            qtd = safe_float(it.get('quantidade'))
+            v_est = safe_float(it.get('valorUnitarioEstimado'))
+            res_val = safe_float(res.get('valorUnitarioHomologado')) if res else 0.0
+            # -------------------------------------------------------
+
             itens_limpos.append({
-                'n': num, 'd': it.get('descricao', ''), 'q': float(it.get('quantidade', 0)),
-                'u': it.get('unidadeMedida', ''), 'v_est': float(it.get('valorUnitarioEstimado', 0)),
+                'n': num, 
+                'd': it.get('descricao', ''), 
+                'q': qtd,
+                'u': it.get('unidadeMedida', ''), 
+                'v_est': v_est,
                 'benef': it.get('tipoBeneficioId') or 4,
                 'sit': "HOMOLOGADO" if res else str(it.get('situacaoCompraItemName', 'ABERTO')).upper(),
                 'res_forn': (res.get('nomeRazaoSocialFornecedor') or res.get('razaoSocial')) if res else None,
-                'res_val': float(res.get('valorUnitarioHomologado') or 0) if res else 0
+                'res_val': res_val
             })
 
         dados_finais = {
@@ -119,16 +136,20 @@ def processar_licitacao(lic, session):
             'cid': lic['unidadeOrgao'].get('municipioNome'), 'obj': obj_raw, 
             'edit': f"{str(lic.get('numeroCompra', '')).zfill(5)}/{ano}",
             'link': f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}", 
-            'val_tot': float(lic.get('valorTotalEstimado') or 0), 'itens': itens_limpos
+            'val_tot': safe_float(lic.get('valorTotalEstimado')), 
+            'itens': itens_limpos
         }
         
         return ('CAPTURADO', dados_finais, len(itens_limpos), homologados)
 
-    except: return ('ERRO', None, 0, 0)
+    except Exception as e:
+        # Se ainda der erro, imprime para sabermos o que é
+        # print(f"ERRO FATAL: {str(e)}") 
+        return ('ERRO_CRASH', None, 0, 0)
 
 def buscar_periodo(session, banco, d_ini, d_fim):
-    # Estatísticas Globais
-    stats_geral = {'vetados': 0, 'capturados': 0, 'itens': 0, 'homologados': 0, 'ignorados': 0}
+    # Estatísticas Detalhadas
+    stats_geral = {'vetados': 0, 'capturados': 0, 'itens': 0, 'homologados': 0, 'sem_interesse': 0, 'erros': 0}
     
     delta = d_fim - d_ini
     for i in range(delta.days + 1):
@@ -143,9 +164,7 @@ def buscar_periodo(session, banco, d_ini, d_fim):
             if not lics: break
             
             total_paginas = dados.get('totalPaginas', 1)
-            
-            # Estatísticas da Página
-            stats_pag = {'vetados': 0, 'capturados': 0, 'itens': 0, 'homologados': 0, 'ignorados': 0}
+            stats_pag = {'vetados': 0, 'capturados': 0, 'itens': 0, 'homologados': 0, 'sem_interesse': 0, 'erros': 0}
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
                 futuros = [exe.submit(processar_licitacao, l, session) for l in lics]
@@ -159,19 +178,18 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                         if dados_lic: banco[dados_lic['id']] = dados_lic
                     elif status == 'VETADO':
                         stats_pag['vetados'] += 1
-                    else:
-                        stats_pag['ignorados'] += 1
+                    elif status.startswith('IGNORADO'):
+                        stats_pag['sem_interesse'] += 1
+                    else: # ERRO_CRASH, ERRO_API, ERRO_DATA
+                        stats_pag['erros'] += 1
             
-            # Atualiza Geral
             for k in stats_geral: stats_geral[k] += stats_pag[k]
 
-            # IMPRIME RESUMO DA PÁGINA
-            print(f"   📄 Pág {pag}/{total_paginas}: 🎯 {stats_pag['capturados']} Caps ({stats_pag['itens']} Itens/{stats_pag['homologados']} Homol) | 🚫 {stats_pag['vetados']} Vetos | ⚠️ {stats_pag['ignorados']} Ignorados")
+            print(f"   📄 Pág {pag}/{total_paginas}: 🎯 {stats_pag['capturados']} Caps | 🚫 {stats_pag['vetados']} Vetos | 👁️ {stats_pag['sem_interesse']} Ignorados | 🔥 {stats_pag['erros']} Erros")
             
             if pag >= total_paginas: break
             pag += 1
 
-    # IMPRIME RESUMÃO GERAL
     print("\n" + "="*50)
     print("📊 RESUMÃO GERAL DA EXECUÇÃO")
     print("="*50)
@@ -179,7 +197,8 @@ def buscar_periodo(session, banco, d_ini, d_fim):
     print(f"🚫 PREGÕES VETADOS:      {stats_geral['vetados']}")
     print(f"📦 ITENS CAPTURADOS:     {stats_geral['itens']}")
     print(f"🏆 ITENS HOMOLOGADOS:    {stats_geral['homologados']}")
-    print(f"⚠️ IGNORADOS/OUTROS:     {stats_geral['ignorados']}")
+    print(f"👁️ SEM INTERESSE:        {stats_geral['sem_interesse']}")
+    print(f"🔥 ERROS TÉCNICOS:       {stats_geral['erros']}")
     print("="*50 + "\n")
 
 if __name__ == '__main__':
