@@ -10,23 +10,21 @@ ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'
 ARQ_CATALOGO = 'Exportar Dados.csv'              
 DATA_CORTE_2026 = datetime(2025, 12, 1)           
 
-NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
-ESTADOS_BLOQUEADOS = []
-
-# Termos que salvam tudo no NE 
-TERMOS_UNIVERSAIS_NE = ["FRALDA", "ABSORVENTE", "ALCOOL 70", "ALCOOL ETILICO", "ALCOOL GEL", "ALCOOL EM GEL"]
-
-# Vetos que matam o edital 
-VETOS_IMEDIATOS = [
-    "PRESTACAO DE SERVICO", "SERVICO DE ENGENHARIA", "LOCACAO", "INSTALACAO", 
-    "MANUTENCAO", "UNIFORME", "TEXTIL", "REFORMA", "LIMPEZA PREDIAL", 
-    "LAVANDERIA", "IMPRESSAO", "CONSULTORIA", "TREINAMENTO", "VIGILANCIA",
-    "PORTARIA", "RECEPCAO", "EVENTOS", "BUFFET", "SONDAGEM", "GEOLOGIA"
-]
+ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
 
 def normalize(t):
     if not t: return ""
     return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
+
+def inferir_beneficio(desc, benef_atual):
+    """PLANO B: Corrige a omissão do PNCP lendo a descrição do item"""
+    if benef_atual in [1, 2, 3]: return benef_atual
+    d = normalize(desc)
+    if any(x in d for x in ["EXCLUSIVA ME", "EXCLUSIVO ME", "COTA EXCLUSIVA", "SOMENTE ME", "EXCLUSIVIDADE ME", "ME/EPP"]):
+        return 1
+    if any(x in d for x in ["COTA RESERVADA", "RESERVADA ME", "RESERVADA PARA ME"]):
+        return 3
+    return benef_atual
 
 CATALOGO = set()
 try:
@@ -51,55 +49,31 @@ for p in dados_brutos:
     uf = p.get('uf', '')
     if uf in ESTADOS_BLOQUEADOS: continue
 
-    dt_enc_str = p.get('dt_enc', '')
-    if dt_enc_str:
-        try:
-            dt = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
-            if dt < DATA_CORTE_2026: continue
-        except: pass
-
-    obj = normalize(p.get('obj', ''))
-    
-    # Check Veto
-    vetado = False
-    for v in VETOS_IMEDIATOS:
-        if v in obj:
-            if v == "SERVICO" and "FORNECIMENTO" in obj: continue
-            vetado = True; break
-    if vetado: continue
-
-    # Check Interesse
-    tem_interesse = any(c in obj for c in CATALOGO)
-    if not tem_interesse and uf in NE_ESTADOS:
-        tem_interesse = any(tu in obj for tu in TERMOS_UNIVERSAIS_NE)
-    if not tem_interesse:
-        if any(x in obj for x in ["MEDICAMENTO", "MATERIAL MED", "INSUMO HOSP"]): tem_interesse = True
-    
-    if not tem_interesse: continue
-
-    # Itens Processados
     itens_brutos = p.get('itens', [])
     itens_fmt = []
     
     for it in itens_brutos:
-        desc = normalize(it.get('d', ''))
+        desc = it.get('d', '')
         
-        # Formato limpo e renomeado
+        # Correção do ME/EPP
+        benef_bruto = int(it.get('benef') or 4)
+        benef_corrigido = inferir_beneficio(desc, benef_bruto)
+        
         itens_fmt.append({
             'n': it.get('n'), 
-            'desc': it.get('d'), 
+            'desc': desc, 
             'qtd': it.get('q', 0),
             'un': it.get('u', ''), 
             'valUnit': it.get('v_est', 0),
             'valHomologado': it.get('res_val', 0), 
             'fornecedor': it.get('res_forn'),
             'situacao': it.get('sit', 'EM ANDAMENTO'), 
-            'benef': int(it.get('benef') or 4) 
+            'benef': benef_corrigido
         })
         
     if not itens_fmt: continue
 
-    # Calcula Benefício do Edital Inteiro
+    # Calcula Benefício do Edital Inteiro pro HTML
     todos_exclusivos = all(i['benef'] in [1, 2, 3] for i in itens_fmt)
     algum_exclusivo = any(i['benef'] in [1, 2, 3] for i in itens_fmt)
     tipo_lic = "EXCLUSIVO" if todos_exclusivos else ("PARCIAL" if algum_exclusivo else "AMPLO")
