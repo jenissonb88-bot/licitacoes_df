@@ -224,4 +224,74 @@ function filtrar() {
 }
 
 function limparFiltros() {
-    document.querySelectorAll('.form-control').forEach(i => i.value =
+    document.querySelectorAll('.form-control').forEach(i => i.value = '');
+    filteredData = [...allData];
+    currentPage = 1;
+    renderMonitor();
+}
+
+function abrirItens(id) {
+    const lic = allData.find(x => x.id === id);
+    document.getElementById('modalTitle').innerText = `Itens: ${lic.orgao} (Edital ${lic.edital})`;
+    document.getElementById('linkPncp').href = lic.link;
+
+    const grupos = {};
+    const aguardando = [];
+
+    lic.itens.forEach(it => {
+        if (it.fornecedor && it.situacao === "HOMOLOGADO") {
+            if (!grupos[it.fornecedor]) grupos[it.fornecedor] = [];
+            grupos[it.fornecedor].push(it);
+        } else {
+            aguardando.push(it);
+        }
+    });
+
+    let html = `<div class="table-responsive"><table class="table table-sm table-bordered table-itens align-middle"><thead class="table-dark">
+        <tr><th class="text-center">#</th><th>Descrição</th><th class="text-center">ME/EPP</th><th class="text-center">Qtd/Un</th><th class="text-center">Est. Unit.</th><th class="text-center">Final Unit.</th><th class="text-center">Total</th></tr>
+        </thead><tbody>`;
+
+    if (aguardando.length > 0) {
+        html += `<tr><td colspan="7" class="header-status-aguardando py-1 small">ITENS EM ANDAMENTO</td></tr>`;
+        aguardando.forEach(it => html += renderLinhaItem(it));
+    }
+
+    for (const forn in grupos) {
+        html += `<tr class="header-fornecedor"><td colspan="7">Fornecedor: ${forn}</td></tr>`;
+        grupos[forn].forEach(it => html += renderLinhaItem(it));
+    }
+
+    html += `</tbody></table></div>`;
+    document.getElementById('modalBody').innerHTML = html;
+    modalObj.show();
+}
+
+function renderLinhaItem(it) {
+    const isMeEpp = [1, 2, 3].includes(parseInt(it.benef));
+    const meEppHtml = isMeEpp ? '<span class="benef-sim">SIM</span>' : '<span class="benef-nao">NÃO</span>';
+    const valorTotal = it.valHomologado > 0 ? (it.valHomologado * it.qtd) : (it.valUnit * it.qtd);
+
+    return `<tr><td class="text-center fw-bold">${it.n}</td><td>${it.desc}</td><td class="text-center">${meEppHtml}</td>
+            <td class="text-center">${it.qtd} ${it.un}</td><td class="text-center val-estimado">R$ ${it.valUnit.toFixed(4)}</td>
+            <td class="text-center val-homologado">${it.valHomologado > 0 ? 'R$ ' + it.valHomologado.toFixed(4) : '---'}</td>
+            <td class="text-center fw-bold">R$ ${valorTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td></tr>`;
+}
+
+function excluirLicitacao(id) {
+    if(confirm("Deseja remover esta licitação da visualização?")) {
+        allData = allData.filter(x => x.id !== id);
+        filtrar();
+    }
+}
+
+function abrirInclusaoManual() {
+    alert("Para Inclusão Manual:\n\nAdicione o link da licitação no ficheiro 'links_manuais.txt' no GitHub. Ele será lido e adicionado no próximo processamento do robô.");
+}
+
+document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
+document.getElementById('nextPage').onclick = () => { if(currentPage * itemsPerPage < filteredData.length) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
+
+loadData();
+</script>
+</body>
+</html>
