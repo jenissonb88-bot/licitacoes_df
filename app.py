@@ -13,17 +13,16 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 # --- CONFIGURAÇÕES ---
-ARQDADOS = 'pregacoes_pharma_limpos.json.gz' # Mantido para o index.html
+ARQDADOS = 'dadosoportunidades.json.gz' # VOLTOU A SER O BRUTO
 ARQ_LOCK = 'execucao.lock'
 ARQ_CATALOGO = 'Exportar Dados.csv'
-ARQ_MANUAL = 'links_manuais.txt' # Sistema de Inclusão Manual mantido
+ARQ_MANUAL = 'links_manuais.txt' 
 MAXWORKERS = 15 
 DATA_CORTE_FIXA = datetime(2025, 12, 1)
 
-# --- GEOGRAFIA (Sua Lógica) ---
+# --- GEOGRAFIA E MAPA ---
 NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
 EXT_ESTADOS = ['ES', 'RJ', 'SP', 'MG', 'GO', 'MT', 'MS', 'DF', 'AM', 'PA', 'TO']
-
 MAPA_SITUACAO = {1: "EM ANDAMENTO", 2: "HOMOLOGADO", 3: "CANCELADO", 4: "DESERTO", 5: "FRACASSADO"}
 
 def normalize(t):
@@ -54,31 +53,13 @@ if os.path.exists(ARQ_CATALOGO):
             except: continue
     except: pass
 
-# --- VETOS (Sua Lógica de Muros de Contenção) ---
-VETOS_ALIMENTACAO = [normalize(x) for x in [
-    "ALIMENTACAO ESCOLAR", "GENEROS ALIMENTICIOS", "MERENDA", "PNAE", "PERECIVEIS", 
-    "HORTIFRUTI", "CARNES", "PANIFICACAO", "CESTAS BASICAS", "LANCHE", "REFEICOES", 
-    "COFFEE BREAK", "BUFFET", "COZINHA", "AÇOUGUE", "POLPA DE FRUTA", "ESTIAGEM"
-]]
-
-VETOS_EDUCACAO = [normalize(x) for x in [
-    "MATERIAL ESCOLAR", "PEDAGOGICO", "DIDATICO", "BRINQUEDOS", "LIVROS", 
-    "TRANSPORTE ESCOLAR", "KIT ALUNO", "REDE MUNICIPAL DE ENSINO", "SECRETARIA DE EDUCACAO"
-]]
-
-VETOS_OPERACIONAL = [normalize(x) for x in [
-    "OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "REFORMA", "MANUTENCAO PREDIAL", 
-    "LIMPEZA URBANA", "RESIDUOS SOLIDOS", "LOCACAO DE VEICULOS", "TRANSPORTE", 
-    "COMBUSTIVEL", "DIESEL", "GASOLINA", "PNEUS", "PECAS AUTOMOTIVAS", "OFICINA",
-    "VIGILANCIA", "SEGURANCA", "BOMBEIRO", "SALVAMENTO", "RESGATE", "VIATURA", 
-    "FARDAMENTO", "VESTUARIO", "INFORMATICA", "COMPUTADORES", "IMPRESSAO", "EVENTOS"
-]]
-
+# --- VETOS E ALVOS ---
+VETOS_ALIMENTACAO = [normalize(x) for x in ["ALIMENTACAO ESCOLAR", "GENEROS ALIMENTICIOS", "MERENDA", "PNAE", "PERECIVEIS", "HORTIFRUTI", "CARNES", "PANIFICACAO", "CESTAS BASICAS", "LANCHE", "REFEICOES", "COFFEE BREAK", "BUFFET", "COZINHA", "AÇOUGUE", "POLPA DE FRUTA", "ESTIAGEM"]]
+VETOS_EDUCACAO = [normalize(x) for x in ["MATERIAL ESCOLAR", "PEDAGOGICO", "DIDATICO", "BRINQUEDOS", "LIVROS", "TRANSPORTE ESCOLAR", "KIT ALUNO", "REDE MUNICIPAL DE ENSINO", "SECRETARIA DE EDUCACAO"]]
+VETOS_OPERACIONAL = [normalize(x) for x in ["OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "REFORMA", "MANUTENCAO PREDIAL", "LIMPEZA URBANA", "RESIDUOS SOLIDOS", "LOCACAO DE VEICULOS", "TRANSPORTE", "COMBUSTIVEL", "DIESEL", "GASOLINA", "PNEUS", "PECAS AUTOMOTIVAS", "OFICINA", "VIGILANCIA", "SEGURANCA", "BOMBEIRO", "SALVAMENTO", "RESGATE", "VIATURA", "FARDAMENTO", "VESTUARIO", "INFORMATICA", "COMPUTADORES", "IMPRESSAO", "EVENTOS"]]
 VETOS_ADM = [normalize(x) for x in ["ADESAO", "INTENCAO", "IRP", "CREDENCIAMENTO", "LEILAO", "ALIENACAO"]]
-
 TODOS_VETOS = VETOS_ALIMENTACAO + VETOS_EDUCACAO + VETOS_OPERACIONAL + VETOS_ADM
 
-# --- ALVOS (Seus Ímãs) ---
 WL_MEDICAMENTOS = [normalize(x) for x in ["MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOAL", "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA", "ANTIBIOTICO"]]
 WL_NUTRI_CLINICA = [normalize(x) for x in ["NUTRICAO ENTERAL", "FORMULA INFANTIL", "SUPLEMENTO ALIMENTAR", "DIETA ENTERAL", "DIETA PARENTERAL", "NUTRICAO CLINICA"]]
 WL_MATERIAIS_NE = [normalize(x) for x in ["MATERIAL MEDIC", "INSUMO HOSPITALAR", "MMH", "SERINGA", "AGULHA", "GAZE", "ATADURA", "SONDA", "CATETER", "EQUIPO", "LUVAS DE PROCEDIMENTO", "MASCARA CIRURGICA"]]
@@ -105,10 +86,6 @@ def safe_float(val):
     try: return float(val) if val is not None else 0.0
     except: return 0.0
 
-def safe_int(val, default=4):
-    try: return int(val) if val is not None else default
-    except: return default
-
 def processar_licitacao(lic, session, forcado=False):
     id_ref = "DESC"
     try:
@@ -126,7 +103,6 @@ def processar_licitacao(lic, session, forcado=False):
         
         dt_enc_str = lic.get('dataEncerramentoProposta') or datetime.now().isoformat()
         
-        # Lógica de Triagem apenas se não for Inclusão Manual
         if not forcado:
             dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
             if dt_enc < DATA_CORTE_FIXA: return ('IGNORADO', None, 0, 0)
@@ -139,7 +115,6 @@ def processar_licitacao(lic, session, forcado=False):
 
             if not tem_interesse: return ('IGNORADO', None, 0, 0)
 
-        # Captura de Itens
         url_itens = f'https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens'
         r_itens = session.get(url_itens, params={'pagina': 1, 'tamanhoPagina': 100}, timeout=20)
         if r_itens.status_code != 200: return ('ERRO', {'msg': f'HTTP {r_itens.status_code}'}, 0, 0)
@@ -151,9 +126,8 @@ def processar_licitacao(lic, session, forcado=False):
 
         if not itens_raw: return ('IGNORADO', None, 0, 0)
 
-        itens_limpos = []
-        homologados = 0
-        tem_item_catalogo = forcado # Se forçado, assume que tem
+        itens_brutos = []
+        tem_item_catalogo = forcado 
         
         for it in itens_raw:
             if not isinstance(it, dict): continue
@@ -162,78 +136,50 @@ def processar_licitacao(lic, session, forcado=False):
             desc_norm = normalize(desc)
             ncm = str(it.get('ncmNbsCodigo', ''))
             
-            # Filtro de Lixo Interno
             if any(v in desc_norm for v in ["ARROZ", "FEIJAO", "CARNE", "PNEU", "GASOLINA", "RODA", "LIVRO", "COPO", "CAFE", "ACUCAR"]):
                 continue
 
-            # Mantive a adição do NCM aqui como uma camada extra de segurança sem quebrar sua lógica
             if ncm.startswith('30') or any(term in desc_norm for term in CATALOGO_TERMOS):
                 tem_item_catalogo = True
             
-            sit_id = safe_int(it.get('situacaoCompraItem'), 1)
-            status_final = MAPA_SITUACAO.get(sit_id, "EM ANDAMENTO")
-            num = it.get('numeroItem')
-            res_forn, res_val = None, 0.0
+            sit_id = int(it.get('situacaoCompraItem') or 1)
             
-            if it.get('temResultado') or sit_id == 2:
-                try:
-                    r_res = session.get(f"{url_itens}/{num}/resultados", timeout=15)
-                    if r_res.status_code == 200:
-                        rl = r_res.json()
-                        res = rl[0] if isinstance(rl, list) and len(rl) > 0 else (rl if isinstance(rl, dict) else None)
-                        if res:
-                            nf = res.get('nomeRazaoSocialFornecedor') or res.get('razaoSocial')
-                            ni = res.get('niFornecedor')
-                            if nf: res_forn = f"{nf} (CNPJ: {ni})" if ni else nf
-                            res_val = safe_float(res.get('valorUnitarioHomologado'))
-                            if sit_id == 1 and res_forn: status_final = "HOMOLOGADO"
-                except: pass
-
-            if status_final == "HOMOLOGADO": homologados += 1
-
-            # CHAVES ADAPTADAS PARA O SEU FRONTEND HTML (index.html)
-            itens_limpos.append({
-                'n': num, 
-                'desc': desc, 
-                'qtd': safe_float(it.get('quantidade')),
-                'un': it.get('unidadeMedida', 'UN'), 
-                'valUnit': safe_float(it.get('valorUnitarioEstimado')),
-                'valHomologado': res_val,
-                'benef': safe_int(it.get('tipoBeneficioId'), 4),
-                'situacao': status_final, 
-                'fornecedor': res_forn
+            # Formato BRUTO antigo para o limpeza.py ler
+            itens_brutos.append({
+                'n': it.get('numeroItem'), 
+                'd': desc, 
+                'q': safe_float(it.get('quantidade')),
+                'u': it.get('unidadeMedida', 'UN'), 
+                'v_est': safe_float(it.get('valorUnitarioEstimado')),
+                'benef': it.get('tipoBeneficioId') or 4,
+                'sit': MAPA_SITUACAO.get(sit_id, "EM ANDAMENTO"), 
+                'res_forn': None,
+                'res_val': 0.0
             })
 
-        if not itens_limpos: return ('IGNORADO', None, 0, 0)
+        if not itens_brutos: return ('IGNORADO', None, 0, 0)
         
-        # A Regra de Ouro Geográfica (aplicada se não for manual)
         if not forcado and uf not in NE_ESTADOS:
             if not tem_item_catalogo and not any(m in obj_norm for m in WL_MEDICAMENTOS):
                  return ('IGNORADO', None, 0, 0)
 
-        # Cálculo do Tipo de Licitação para o HTML
-        todos_exclusivos = all(i['benef'] in [1, 2, 3] for i in itens_limpos)
-        algum_exclusivo = any(i['benef'] in [1, 2, 3] for i in itens_limpos)
-        tipo_lic = "EXCLUSIVO" if todos_exclusivos else ("PARCIAL" if algum_exclusivo else "AMPLO")
-
-        # ESTRUTURA FINAL ADAPTADA PARA O INDEX.HTML
+        # Formato BRUTO para o limpeza.py ler
         dados_finais = {
             'id': f"{cnpj}{ano}{seq}", 
-            'data_enc': dt_enc_str, 
+            'dt_enc': dt_enc_str, 
             'uf': uf, 
             'uasg': lic.get('unidadeOrgao', {}).get('codigoUnidade', '---'),
-            'orgao': lic.get('orgaoEntidade', {}).get('razaoSocial', '---'), 
-            'unidade': lic.get('unidadeOrgao', {}).get('nomeUnidade', '---'),
-            'cidade': lic.get('unidadeOrgao', {}).get('municipioNome', '---'), 
-            'objeto': obj_raw, 
-            'edital': f"{str(lic.get('numeroCompra', '')).zfill(5)}/{ano}",
+            'org': lic.get('orgaoEntidade', {}).get('razaoSocial', '---'), 
+            'unid_nome': lic.get('unidadeOrgao', {}).get('nomeUnidade', '---'),
+            'cid': lic.get('unidadeOrgao', {}).get('municipioNome', '---'), 
+            'obj': obj_raw, 
+            'edit': f"{str(lic.get('numeroCompra', '')).zfill(5)}/{ano}",
             'link': f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}", 
-            'valor_estimado': safe_float(lic.get('valorTotalEstimado')), 
-            'tipo_licitacao': tipo_lic,
-            'itens': itens_limpos
+            'val_tot': safe_float(lic.get('valorTotalEstimado')), 
+            'itens': itens_brutos
         }
         
-        return ('CAPTURADO', dados_finais, len(itens_limpos), homologados)
+        return ('CAPTURADO', dados_finais, len(itens_brutos), 0)
 
     except Exception as e: return ('ERRO', {'msg': str(e)}, 0, 0)
 
@@ -253,7 +199,7 @@ def processar_inclusoes_manuais(session, banco):
                     if st == 'CAPTURADO' and d:
                         banco[d['id']] = d
                         print(f"   ✅ Captura Manual Sucesso: {cnpj}/{ano}/{seq}")
-        open(ARQ_MANUAL, 'w').close() # Limpa após capturar
+        open(ARQ_MANUAL, 'w').close() 
     except Exception as e: print(f"Erro Inclusão Manual: {e}")
 
 def buscar_periodo(session, banco, d_ini, d_fim):
