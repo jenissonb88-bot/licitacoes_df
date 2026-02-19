@@ -9,7 +9,6 @@
         :root { --blue-df: #004a99; --green-df: #198754; --red-df: #dc3545; --yellow-df: #ffc107; }
         body { background-color: #f0f2f5; font-family: 'Segoe UI', system-ui, sans-serif; color: #333; font-size: 0.92rem; }
         
-        /* Cabeçalho do Card */
         .header-card { 
             background: linear-gradient(90deg, #002d5a 0%, #004a99 100%); 
             color: white; padding: 12px 20px; border-radius: 10px 10px 0 0; font-size: 1.05rem;
@@ -18,7 +17,6 @@
         .header-bold { font-weight: 700; }
         .badge-uf-header { background-color: #000; color: #fff; font-weight: 800; padding: 2px 8px; border-radius: 4px; margin-right: 5px; }
 
-        /* Status de Benefício ME/EPP */
         .benef-sim { color: var(--red-df) !important; font-weight: bold !important; }
         .benef-nao { color: var(--green-df) !important; font-weight: bold !important; }
 
@@ -35,10 +33,8 @@
         
         .pagination-container { display: flex; align-items: center; justify-content: center; gap: 15px; margin-top: 20px; padding-bottom: 40px; }
         
-        /* Botões */
         .btn-excluir { font-size: 0.7rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 2px 8px; border-radius: 4px; cursor: pointer; }
         .btn-excluir:hover { background: var(--red-df); border-color: var(--red-df); }
-        .badge-status { font-weight: bold; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; }
     </style>
 </head>
 <body>
@@ -54,25 +50,28 @@
     
     <div class="filter-box shadow-sm">
         <div class="row g-2">
+            <div class="col-md-2">
+                <label class="filter-label">DATA ENCERRAMENTO</label>
+                <input type="date" id="filterData" class="form-control form-control-sm" onchange="filtrar()">
+            </div>
             <div class="col-md-1">
                 <label class="filter-label">UF</label>
-                <input type="text" id="filterUF" class="form-control form-control-sm" placeholder="Ex: PE">
+                <input type="text" id="filterUF" class="form-control form-control-sm" placeholder="Ex: PE" oninput="filtrar()">
             </div>
             <div class="col-md-2">
                 <label class="filter-label">CIDADE</label>
-                <input type="text" id="filterCidade" class="form-control form-control-sm" placeholder="Busque a cidade...">
+                <input type="text" id="filterCidade" class="form-control form-control-sm" placeholder="Busque a cidade..." oninput="filtrar()">
             </div>
             <div class="col-md-3">
                 <label class="filter-label">ÓRGÃO / CÓDIGO</label>
-                <input type="text" id="filterOrgao" class="form-control form-control-sm" placeholder="Nome ou UASG">
+                <input type="text" id="filterOrgao" class="form-control form-control-sm" placeholder="Nome ou UASG" oninput="filtrar()">
             </div>
             <div class="col-md-2">
                 <label class="filter-label">Nº EDITAL</label>
-                <input type="text" id="filterEdital" class="form-control form-control-sm" placeholder="00000/2026">
+                <input type="text" id="filterEdital" class="form-control form-control-sm" placeholder="00000/2026" oninput="filtrar()">
             </div>
-            <div class="col-md-2 d-flex align-items-end gap-1">
-                <button class="btn btn-sm btn-primary w-100 fw-bold" onclick="filtrar()">BUSCAR</button>
-                <button class="btn btn-sm btn-outline-secondary w-100 fw-bold" onclick="limparFiltros()">LIMPAR</button>
+            <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-sm btn-outline-secondary w-100 fw-bold" onclick="limparFiltros()">LIMPAR FILTROS</button>
             </div>
         </div>
     </div>
@@ -93,8 +92,7 @@
                 <h6 class="modal-title fw-bold" id="modalTitle">Itens da Licitação</h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body p-3" id="modalBody">
-                </div>
+            <div class="modal-body p-3" id="modalBody"></div>
             <div class="modal-footer bg-light border-0 py-2">
                 <a id="linkPncp" href="#" target="_blank" class="btn btn-sm btn-primary px-4 fw-bold">VER NO PNCP</a>
                 <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">FECHAR</button>
@@ -113,7 +111,6 @@ const modalObj = new bootstrap.Modal(document.getElementById('modalDetalhes'));
 
 async function loadData() {
     try {
-        // Nome do ficheiro gerado pelo robô Python
         const response = await fetch('pregacoes_pharma_limpos.json.gz');
         const ds = new DecompressionStream('gzip');
         const decompressedStream = response.body.pipeThrough(ds);
@@ -137,10 +134,13 @@ function renderMonitor() {
     const end = start + itemsPerPage;
     const pageItems = filteredData.slice(start, end);
 
+    if (pageItems.length === 0) {
+        container.innerHTML = '<div class="text-center py-5 text-muted">Nenhuma licitação encontrada para os filtros aplicados.</div>';
+    }
+
     pageItems.forEach(lic => {
         const div = document.createElement('div');
         div.className = 'card card-licitacao';
-        
         const valorTotal = lic.valor_estimado > 0 
             ? `R$ ${lic.valor_estimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` 
             : 'Sigiloso/Não inf.';
@@ -161,7 +161,7 @@ function renderMonitor() {
                         <h6 class="fw-bold mb-2">${lic.objeto}</h6>
                         <div class="d-flex gap-2">
                             <span class="badge bg-secondary">UASG/Código: ${lic.uasg}</span>
-                            <span class="badge bg-info text-dark">Abertura: ${new Date(lic.data_enc).toLocaleString('pt-BR')}</span>
+                            <span class="badge bg-info text-dark">Vencimento: ${new Date(lic.data_enc).toLocaleString('pt-BR')}</span>
                         </div>
                     </div>
                     <div class="col-md-4 text-center">
@@ -178,85 +178,19 @@ function renderMonitor() {
     document.getElementById('pageInfo').innerText = `Página ${currentPage} de ${totalPages}`;
 }
 
-function abrirItens(id) {
-    const lic = allData.find(x => x.id === id);
-    document.getElementById('modalTitle').innerText = `Itens: ${lic.orgao} (Edital ${lic.edital})`;
-    document.getElementById('linkPncp').href = lic.link;
-
-    const itens = lic.itens;
-    let html = `
-        <div class="table-responsive">
-            <table class="table table-sm table-bordered table-itens align-middle">
-                <thead class="table-dark">
-                    <tr>
-                        <th class="text-center">#</th>
-                        <th>Descrição do Item</th>
-                        <th class="text-center">ME/EPP</th>
-                        <th class="text-center">Qtd/Un</th>
-                        <th class="text-center">Est. Unit.</th>
-                        <th class="text-center">Final Unit.</th>
-                        <th class="text-center">Total</th>
-                    </tr>
-                </thead>
-                <tbody>`;
-
-    // Agrupamento por fornecedor se homologado
-    const grupos = {};
-    const aguardando = [];
-
-    itens.forEach(it => {
-        if (it.fornecedor && it.situacao === "HOMOLOGADO") {
-            if (!grupos[it.fornecedor]) grupos[it.fornecedor] = [];
-            grupos[it.fornecedor].push(it);
-        } else {
-            aguardando.push(it);
-        }
-    });
-
-    // Renderizar itens aguardando/em aberto
-    if (aguardando.length > 0) {
-        html += `<tr><td colspan="7" class="header-status-aguardando py-1 small">ITENS EM ANDAMENTO / NÃO HOMOLOGADOS</td></tr>`;
-        aguardando.forEach(it => html += renderLinhaItem(it));
-    }
-
-    // Renderizar itens por fornecedor
-    for (const fornecedor in grupos) {
-        html += `<tr class="header-fornecedor"><td colspan="7">Fornecedor: ${fornecedor}</td></tr>`;
-        grupos[fornecedor].forEach(it => html += renderLinhaItem(it));
-    }
-
-    html += `</tbody></table></div>`;
-    document.getElementById('modalBody').innerHTML = html;
-    modalObj.show();
-}
-
-function renderLinhaItem(it) {
-    // Lógica ME/EPP: 1, 2, 3 = SIM | 4, 5 = NÃO
-    const isMeEpp = [1, 2, 3].includes(parseInt(it.benef));
-    const meEppHtml = isMeEpp ? '<span class="benef-sim">SIM</span>' : '<span class="benef-nao">NÃO</span>';
-    
-    const valorTotal = it.valHomologado > 0 ? (it.valHomologado * it.qtd) : (it.valUnit * it.qtd);
-
-    return `
-        <tr>
-            <td class="text-center fw-bold">${it.n}</td>
-            <td>${it.desc}</td>
-            <td class="text-center">${meEppHtml}</td>
-            <td class="text-center">${it.qtd} ${it.un}</td>
-            <td class="text-center val-estimado">R$ ${it.valUnit.toFixed(4)}</td>
-            <td class="text-center val-homologado">${it.valHomologado > 0 ? 'R$ ' + it.valHomologado.toFixed(4) : '---'}</td>
-            <td class="text-center fw-bold">R$ ${valorTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-        </tr>`;
-}
-
 function filtrar() {
+    const dataEnc = document.getElementById('filterData').value;
     const uf = document.getElementById('filterUF').value.toUpperCase();
     const cid = document.getElementById('filterCidade').value.toUpperCase();
     const org = document.getElementById('filterOrgao').value.toUpperCase();
     const edt = document.getElementById('filterEdital').value.toUpperCase();
 
     filteredData = allData.filter(lic => {
-        return (!uf || lic.uf.includes(uf)) &&
+        // Formatar data_enc para comparação YYYY-MM-DD
+        const dataLic = lic.data_enc.split('T')[0];
+        
+        return (!dataEnc || dataLic === dataEnc) &&
+               (!uf || lic.uf.includes(uf)) &&
                (!cid || lic.cidade.toUpperCase().includes(cid)) &&
                (!org || lic.orgao.toUpperCase().includes(org) || (lic.uasg||"").includes(org)) &&
                (!edt || lic.edital.includes(edt));
@@ -273,25 +207,68 @@ function limparFiltros() {
     renderMonitor();
 }
 
+function abrirItens(id) {
+    const lic = allData.find(x => x.id === id);
+    document.getElementById('modalTitle').innerText = `Itens: ${lic.orgao} (Edital ${lic.edital})`;
+    document.getElementById('linkPncp').href = lic.link;
+
+    const grupos = {};
+    const aguardando = [];
+
+    lic.itens.forEach(it => {
+        if (it.fornecedor && it.situacao === "HOMOLOGADO") {
+            if (!grupos[it.fornecedor]) grupos[it.fornecedor] = [];
+            grupos[it.fornecedor].push(it);
+        } else {
+            aguardando.push(it);
+        }
+    });
+
+    let html = `<div class="table-responsive"><table class="table table-sm table-bordered table-itens align-middle"><thead class="table-dark">
+        <tr><th>#</th><th>Descrição</th><th class="text-center">ME/EPP</th><th class="text-center">Qtd/Un</th><th class="text-center">Est. Unit.</th><th class="text-center">Final Unit.</th><th class="text-center">Total</th></tr>
+        </thead><tbody>`;
+
+    if (aguardando.length > 0) {
+        html += `<tr><td colspan="7" class="header-status-aguardando py-1 small">ITENS EM ANDAMENTO</td></tr>`;
+        aguardando.forEach(it => html += renderLinhaItem(it));
+    }
+
+    for (const forn in grupos) {
+        html += `<tr class="header-fornecedor"><td colspan="7">Fornecedor: ${forn}</td></tr>`;
+        grupos[forn].forEach(it => html += renderLinhaItem(it));
+    }
+
+    html += `</tbody></table></div>`;
+    document.getElementById('modalBody').innerHTML = html;
+    modalObj.show();
+}
+
+function renderLinhaItem(it) {
+    const isMeEpp = [1, 2, 3].includes(parseInt(it.benef));
+    const meEppHtml = isMeEpp ? '<span class="benef-sim">SIM</span>' : '<span class="benef-nao">NÃO</span>';
+    const valorTotal = it.valHomologado > 0 ? (it.valHomologado * it.qtd) : (it.valUnit * it.qtd);
+
+    return `<tr><td class="text-center fw-bold">${it.n}</td><td>${it.desc}</td><td class="text-center">${meEppHtml}</td>
+            <td class="text-center">${it.qtd} ${it.un}</td><td class="text-center val-estimado">R$ ${it.valUnit.toFixed(4)}</td>
+            <td class="text-center val-homologado">${it.valHomologado > 0 ? 'R$ ' + it.valHomologado.toFixed(4) : '---'}</td>
+            <td class="text-center fw-bold">R$ ${valorTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td></tr>`;
+}
+
 function excluirLicitacao(id) {
-    if(confirm("Deseja remover esta licitação da visualização?")) {
+    if(confirm("Deseja remover esta licitação?")) {
         allData = allData.filter(x => x.id !== id);
-        filteredData = filteredData.filter(x => x.id !== id);
-        renderMonitor();
+        filtrar();
     }
 }
 
 function abrirInclusaoManual() {
-    alert("Para inclusão manual:\n1. Adicione o link do edital no ficheiro 'links_manuais.txt' no seu GitHub.\n2. O robô irá processar e incluir na próxima varredura.");
+    alert("Adicione o link no ficheiro 'links_manuais.txt' no GitHub para processamento automático.");
 }
 
-// Eventos de Paginação
 document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
 document.getElementById('nextPage').onclick = () => { if(currentPage * itemsPerPage < filteredData.length) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
 
-// Inicialização
 loadData();
 </script>
-
 </body>
 </html>
