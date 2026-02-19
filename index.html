@@ -20,6 +20,12 @@
         .benef-sim { color: var(--red-df) !important; font-weight: bold !important; }
         .benef-nao { color: var(--green-df) !important; font-weight: bold !important; }
 
+        /* Classes para a Classificação do Processo */
+        .badge-tipo { font-weight: 800; padding: 5px 10px; border-radius: 4px; font-size: 0.75rem; letter-spacing: 0.5px; display: inline-flex; align-items: center; }
+        .badge-amplo { background-color: var(--green-df); color: white; }
+        .badge-exclusivo { background-color: var(--red-df); color: white; }
+        .badge-parcial { background-color: var(--yellow-df); color: #212529; }
+
         .card-licitacao { border-radius: 10px; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; overflow: hidden; }
         .filter-box { background: white; padding: 15px; border-radius: 10px; border: 1px solid #e0e6ed; margin-bottom: 20px; }
         .filter-label { font-size: 0.65rem; font-weight: 800; color: var(--blue-df); margin-bottom: 2px; display: block; text-transform: uppercase; }
@@ -117,6 +123,7 @@ async function loadData() {
         const text = await new Response(decompressedStream).text();
         
         allData = JSON.parse(text);
+        allData.sort((a, b) => new Date(b.data_enc) - new Date(a.data_enc));
         filteredData = [...allData];
         renderMonitor();
     } catch (e) { 
@@ -144,6 +151,23 @@ function renderMonitor() {
             ? `R$ ${lic.valor_estimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` 
             : 'Sigiloso/Não inf.';
 
+        // Lógica de Classificação do Processo baseado nos itens
+        let tipoLic = "AMPLO";
+        let cssTipo = "badge-amplo";
+        
+        if (lic.itens && lic.itens.length > 0) {
+            const todosExclusivos = lic.itens.every(it => [1, 2, 3].includes(parseInt(it.benef)));
+            const algumExclusivo = lic.itens.some(it => [1, 2, 3].includes(parseInt(it.benef)));
+            
+            if (todosExclusivos) {
+                tipoLic = "EXCLUSIVO";
+                cssTipo = "badge-exclusivo";
+            } else if (algumExclusivo) {
+                tipoLic = "PARCIAL";
+                cssTipo = "badge-parcial";
+            }
+        }
+
         div.innerHTML = `
             <div class="header-card">
                 <div>
@@ -158,9 +182,10 @@ function renderMonitor() {
                     <div class="col-md-8 border-end">
                         <small class="text-muted d-block mb-1">${lic.cidade} - ${lic.unidade}</small>
                         <h6 class="fw-bold mb-2">${lic.objeto}</h6>
-                        <div class="d-flex gap-2">
-                            <span class="badge bg-secondary">UASG/Código: ${lic.uasg}</span>
-                            <span class="badge bg-info text-dark">Vencimento: ${new Date(lic.data_enc).toLocaleString('pt-BR')}</span>
+                        <div class="d-flex gap-2 mt-2">
+                            <span class="badge bg-secondary d-flex align-items-center">UASG/Código: ${lic.uasg}</span>
+                            <span class="badge bg-info text-dark d-flex align-items-center">Vencimento: ${new Date(lic.data_enc).toLocaleString('pt-BR')}</span>
+                            <span class="badge-tipo ${cssTipo}">${tipoLic}</span>
                         </div>
                     </div>
                     <div class="col-md-4 text-center">
@@ -186,6 +211,7 @@ function filtrar() {
 
     filteredData = allData.filter(lic => {
         const dataLic = lic.data_enc.split('T')[0];
+        
         return (!dataEnc || dataLic === dataEnc) &&
                (!uf || lic.uf.includes(uf)) &&
                (!cid || lic.cidade.toUpperCase().includes(cid)) &&
@@ -193,92 +219,9 @@ function filtrar() {
                (!edt || lic.edital.includes(edt));
     });
     
-    currentPage = 1; renderMonitor();
+    currentPage = 1;
+    renderMonitor();
 }
 
 function limparFiltros() {
-    document.querySelectorAll('.form-control').forEach(i => i.value = '');
-    filteredData = [...allData];
-    currentPage = 1; renderMonitor();
-}
-
-function abrirItens(id) {
-    const lic = allData.find(x => x.id === id);
-    document.getElementById('modalTitle').innerText = `Itens: ${lic.orgao} (Edital ${lic.edital})`;
-    document.getElementById('linkPncp').href = lic.link;
-
-    const grupos = {};
-    const aguardando = [];
-
-    lic.itens.forEach(it => {
-        if (it.fornecedor && it.situacao === "HOMOLOGADO") {
-            if (!grupos[it.fornecedor]) grupos[it.fornecedor] = [];
-            grupos[it.fornecedor].push(it);
-        } else {
-            aguardando.push(it);
-        }
-    });
-
-    let html = `<div class="table-responsive"><table class="table table-sm table-bordered table-itens align-middle"><thead class="table-dark">
-        <tr><th class="text-center">#</th><th>Descrição</th><th class="text-center">ME/EPP</th><th class="text-center">Qtd/Un</th><th class="text-center">Est. Unit.</th><th class="text-center">Final Unit.</th><th class="text-center">Total</th></tr>
-        </thead><tbody>`;
-
-    if (aguardando.length > 0) {
-        html += `<tr><td colspan="7" class="header-status-aguardando py-1 small">ITENS EM ANDAMENTO</td></tr>`;
-        aguardando.forEach(it => html += renderLinhaItem(it));
-    }
-
-    for (const forn in grupos) {
-        html += `<tr class="header-fornecedor"><td colspan="7">Fornecedor: ${forn}</td></tr>`;
-        grupos[forn].forEach(it => html += renderLinhaItem(it));
-    }
-
-    html += `</tbody></table></div>`;
-    document.getElementById('modalBody').innerHTML = html;
-    modalObj.show();
-}
-
-function renderLinhaItem(it) {
-    let meEppHtml = '';
-    // Tratamento Visual de Divergência
-    if (it.me_epp) {
-        if (it.divergente) {
-            meEppHtml = '<span style="color: #fd7e14; font-weight: bold;" title="Benefício corrigido via análise de texto pelo robô">SIM ⚠️ (Corrigido)</span>';
-        } else {
-            meEppHtml = '<span class="benef-sim">SIM</span>';
-        }
-    } else {
-        meEppHtml = '<span class="benef-nao">NÃO</span>';
-    }
-
-    const valorTotal = it.valHomologado > 0 ? (it.valHomologado * it.qtd) : (it.valUnit * it.qtd);
-
-    return `<tr>
-        <td class="text-center fw-bold">${it.n}</td>
-        <td>${it.desc}</td>
-        <td class="text-center">${meEppHtml}</td>
-        <td class="text-center">${it.qtd} ${it.un}</td>
-        <td class="text-center val-estimado">R$ ${it.valUnit.toFixed(4)}</td>
-        <td class="text-center val-homologado">${it.valHomologado > 0 ? 'R$ ' + it.valHomologado.toFixed(4) : '---'}</td>
-        <td class="text-center fw-bold">R$ ${valorTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-    </tr>`;
-}
-
-function excluirLicitacao(id) {
-    if(confirm("Deseja remover esta licitação?")) {
-        allData = allData.filter(x => x.id !== id);
-        filtrar();
-    }
-}
-
-function abrirInclusaoManual() {
-    alert("Adicione o link no ficheiro 'links_manuais.txt' no GitHub para processamento automático.");
-}
-
-document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
-document.getElementById('nextPage').onclick = () => { if(currentPage * itemsPerPage < filteredData.length) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
-
-loadData();
-</script>
-</body>
-</html>
+    document.querySelectorAll('.form-control').forEach(i => i.value =
