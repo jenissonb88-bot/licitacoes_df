@@ -22,7 +22,7 @@ DATA_CORTE_FIXA = datetime(2025, 12, 1)
 
 # --- GEOGRAFIA E MAPA ---
 NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
-ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR'] # BLOQUEIO ABSOLUTO REATIVADO
+ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR'] 
 
 MAPA_SITUACAO = {1: "EM ANDAMENTO", 2: "HOMOLOGADO", 3: "CANCELADO", 4: "DESERTO", 5: "FRACASSADO"}
 
@@ -66,7 +66,7 @@ WL_MATERIAIS_NE = [normalize(x) for x in ["MATERIAL MEDIC", "INSUMO HOSPITALAR",
 
 def criar_sessao():
     s = requests.Session()
-    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/14.0'})
+    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/15.0'})
     retry = Retry(total=5, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
     s.mount('https://', HTTPAdapter(max_retries=retry))
     return s
@@ -104,14 +104,12 @@ def processar_licitacao(lic, session, forcado=False):
         dt_enc_str = lic.get('dataEncerramentoProposta') or datetime.now().isoformat()
         
         if not forcado:
-            # 1. BLOQUEIO GEOGRÁFICO ABSOLUTO EM PRIMEIRO LUGAR
             if uf in ESTADOS_BLOQUEADOS: 
                 return ('VETADO', None, 0, 0)
             
             dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
             if dt_enc < DATA_CORTE_FIXA: return ('IGNORADO', None, 0, 0)
             
-            # 2. VETO DE OBJETO
             if veta_edital(obj_raw, uf): return ('VETADO', None, 0, 0)
 
             tem_interesse = False
@@ -149,15 +147,28 @@ def processar_licitacao(lic, session, forcado=False):
                 tem_item_catalogo = True
             
             sit_id = int(it.get('situacaoCompraItem') or 1)
+            sit_nome = MAPA_SITUACAO.get(sit_id, "EM ANDAMENTO")
             
+            # --- VALIDAÇÃO CRUZADA HÍBRIDA DE BENEFÍCIO ME/EPP ---
+            benef_id = it.get('tipoBeneficioId')
+            benef_nome_api = str(it.get('tipoBeneficioNome', '')).upper()
+            
+            if benef_id in [1, 2, 3]:
+                benef_final = benef_id
+            elif "ME/EPP" in benef_nome_api or "EXCLUSIVA" in benef_nome_api or "COTA" in benef_nome_api:
+                benef_final = 1 if "EXCLUSIVA" in benef_nome_api else 3
+            else:
+                benef_final = 4
+            # -----------------------------------------------------
+
             itens_brutos.append({
                 'n': it.get('numeroItem'), 
                 'd': desc, 
                 'q': safe_float(it.get('quantidade')),
                 'u': it.get('unidadeMedida', 'UN'), 
                 'v_est': safe_float(it.get('valorUnitarioEstimado')),
-                'benef': it.get('tipoBeneficioId') or 4, # Inteiro preservado
-                'sit': MAPA_SITUACAO.get(sit_id, "EM ANDAMENTO"), 
+                'benef': benef_final, 
+                'sit': sit_nome, 
                 'res_forn': None, 
                 'res_val': 0.0
             })
