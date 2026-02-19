@@ -9,21 +9,16 @@
         :root { --blue-df: #004a99; --green-df: #198754; --red-df: #dc3545; --yellow-df: #ffc107; }
         body { background-color: #f0f2f5; font-family: 'Segoe UI', system-ui, sans-serif; color: #333; font-size: 0.92rem; }
         
-        /* CABEÇALHO DO CARD (AJUSTADO: MAIOR E COM NEGRITO SELETIVO) */
         .header-card { 
             background: linear-gradient(90deg, #002d5a 0%, #004a99 100%); 
-            color: white; 
-            padding: 12px 20px; 
-            border-radius: 10px 10px 0 0; 
-            font-size: 1.05rem; /* Aumentado conforme solicitado */
+            color: white; padding: 12px 20px; border-radius: 10px 10px 0 0; font-size: 1.05rem; 
+            display: flex; justify-content: space-between; align-items: center;
         }
         .header-bold { font-weight: 700; }
         .header-normal { font-weight: 400; opacity: 0.9; }
-
         .badge-uf-header { background-color: #000; color: #fff; font-weight: 800; padding: 2px 8px; border-radius: 4px; margin-right: 5px; }
 
-        /* TARJAS DE STATUS DO PREGÃO */
-        .badge-status-master { font-size: 1rem !important; padding: 8px 16px !important; border-radius: 6px !important; letter-spacing: 0.5px; }
+        .badge-status-master { font-size: 0.9rem !important; padding: 6px 12px !important; border-radius: 6px !important; letter-spacing: 0.5px; }
         .badge-amplo { background-color: var(--green-df) !important; color: white !important; font-weight: bold !important; } 
         .badge-exclusivo { background-color: var(--red-df) !important; color: white !important; font-weight: bold !important; } 
         .badge-parcial { background-color: var(--yellow-df) !important; color: #212529 !important; font-weight: bold !important; } 
@@ -39,20 +34,23 @@
         .val-estimado { background-color: #fffdf2; color: #856404; }
         .val-homologado { background-color: #f2f7ff; color: #084298; }
         
-        .txt-itens-count { font-size: 1.25rem !important; font-weight: 800; color: #444; display: block; margin-top: 5px; }
+        .txt-itens-count { font-size: 1.1rem !important; font-weight: 800; color: #444; display: block; margin-top: 5px; }
         .header-fornecedor { background-color: #f8f9fa; color: var(--blue-df); }
         .header-status-aguardando { background-color: #fff9db; font-weight: bold; color: #856404; text-align: center; }
-        .header-falhas { background-color: #fdf2f2; font-weight: bold; color: #a94442; text-align: center; }
         
         .pagination-container { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 20px; padding-bottom: 40px; }
+        .btn-excluir { font-size: 0.75rem; background-color: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; }
     </style>
 </head>
 <body>
 
 <div class="container-fluid px-4 py-3">
-    <div class="text-center mb-3">
-        <h3 class="fw-bold mb-0" style="color: #003366;">🔭 Sniper Pharma Monitor</h3>
-        <span class="badge bg-dark" style="font-size: 0.7rem;">DROGAFONTE LTDA | 2026</span>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h3 class="fw-bold mb-0" style="color: #003366;">🔭 Sniper Pharma Monitor</h3>
+            <span class="badge bg-dark" style="font-size: 0.7rem;">DROGAFONTE LTDA | 2026</span>
+        </div>
+        <button class="btn btn-success fw-bold" onclick="abrirInclusaoManual()">+ Inclusão Manual</button>
     </div>
     
     <div class="filter-box mb-3 shadow-sm">
@@ -82,11 +80,6 @@
         <button class="btn btn-sm btn-primary px-3" id="prevPage">Anterior</button>
         <span id="pageInfo" class="fw-bold px-2 small">Página 1</span>
         <button class="btn btn-sm btn-primary px-3" id="nextPage">Próxima</button>
-        <div class="ms-3 d-flex align-items-center">
-            <span class="small me-2">Pular para:</span>
-            <input type="number" id="jumpInput" class="form-control form-control-sm text-center" style="width: 60px;">
-            <button class="btn btn-dark btn-sm ms-1" id="btnJump">IR</button>
-        </div>
     </div>
 </div>
 
@@ -111,7 +104,7 @@
 let allData = [];
 let filteredData = [];
 let currentPage = 1;
-const itemsPerPage = 15;
+const itemsPerPage = 20;
 const myModal = new bootstrap.Modal(document.getElementById('modalDetalhes'));
 
 async function loadData() {
@@ -123,7 +116,10 @@ async function loadData() {
         allData.sort((a, b) => new Date(b.data_enc) - new Date(a.data_enc));
         filteredData = [...allData];
         renderMonitor();
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+        console.error("Erro ao carregar dados:", e);
+        document.getElementById('monitor-content').innerHTML = '<div class="alert alert-warning">Aguardando arquivo de dados gerado pelo robô.</div>';
+    }
 }
 
 function renderMonitor() {
@@ -134,26 +130,28 @@ function renderMonitor() {
     slice.forEach(p => {
         const div = document.createElement('div');
         div.className = 'card card-licitacao';
-        const sClass = `badge-${p.tipo_licitacao.toLowerCase()}`;
+        const sClass = `badge-${(p.tipo_licitacao || 'amplo').toLowerCase()}`;
         
         const valorDisplay = (p.valor_estimado === 0 || p.valor_estimado === 0.00) 
             ? '<span class="text-danger fw-bold">Sigiloso</span>' 
             : `R$ ${p.valor_estimado.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 
-        // CABEÇALHO COM A NOVA ESTRUTURA E NEGRITO SELETIVO
         div.innerHTML = `
             <div class="header-card">
-                <span class="badge-uf-header">${p.uf}</span>
-                <span class="header-bold">${p.uasg} - ${p.orgao} - </span>
-                <span class="header-normal">${p.unidade || 'Unidade não informada'}</span>
-                <span class="header-bold"> - Edital nº ${p.edit || p.edital}</span>
+                <div>
+                    <span class="badge-uf-header">${p.uf}</span>
+                    <span class="header-bold">${p.uasg} - ${p.orgao} - </span>
+                    <span class="header-normal">${p.unidade || 'Unidade não informada'}</span>
+                    <span class="header-bold"> - Edital nº ${p.edital}</span>
+                </div>
+                <button class="btn-excluir" onclick="excluirLicitacao('${p.id}')">X Descartar</button>
             </div>
             <div class="card-body py-2">
                 <div class="row align-items-center">
                     <div class="col-md-9 border-end">
-                        <p class="mb-1 text-muted" style="font-size: 0.75rem;">${p.cidade} | Encerramento: ${new Date(p.data_enc).toLocaleString()}</p>
-                        <h6 class="mb-2 fw-bold text-dark" style="font-size: 0.85rem; line-height: 1.2;">${p.objeto}</h6>
-                        <span class="badge badge-status-master ${sClass} me-2">${p.tipo_licitacao}</span>
+                        <p class="mb-1 text-muted" style="font-size: 0.75rem;">${p.cidade} | Encerramento: ${new Date(p.data_enc).toLocaleString('pt-BR')}</p>
+                        <h6 class="mb-2 fw-bold text-dark" style="font-size: 0.85rem;">${p.objeto}</h6>
+                        <span class="badge badge-status-master ${sClass} me-2">${p.tipo_licitacao || 'AMPLO'}</span>
                     </div>
                     <div class="col-md-3 text-center">
                         <small class="text-muted d-block" style="font-size: 0.65rem;">VALOR ESTIMADO</small>
@@ -161,7 +159,7 @@ function renderMonitor() {
                         <div class="mt-1 mb-2">
                             <span class="txt-itens-count">Itens: ${p.itens.length}</span>
                         </div>
-                        <button class="btn btn-sm btn-primary w-100 fw-bold shadow-sm" style="font-size: 0.75rem;" onclick="showPopup('${p.id}')">VER DETALHES</button>
+                        <button class="btn btn-sm btn-primary w-100 fw-bold shadow-sm" style="font-size: 0.75rem;" onclick="showPopup('${p.id}')">VER ITENS</button>
                     </div>
                 </div>
             </div>`;
@@ -171,13 +169,26 @@ function renderMonitor() {
     document.getElementById('pageInfo').innerText = `Página ${currentPage} de ${totalPages}`;
 }
 
+function excluirLicitacao(id) {
+    if(confirm("Deseja realmente descartar esta licitação do painel?")) {
+        allData = allData.filter(x => x.id !== id);
+        filtrar();
+    }
+}
+
+function abrirInclusaoManual() {
+    const url = prompt("Cole aqui o link do Portal Nacional de Contratações Públicas (PNCP):");
+    if(url) {
+        alert("Comando de inclusão manual registrado para o Backend processar o link: " + url);
+    }
+}
+
 function showPopup(id) {
     const p = allData.find(x => x.id === id);
     document.getElementById('modalTitle').innerText = `${p.uf} - ${p.orgao}`;
     document.getElementById('linkPncp').href = p.link;
 
     const aguard = p.itens.filter(i => !i.fornecedor && !['FRACASSADO', 'DESERTO', 'CANCELADO'].includes(i.situacao));
-    const falhas = p.itens.filter(i => ['FRACASSADO', 'DESERTO', 'CANCELADO'].includes(i.situacao));
     const ganhos = {};
 
     p.itens.filter(i => i.fornecedor && !['FRACASSADO', 'DESERTO', 'CANCELADO'].includes(i.situacao)).forEach(it => {
@@ -195,14 +206,14 @@ function showPopup(id) {
             <table class="table table-sm table-bordered table-itens align-middle mb-0">
                 <thead class="table-dark">
                     <tr>
-                        <th class="text-center">ITEM</th><th>DESCRIÇÃO</th><th class="text-center">EXCLUSIVO?</th>
+                        <th class="text-center">ITEM</th><th>DESCRIÇÃO</th><th class="text-center">ME/EPP</th>
                         <th class="text-center">QTD/UN</th><th class="text-center">EST. UNIT</th>
                         <th class="text-center">HOMOL. UNIT</th><th class="text-center">TOTAL ITEM</th>
                     </tr>
                 </thead><tbody>`;
 
     if (aguard.length) {
-        html += `<tr><td colspan="7" class="header-status-aguardando py-1">⏳ AGUARDANDO RESULTADO</td></tr>`;
+        html += `<tr><td colspan="7" class="header-status-aguardando py-1">⏳ ITENS EM ANDAMENTO</td></tr>`;
         aguard.forEach(it => html += renderRow(it));
     }
 
@@ -214,20 +225,17 @@ function showPopup(id) {
         d.itens.forEach(it => html += renderRow(it));
     }
 
-    if (falhas.length) {
-        html += `<tr><td colspan="7" class="header-falhas py-1">⚠️ FRACASSADOS / DESERTOS / CANCELADOS</td></tr>`;
-        falhas.forEach(it => html += renderRow(it, 'opacity-75 bg-light'));
-    }
-
     html += `</tbody></table></div>`;
     document.getElementById('modalBody').innerHTML = html;
     myModal.show();
 }
 
-function renderRow(it, css = '') {
+function renderRow(it) {
     const total = it.valHomologado ? (it.qtd * it.valHomologado) : 0;
-    const isEx = it.me_epp === true || [1, 2, 3].includes(parseInt(it.benef));
-    return `<tr class="${css}">
+    // Lógica corrigida do Manual PNCP: 1, 2 e 3 = SIM. 4 e 5 = NÃO.
+    const isEx = [1, 2, 3].includes(parseInt(it.benef));
+    
+    return `<tr>
         <td class="text-center fw-bold">${it.n}</td>
         <td style="max-width: 350px;">${it.desc}</td>
         <td class="text-center ${isEx ? 'benef-sim' : 'benef-nao'}">${isEx ? 'SIM' : 'NÃO'}</td>
@@ -256,10 +264,6 @@ function filtrar() {
 document.querySelectorAll('input').forEach(el => el.oninput = filtrar);
 document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
 document.getElementById('nextPage').onclick = () => { if(currentPage * itemsPerPage < filteredData.length) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
-document.getElementById('btnJump').onclick = () => {
-    const v = parseInt(document.getElementById('jumpInput').value);
-    if(v >= 1 && v <= Math.ceil(filteredData.length / itemsPerPage)) { currentPage = v; renderMonitor(); window.scrollTo(0,0); }
-};
 
 loadData();
 </script>
