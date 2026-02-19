@@ -18,58 +18,67 @@ def criar_sessao():
     return s
 
 def precisa_atualizar(lic):
-    # Foca em quem não tem vencedor registrado ainda e tem potencial de ter ganho
+    # Condição: Se um item não tiver fornecedor E for passível de ter ganho um.
+    # Mesmo se o app.py o taxar de "HOMOLOGADO", ele vasculha pois falta o dado.
     return any(not it.get('fornecedor') and it.get('situacao') in ["EM ANDAMENTO", "HOMOLOGADO"] for it in lic.get('itens', []))
 
-def atualizar_licitacao(lid, dados, session):
+def atualizar_licitacao(lid, dados_antigos, session):
     try:
-        cnpj, ano, seq = lid[:14], lid[14:18], lid[18:]
+        cnpj = lid[:14]
+        ano = lid[14:18]
+        seq = lid[18:]
         url_base = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
+        
         itens_atualizados = []
         houve_mudanca = False
         
-        for it in dados.get('itens', []):
+        for it in dados_antigos.get('itens', []):
             item_novo = it.copy()
+            
+            # Condição de busca: Sem fornecedor + Situação passível
             if not it.get('fornecedor') and it.get('situacao') in ["EM ANDAMENTO", "HOMOLOGADO"]:
                 try:
                     num = it['n']
                     r = session.get(f"{url_base}/{num}/resultados", timeout=15)
-                    if r.status_code == 200 and r.json():
+                    if r.status_code == 200:
                         rl = r.json()
                         res = rl[0] if isinstance(rl, list) and len(rl) > 0 else (rl if isinstance(rl, dict) else None)
-                        if res and res.get('nomeRazaoSocialFornecedor'):
-                            nf = res.get('nomeRazaoSocialFornecedor')
+                        if res:
+                            nf = res.get('nomeRazaoSocialFornecedor') or res.get('razaoSocial')
                             ni = res.get('niFornecedor')
-                            item_novo['fornecedor'] = f"{nf} (CNPJ: {ni})" if ni else nf
-                            item_novo['situacao'] = "HOMOLOGADO"
-                            item_novo['valHomologado'] = float(res.get('valorUnitarioHomologado') or 0.0)
-                            houve_mudanca = True
+                            if nf:
+                                item_novo['fornecedor'] = f"{nf} (CNPJ: {ni})" if ni else nf
+                                item_novo['situacao'] = "HOMOLOGADO"
+                                item_novo['valHomologado'] = float(res.get('valorUnitarioHomologado') or 0.0)
+                                houve_mudanca = True
                 except: pass
             
             itens_atualizados.append(item_novo)
             
         if houve_mudanca:
-            d_novo = dados.copy()
-            d_novo['itens'] = itens_atualizados
-            return d_novo
-    except: pass
-    return None
+            dados_novos = dados_antigos.copy()
+            dados_novos['itens'] = itens_atualizados
+            return dados_novos
+        return None
 
-# --- EXECUÇÃO ---
+    except Exception: return None
+
+# --- EXECUÇÃO PRINCIPAL ---
 if not os.path.exists(ARQDADOS): exit()
 
-print("🩺 Auditoria Profunda de Fornecedores Iniciada...")
+print("🩺 Auditoria Profunda de Resultados Iniciada...")
 
 with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
     banco_raw = json.load(f)
 
+# Converte pra dict para facilitar a substituição
 banco_dict = {item['id']: item for item in banco_raw}
 session = criar_sessao()
 
 alvos = [lid for lid, d in banco_dict.items() if precisa_atualizar(d)]
 
 print(f"📊 Banco Limpo Total: {len(banco_dict)}")
-print(f"🎯 Alvos com Fornecedores Pendentes: {len(alvos)}")
+print(f"🎯 Alvos com Fornecedores Ocultos: {len(alvos)}")
 
 if alvos:
     atualizados = 0
