@@ -54,15 +54,12 @@ jobs:
             echo "MODE=${{ inputs.mode }}" >> $GITHUB_ENV
         fi
 
-    # 1. PASSO: CAPTURA BRUTA
     - name: 🚀 1. Run Core Crawler (app.py)
       run: python app.py --start "$START_DATE" --end "$END_DATE"
 
-    # 2. PASSO: LIMPEZA E LAPIDAÇÃO
     - name: 🧹 2. Run Data Cleaner (limpeza.py)
       run: python limpeza.py
 
-    # 3. PASSO: AUDITORIA PROFUNDA NOS PROCESSOS LIMPOS
     - name: 🩺 3. Run Auditor (atualiza.py)
       run: python atualiza.py
 
@@ -71,14 +68,27 @@ jobs:
         git config user.name "Sniper Pharma Bot"
         git config user.email "sniper@pharma.bot"
         
-        echo "🔄 Preparando envio dos dados acumulados..."
-        
         git add dadosoportunidades.json.gz || true
         git add pregacoes_pharma_limpos.json.gz || true
         git add links_manuais.txt || true
         
-        git diff --staged --quiet || git commit -m "Sniper Data Atualizado"
+        git diff --staged --quiet || git commit -m "Sniper Data: $START_DATE"
         
         git pull origin main --rebase -X theirs
         git push origin main
-        echo "✅ Workflow concluído com sucesso!"
+
+    # A ENGRENAGEM DO LOOP INFINITO
+    - name: 🔄 Trigger Próximo Dia (Loop)
+      if: env.MODE == 'manual_loop'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        NEXT_DAY=$(date -d "$START_DATE + 1 day" +'%Y-%m-%d')
+        TODAY=$(date +'%Y-%m-%d')
+        
+        if [[ "$NEXT_DAY" < "$TODAY" ]] || [[ "$NEXT_DAY" == "$TODAY" ]]; then
+           echo "🚀 Disparando o robô automaticamente para o dia $NEXT_DAY..."
+           gh workflow run "Sniper Pharma Controller" -f mode="manual_loop" -f target_date="$NEXT_DAY"
+        else
+           echo "🏁 O robô alcançou o dia de hoje. Loop finalizado e aguardando amanhã."
+        fi
