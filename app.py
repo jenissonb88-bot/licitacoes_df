@@ -13,7 +13,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 # --- CONFIGURAÇÕES ---
-ARQDADOS = 'dadosoportunidades.json.gz' # VOLTOU A SER O BRUTO
+ARQDADOS = 'dadosoportunidades.json.gz'
 ARQ_LOCK = 'execucao.lock'
 ARQ_CATALOGO = 'Exportar Dados.csv'
 ARQ_MANUAL = 'links_manuais.txt' 
@@ -22,7 +22,9 @@ DATA_CORTE_FIXA = datetime(2025, 12, 1)
 
 # --- GEOGRAFIA E MAPA ---
 NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
-EXT_ESTADOS = ['ES', 'RJ', 'SP', 'MG', 'GO', 'MT', 'MS', 'DF', 'AM', 'PA', 'TO']
+# VETO GEOGRÁFICO ABSOLUTO REATIVADO
+ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR'] 
+
 MAPA_SITUACAO = {1: "EM ANDAMENTO", 2: "HOMOLOGADO", 3: "CANCELADO", 4: "DESERTO", 5: "FRACASSADO"}
 
 def normalize(t):
@@ -53,7 +55,6 @@ if os.path.exists(ARQ_CATALOGO):
             except: continue
     except: pass
 
-# --- VETOS E ALVOS ---
 VETOS_ALIMENTACAO = [normalize(x) for x in ["ALIMENTACAO ESCOLAR", "GENEROS ALIMENTICIOS", "MERENDA", "PNAE", "PERECIVEIS", "HORTIFRUTI", "CARNES", "PANIFICACAO", "CESTAS BASICAS", "LANCHE", "REFEICOES", "COFFEE BREAK", "BUFFET", "COZINHA", "AÇOUGUE", "POLPA DE FRUTA", "ESTIAGEM"]]
 VETOS_EDUCACAO = [normalize(x) for x in ["MATERIAL ESCOLAR", "PEDAGOGICO", "DIDATICO", "BRINQUEDOS", "LIVROS", "TRANSPORTE ESCOLAR", "KIT ALUNO", "REDE MUNICIPAL DE ENSINO", "SECRETARIA DE EDUCACAO"]]
 VETOS_OPERACIONAL = [normalize(x) for x in ["OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "REFORMA", "MANUTENCAO PREDIAL", "LIMPEZA URBANA", "RESIDUOS SOLIDOS", "LOCACAO DE VEICULOS", "TRANSPORTE", "COMBUSTIVEL", "DIESEL", "GASOLINA", "PNEUS", "PECAS AUTOMOTIVAS", "OFICINA", "VIGILANCIA", "SEGURANCA", "BOMBEIRO", "SALVAMENTO", "RESGATE", "VIATURA", "FARDAMENTO", "VESTUARIO", "INFORMATICA", "COMPUTADORES", "IMPRESSAO", "EVENTOS"]]
@@ -66,7 +67,7 @@ WL_MATERIAIS_NE = [normalize(x) for x in ["MATERIAL MEDIC", "INSUMO HOSPITALAR",
 
 def criar_sessao():
     s = requests.Session()
-    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/12.0'})
+    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/13.0'})
     retry = Retry(total=5, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
     s.mount('https://', HTTPAdapter(max_retries=retry))
     return s
@@ -104,8 +105,14 @@ def processar_licitacao(lic, session, forcado=False):
         dt_enc_str = lic.get('dataEncerramentoProposta') or datetime.now().isoformat()
         
         if not forcado:
+            # 1. BLOQUEIO GEOGRÁFICO ABSOLUTO EM PRIMEIRO LUGAR
+            if uf in ESTADOS_BLOQUEADOS: 
+                return ('VETADO', None, 0, 0)
+            
             dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
             if dt_enc < DATA_CORTE_FIXA: return ('IGNORADO', None, 0, 0)
+            
+            # 2. VETO DE OBJETO
             if veta_edital(obj_raw, uf): return ('VETADO', None, 0, 0)
 
             tem_interesse = False
@@ -144,16 +151,15 @@ def processar_licitacao(lic, session, forcado=False):
             
             sit_id = int(it.get('situacaoCompraItem') or 1)
             
-            # Formato BRUTO antigo para o limpeza.py ler
             itens_brutos.append({
                 'n': it.get('numeroItem'), 
                 'd': desc, 
                 'q': safe_float(it.get('quantidade')),
                 'u': it.get('unidadeMedida', 'UN'), 
                 'v_est': safe_float(it.get('valorUnitarioEstimado')),
-                'benef': it.get('tipoBeneficioId') or 4,
+                'benef': it.get('tipoBeneficioId') or 4, # Fallback garantido na limpeza
                 'sit': MAPA_SITUACAO.get(sit_id, "EM ANDAMENTO"), 
-                'res_forn': None,
+                'res_forn': None, # Será pego pelo atualiza.py
                 'res_val': 0.0
             })
 
@@ -163,7 +169,6 @@ def processar_licitacao(lic, session, forcado=False):
             if not tem_item_catalogo and not any(m in obj_norm for m in WL_MEDICAMENTOS):
                  return ('IGNORADO', None, 0, 0)
 
-        # Formato BRUTO para o limpeza.py ler
         dados_finais = {
             'id': f"{cnpj}{ano}{seq}", 
             'dt_enc': dt_enc_str, 
