@@ -3,43 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sniper Pharma - Monitor Drogafonte</title>
+    <title>Sniper Pharma - Painel de Licitações</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         :root { --blue-df: #004a99; --green-df: #198754; --red-df: #dc3545; --yellow-df: #ffc107; }
         body { background-color: #f0f2f5; font-family: 'Segoe UI', system-ui, sans-serif; color: #333; font-size: 0.92rem; }
         
+        /* Cabeçalho do Card */
         .header-card { 
             background: linear-gradient(90deg, #002d5a 0%, #004a99 100%); 
-            color: white; padding: 12px 20px; border-radius: 10px 10px 0 0; font-size: 1.05rem; 
+            color: white; padding: 12px 20px; border-radius: 10px 10px 0 0; font-size: 1.05rem;
             display: flex; justify-content: space-between; align-items: center;
         }
         .header-bold { font-weight: 700; }
-        .header-normal { font-weight: 400; opacity: 0.9; }
         .badge-uf-header { background-color: #000; color: #fff; font-weight: 800; padding: 2px 8px; border-radius: 4px; margin-right: 5px; }
 
-        .badge-status-master { font-size: 0.9rem !important; padding: 6px 12px !important; border-radius: 6px !important; letter-spacing: 0.5px; }
-        .badge-amplo { background-color: var(--green-df) !important; color: white !important; font-weight: bold !important; } 
-        .badge-exclusivo { background-color: var(--red-df) !important; color: white !important; font-weight: bold !important; } 
-        .badge-parcial { background-color: var(--yellow-df) !important; color: #212529 !important; font-weight: bold !important; } 
-
+        /* Status de Benefício ME/EPP */
         .benef-sim { color: var(--red-df) !important; font-weight: bold !important; }
         .benef-nao { color: var(--green-df) !important; font-weight: bold !important; }
 
-        .card-licitacao { border-radius: 10px; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; }
-        .filter-box { background: white; padding: 15px; border-radius: 10px; border: 1px solid #e0e6ed; }
+        .card-licitacao { border-radius: 10px; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; overflow: hidden; }
+        .filter-box { background: white; padding: 15px; border-radius: 10px; border: 1px solid #e0e6ed; margin-bottom: 20px; }
         .filter-label { font-size: 0.65rem; font-weight: 800; color: var(--blue-df); margin-bottom: 2px; display: block; text-transform: uppercase; }
         
         .table-itens { font-size: 0.82em; }
-        .val-estimado { background-color: #fffdf2; color: #856404; }
-        .val-homologado { background-color: #f2f7ff; color: #084298; }
+        .val-estimado { background-color: #fffdf2; }
+        .val-homologado { background-color: #f2f7ff; }
         
-        .txt-itens-count { font-size: 1.1rem !important; font-weight: 800; color: #444; display: block; margin-top: 5px; }
-        .header-fornecedor { background-color: #f8f9fa; color: var(--blue-df); }
+        .header-fornecedor { background-color: #f8f9fa; color: var(--blue-df); font-weight: bold; }
         .header-status-aguardando { background-color: #fff9db; font-weight: bold; color: #856404; text-align: center; }
         
-        .pagination-container { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 20px; padding-bottom: 40px; }
-        .btn-excluir { font-size: 0.75rem; background-color: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; }
+        .pagination-container { display: flex; align-items: center; justify-content: center; gap: 15px; margin-top: 20px; padding-bottom: 40px; }
+        
+        /* Botões */
+        .btn-excluir { font-size: 0.7rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 2px 8px; border-radius: 4px; cursor: pointer; }
+        .btn-excluir:hover { background: var(--red-df); border-color: var(--red-df); }
+        .badge-status { font-weight: bold; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; }
     </style>
 </head>
 <body>
@@ -48,28 +47,32 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
             <h3 class="fw-bold mb-0" style="color: #003366;">🔭 Sniper Pharma Monitor</h3>
-            <span class="badge bg-dark" style="font-size: 0.7rem;">DROGAFONTE LTDA | 2026</span>
+            <span class="badge bg-dark" style="font-size: 0.7rem;">ANALISTA DE LICITAÇÕES | PNCP & COMPRASGOV</span>
         </div>
-        <button class="btn btn-success fw-bold" onclick="abrirInclusaoManual()">+ Inclusão Manual</button>
+        <button class="btn btn-success fw-bold" onclick="abrirInclusaoManual()">+ Inclusão Manual (PNCP)</button>
     </div>
     
-    <div class="filter-box mb-3 shadow-sm">
+    <div class="filter-box shadow-sm">
         <div class="row g-2">
-            <div class="col-md-2">
-                <label class="filter-label">DATA ENCERRAMENTO</label>
-                <input type="date" id="filterData" class="form-control form-control-sm">
+            <div class="col-md-1">
+                <label class="filter-label">UF</label>
+                <input type="text" id="filterUF" class="form-control form-control-sm" placeholder="Ex: PE">
             </div>
             <div class="col-md-2">
-                <label class="filter-label">EDITAL / UASG</label>
-                <input type="text" id="filterEdital" class="form-control form-control-sm" placeholder="Busca rápida...">
-            </div>
-            <div class="col-md-5">
-                <label class="filter-label">ÓRGÃO / UNIDADE COMPRADORA</label>
-                <input type="text" id="filterOrgao" class="form-control form-control-sm" placeholder="Nome da Prefeitura ou Secretaria">
+                <label class="filter-label">CIDADE</label>
+                <input type="text" id="filterCidade" class="form-control form-control-sm" placeholder="Busque a cidade...">
             </div>
             <div class="col-md-3">
-                <label class="filter-label">CIDADE / UF</label>
-                <input type="text" id="filterLoc" class="form-control form-control-sm" placeholder="Cidade ou UF">
+                <label class="filter-label">ÓRGÃO / CÓDIGO</label>
+                <input type="text" id="filterOrgao" class="form-control form-control-sm" placeholder="Nome ou UASG">
+            </div>
+            <div class="col-md-2">
+                <label class="filter-label">Nº EDITAL</label>
+                <input type="text" id="filterEdital" class="form-control form-control-sm" placeholder="00000/2026">
+            </div>
+            <div class="col-md-2 d-flex align-items-end gap-1">
+                <button class="btn btn-sm btn-primary w-100 fw-bold" onclick="filtrar()">BUSCAR</button>
+                <button class="btn btn-sm btn-outline-secondary w-100 fw-bold" onclick="limparFiltros()">LIMPAR</button>
             </div>
         </div>
     </div>
@@ -77,9 +80,9 @@
     <div id="monitor-content"></div>
 
     <div class="pagination-container">
-        <button class="btn btn-sm btn-primary px-3" id="prevPage">Anterior</button>
+        <button class="btn btn-sm btn-outline-primary px-3" id="prevPage">Anterior</button>
         <span id="pageInfo" class="fw-bold px-2 small">Página 1</span>
-        <button class="btn btn-sm btn-primary px-3" id="nextPage">Próxima</button>
+        <button class="btn btn-sm btn-outline-primary px-3" id="nextPage">Próxima</button>
     </div>
 </div>
 
@@ -87,12 +90,13 @@
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
             <div class="modal-header header-card py-2">
-                <h6 class="modal-title fw-bold" id="modalTitle">Detalhes</h6>
+                <h6 class="modal-title fw-bold" id="modalTitle">Itens da Licitação</h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body p-3" id="modalBody"></div>
+            <div class="modal-body p-3" id="modalBody">
+                </div>
             <div class="modal-footer bg-light border-0 py-2">
-                <a id="linkPncp" href="#" target="_blank" class="btn btn-sm btn-primary px-4 fw-bold">ABRIR NO PNCP</a>
+                <a id="linkPncp" href="#" target="_blank" class="btn btn-sm btn-primary px-4 fw-bold">VER NO PNCP</a>
                 <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">FECHAR</button>
             </div>
         </div>
@@ -105,167 +109,189 @@ let allData = [];
 let filteredData = [];
 let currentPage = 1;
 const itemsPerPage = 20;
-const myModal = new bootstrap.Modal(document.getElementById('modalDetalhes'));
+const modalObj = new bootstrap.Modal(document.getElementById('modalDetalhes'));
 
 async function loadData() {
     try {
-        const r = await fetch('pregacoes_pharma_limpos.json.gz');
-        const b = await r.blob();
-        const t = await new Response(b.stream().pipeThrough(new DecompressionStream('gzip'))).text();
-        allData = JSON.parse(t);
+        // Nome do ficheiro gerado pelo robô Python
+        const response = await fetch('pregacoes_pharma_limpos.json.gz');
+        const ds = new DecompressionStream('gzip');
+        const decompressedStream = response.body.pipeThrough(ds);
+        const text = await new Response(decompressedStream).text();
+        
+        allData = JSON.parse(text);
         allData.sort((a, b) => new Date(b.data_enc) - new Date(a.data_enc));
         filteredData = [...allData];
         renderMonitor();
     } catch (e) { 
         console.error("Erro ao carregar dados:", e);
-        document.getElementById('monitor-content').innerHTML = '<div class="alert alert-warning">Aguardando arquivo de dados gerado pelo robô.</div>';
+        document.getElementById('monitor-content').innerHTML = '<div class="alert alert-info">Aguardando dados da varredura (ficheiro .json.gz)...</div>';
     }
 }
 
 function renderMonitor() {
-    const c = document.getElementById('monitor-content');
-    c.innerHTML = '';
-    const slice = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+    const container = document.getElementById('monitor-content');
+    container.innerHTML = '';
+    
+    const start = (currentPage - 1) * itemsPerPage;
+    const end = start + itemsPerPage;
+    const pageItems = filteredData.slice(start, end);
 
-    slice.forEach(p => {
+    pageItems.forEach(lic => {
         const div = document.createElement('div');
         div.className = 'card card-licitacao';
-        const sClass = `badge-${(p.tipo_licitacao || 'amplo').toLowerCase()}`;
         
-        const valorDisplay = (p.valor_estimado === 0 || p.valor_estimado === 0.00) 
-            ? '<span class="text-danger fw-bold">Sigiloso</span>' 
-            : `R$ ${p.valor_estimado.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        const valorTotal = lic.valor_estimado > 0 
+            ? `R$ ${lic.valor_estimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` 
+            : 'Sigiloso/Não inf.';
 
         div.innerHTML = `
             <div class="header-card">
                 <div>
-                    <span class="badge-uf-header">${p.uf}</span>
-                    <span class="header-bold">${p.uasg} - ${p.orgao} - </span>
-                    <span class="header-normal">${p.unidade || 'Unidade não informada'}</span>
-                    <span class="header-bold"> - Edital nº ${p.edital}</span>
+                    <span class="badge-uf-header">${lic.uf}</span>
+                    <span class="header-bold">${lic.orgao}</span>
+                    <span class="ms-2 opacity-75 small">| Edital: ${lic.edital}</span>
                 </div>
-                <button class="btn-excluir" onclick="excluirLicitacao('${p.id}')">X Descartar</button>
+                <button class="btn-excluir" onclick="excluirLicitacao('${lic.id}')">Excluir</button>
             </div>
-            <div class="card-body py-2">
+            <div class="card-body py-3">
                 <div class="row align-items-center">
-                    <div class="col-md-9 border-end">
-                        <p class="mb-1 text-muted" style="font-size: 0.75rem;">${p.cidade} | Encerramento: ${new Date(p.data_enc).toLocaleString('pt-BR')}</p>
-                        <h6 class="mb-2 fw-bold text-dark" style="font-size: 0.85rem;">${p.objeto}</h6>
-                        <span class="badge badge-status-master ${sClass} me-2">${p.tipo_licitacao || 'AMPLO'}</span>
-                    </div>
-                    <div class="col-md-3 text-center">
-                        <small class="text-muted d-block" style="font-size: 0.65rem;">VALOR ESTIMADO</small>
-                        <h5 class="fw-bold text-primary mb-0">${valorDisplay}</h5>
-                        <div class="mt-1 mb-2">
-                            <span class="txt-itens-count">Itens: ${p.itens.length}</span>
+                    <div class="col-md-8 border-end">
+                        <small class="text-muted d-block mb-1">${lic.cidade} - ${lic.unidade}</small>
+                        <h6 class="fw-bold mb-2">${lic.objeto}</h6>
+                        <div class="d-flex gap-2">
+                            <span class="badge bg-secondary">UASG/Código: ${lic.uasg}</span>
+                            <span class="badge bg-info text-dark">Abertura: ${new Date(lic.data_enc).toLocaleString('pt-BR')}</span>
                         </div>
-                        <button class="btn btn-sm btn-primary w-100 fw-bold shadow-sm" style="font-size: 0.75rem;" onclick="showPopup('${p.id}')">VER ITENS</button>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <small class="text-muted">VALOR ESTIMADO TOTAL</small>
+                        <h5 class="fw-bold text-primary mb-3">${valorTotal}</h5>
+                        <button class="btn btn-sm btn-primary px-4 fw-bold" onclick="abrirItens('${lic.id}')">DETALHAR ${lic.itens.length} ITENS</button>
                     </div>
                 </div>
             </div>`;
-        c.appendChild(div);
+        container.appendChild(div);
     });
+
     const totalPages = Math.ceil(filteredData.length / itemsPerPage) || 1;
     document.getElementById('pageInfo').innerText = `Página ${currentPage} de ${totalPages}`;
 }
 
-function excluirLicitacao(id) {
-    if(confirm("Deseja realmente descartar esta licitação do painel?")) {
-        allData = allData.filter(x => x.id !== id);
-        filtrar();
-    }
-}
+function abrirItens(id) {
+    const lic = allData.find(x => x.id === id);
+    document.getElementById('modalTitle').innerText = `Itens: ${lic.orgao} (Edital ${lic.edital})`;
+    document.getElementById('linkPncp').href = lic.link;
 
-function abrirInclusaoManual() {
-    const url = prompt("Cole aqui o link do Portal Nacional de Contratações Públicas (PNCP):");
-    if(url) {
-        alert("Comando de inclusão manual registrado para o Backend processar o link: " + url);
-    }
-}
-
-function showPopup(id) {
-    const p = allData.find(x => x.id === id);
-    document.getElementById('modalTitle').innerText = `${p.uf} - ${p.orgao}`;
-    document.getElementById('linkPncp').href = p.link;
-
-    const aguard = p.itens.filter(i => !i.fornecedor && !['FRACASSADO', 'DESERTO', 'CANCELADO'].includes(i.situacao));
-    const ganhos = {};
-
-    p.itens.filter(i => i.fornecedor && !['FRACASSADO', 'DESERTO', 'CANCELADO'].includes(i.situacao)).forEach(it => {
-        if (!ganhos[it.fornecedor]) ganhos[it.fornecedor] = { itens: [], total: 0 };
-        ganhos[it.fornecedor].itens.push(it);
-        ganhos[it.fornecedor].total += (it.qtd * it.valHomologado);
-    });
-
+    const itens = lic.itens;
     let html = `
-        <div class="p-2 mb-3 border-start border-4 border-primary bg-light" style="font-size: 0.8rem;">
-            <strong>OBJETO:</strong> ${p.objeto}<br>
-            <strong>UNIDADE:</strong> ${p.unidade} | <strong>UASG:</strong> ${p.uasg}
-        </div>
         <div class="table-responsive">
-            <table class="table table-sm table-bordered table-itens align-middle mb-0">
+            <table class="table table-sm table-bordered table-itens align-middle">
                 <thead class="table-dark">
                     <tr>
-                        <th class="text-center">ITEM</th><th>DESCRIÇÃO</th><th class="text-center">ME/EPP</th>
-                        <th class="text-center">QTD/UN</th><th class="text-center">EST. UNIT</th>
-                        <th class="text-center">HOMOL. UNIT</th><th class="text-center">TOTAL ITEM</th>
+                        <th class="text-center">#</th>
+                        <th>Descrição do Item</th>
+                        <th class="text-center">ME/EPP</th>
+                        <th class="text-center">Qtd/Un</th>
+                        <th class="text-center">Est. Unit.</th>
+                        <th class="text-center">Final Unit.</th>
+                        <th class="text-center">Total</th>
                     </tr>
-                </thead><tbody>`;
+                </thead>
+                <tbody>`;
 
-    if (aguard.length) {
-        html += `<tr><td colspan="7" class="header-status-aguardando py-1">⏳ ITENS EM ANDAMENTO</td></tr>`;
-        aguard.forEach(it => html += renderRow(it));
+    // Agrupamento por fornecedor se homologado
+    const grupos = {};
+    const aguardando = [];
+
+    itens.forEach(it => {
+        if (it.fornecedor && it.situacao === "HOMOLOGADO") {
+            if (!grupos[it.fornecedor]) grupos[it.fornecedor] = [];
+            grupos[it.fornecedor].push(it);
+        } else {
+            aguardando.push(it);
+        }
+    });
+
+    // Renderizar itens aguardando/em aberto
+    if (aguardando.length > 0) {
+        html += `<tr><td colspan="7" class="header-status-aguardando py-1 small">ITENS EM ANDAMENTO / NÃO HOMOLOGADOS</td></tr>`;
+        aguardando.forEach(it => html += renderLinhaItem(it));
     }
 
-    for (const [forn, d] of Object.entries(ganhos)) {
-        html += `<tr class="header-fornecedor">
-            <td colspan="6" class="p-2">🏢 FORNECEDOR: <strong>${forn}</strong></td>
-            <td class="text-center fw-bold" style="font-size: 1rem;">TOTAL: R$ ${d.total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-        </tr>`;
-        d.itens.forEach(it => html += renderRow(it));
+    // Renderizar itens por fornecedor
+    for (const fornecedor in grupos) {
+        html += `<tr class="header-fornecedor"><td colspan="7">Fornecedor: ${fornecedor}</td></tr>`;
+        grupos[fornecedor].forEach(it => html += renderLinhaItem(it));
     }
 
     html += `</tbody></table></div>`;
     document.getElementById('modalBody').innerHTML = html;
-    myModal.show();
+    modalObj.show();
 }
 
-function renderRow(it) {
-    const total = it.valHomologado ? (it.qtd * it.valHomologado) : 0;
-    // Lógica corrigida do Manual PNCP: 1, 2 e 3 = SIM. 4 e 5 = NÃO.
-    const isEx = [1, 2, 3].includes(parseInt(it.benef));
+function renderLinhaItem(it) {
+    // Lógica ME/EPP: 1, 2, 3 = SIM | 4, 5 = NÃO
+    const isMeEpp = [1, 2, 3].includes(parseInt(it.benef));
+    const meEppHtml = isMeEpp ? '<span class="benef-sim">SIM</span>' : '<span class="benef-nao">NÃO</span>';
     
-    return `<tr>
-        <td class="text-center fw-bold">${it.n}</td>
-        <td style="max-width: 350px;">${it.desc}</td>
-        <td class="text-center ${isEx ? 'benef-sim' : 'benef-nao'}">${isEx ? 'SIM' : 'NÃO'}</td>
-        <td class="text-center">${it.qtd} ${it.un}</td>
-        <td class="val-estimado text-center">R$ ${it.valUnit.toFixed(4)}</td>
-        <td class="val-homologado text-center">${it.valHomologado > 0 ? 'R$ '+it.valHomologado.toFixed(4) : '---'}</td>
-        <td class="val-total-item text-center">${total > 0 ? 'R$ '+total.toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '---'}</td>
-    </tr>`;
+    const valorTotal = it.valHomologado > 0 ? (it.valHomologado * it.qtd) : (it.valUnit * it.qtd);
+
+    return `
+        <tr>
+            <td class="text-center fw-bold">${it.n}</td>
+            <td>${it.desc}</td>
+            <td class="text-center">${meEppHtml}</td>
+            <td class="text-center">${it.qtd} ${it.un}</td>
+            <td class="text-center val-estimado">R$ ${it.valUnit.toFixed(4)}</td>
+            <td class="text-center val-homologado">${it.valHomologado > 0 ? 'R$ ' + it.valHomologado.toFixed(4) : '---'}</td>
+            <td class="text-center fw-bold">R$ ${valorTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+        </tr>`;
 }
 
 function filtrar() {
-    const d = document.getElementById('filterData').value;
-    const e = document.getElementById('filterEdital').value.toUpperCase();
-    const o = document.getElementById('filterOrgao').value.toUpperCase();
-    const l = document.getElementById('filterLoc').value.toUpperCase();
+    const uf = document.getElementById('filterUF').value.toUpperCase();
+    const cid = document.getElementById('filterCidade').value.toUpperCase();
+    const org = document.getElementById('filterOrgao').value.toUpperCase();
+    const edt = document.getElementById('filterEdital').value.toUpperCase();
 
-    filteredData = allData.filter(p => {
-        return (!d || p.data_enc.includes(d)) &&
-               (!e || (p.edital||"").includes(e) || (p.uasg||"").includes(e)) &&
-               (!o || p.orgao.toUpperCase().includes(o) || (p.unidade||"").toUpperCase().includes(o)) &&
-               (!l || p.cidade.toUpperCase().includes(l) || p.uf.toUpperCase().includes(l));
+    filteredData = allData.filter(lic => {
+        return (!uf || lic.uf.includes(uf)) &&
+               (!cid || lic.cidade.toUpperCase().includes(cid)) &&
+               (!org || lic.orgao.toUpperCase().includes(org) || (lic.uasg||"").includes(org)) &&
+               (!edt || lic.edital.includes(edt));
     });
-    currentPage = 1; renderMonitor();
+    
+    currentPage = 1;
+    renderMonitor();
 }
 
-document.querySelectorAll('input').forEach(el => el.oninput = filtrar);
+function limparFiltros() {
+    document.querySelectorAll('.form-control').forEach(i => i.value = '');
+    filteredData = [...allData];
+    currentPage = 1;
+    renderMonitor();
+}
+
+function excluirLicitacao(id) {
+    if(confirm("Deseja remover esta licitação da visualização?")) {
+        allData = allData.filter(x => x.id !== id);
+        filteredData = filteredData.filter(x => x.id !== id);
+        renderMonitor();
+    }
+}
+
+function abrirInclusaoManual() {
+    alert("Para inclusão manual:\n1. Adicione o link do edital no ficheiro 'links_manuais.txt' no seu GitHub.\n2. O robô irá processar e incluir na próxima varredura.");
+}
+
+// Eventos de Paginação
 document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
 document.getElementById('nextPage').onclick = () => { if(currentPage * itemsPerPage < filteredData.length) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
 
+// Inicialização
 loadData();
 </script>
+
 </body>
 </html>
