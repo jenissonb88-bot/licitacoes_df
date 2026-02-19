@@ -2,91 +2,154 @@ import json
 import gzip
 import os
 import unicodedata
+import csv
 from datetime import datetime
 
+# --- CONFIGURAÇÕES ---
 ARQDADOS = 'dadosoportunidades.json.gz'          
 ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'     
-DATA_CORTE_2026 = datetime(2026, 1, 1)           
+ARQ_CATALOGO = 'Exportar Dados.csv'              
+DATA_CORTE_2026 = datetime(2025, 12, 1)           
+
+NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
+ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
+
+# --- DICIONÁRIOS DE INTELLIGENCE ---
+VETOS_IMEDIATOS = [
+    "PRESTACAO DE SERVICO", "SERVICO ESPECIALIZADO", "LOCACAO", "INSTALACAO", 
+    "MANUTENCAO", "UNIFORME", "TEXTIL", "REFORMA", "GASES MEDICINAIS", 
+    "OXIGENIO", "CILINDRO", "LIMPEZA PREDIAL", "LAVANDERIA", "IMPRESSAO"
+]
+TERMOS_NE_MMH_NUTRI = [
+    "MATERIAL MEDIC", "INSUMO HOSPITALAR", "MMH", "SERINGA", "AGULHA", "GAZE", 
+    "ATADURA", "SONDA", "CATETER", "EQUIPO", "LUVAS", "MASCARA", 
+    "NUTRICAO ENTERAL", "FORMULA INFANTIL", "SUPLEMENTO", "DIETA", "NUTRICAO CLINICA"
+]
+TERMOS_SALVAMENTO = ["MEDICAMENT", "FARMAC", "REMEDIO", "FARMACO", "INJETAVEL"]
+CONTEXTO_SAUDE = ["HOSPITALAR", "DIETA", "MEDICAMENTO", "SAUDE", "CLINICA", "PACIENTE"]
+LIXO_INTERNO = ["ARROZ", "FEIJAO", "CARNE", "PNEU", "GASOLINA", "RODA", "LIVRO", "COPO", "CAFE", "ACUCAR", "COMPUTADOR", "VEICULO"]
 
 def normalize(t):
     if not t: return ""
     return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
 
-def auditar_beneficio(desc, cod_api):
-    """
-    Verifica divergência: Se a API diz que é Amplo (4, 5 ou vazio), 
-    mas o texto exige exclusividade.
-    """
+def inferir_beneficio(desc, benef_atual):
+    """MANTÉM O FORMATO 1 a 5 (Plano B do ME/EPP)"""
+    if benef_atual in [1, 2, 3]: return benef_atual
     d = normalize(desc)
-    if cod_api in [4, 5, 0, None]:
-        if any(x in d for x in ["EXCLUSIVO ME", "EXCLUSIVA ME", "ME EPP", "PARA ME", "SOMENTE ME", "EXCLUSIVIDADE ME"]):
-            return 1, True # Retorna código 1 (Exclusivo) e flag de Divergência = True
-        if any(x in d for x in ["COTA RESERVADA", "RESERVADA ME"]):
-            return 3, True # Retorna código 3 (Cota) e flag de Divergência = True
-    return cod_api, False # Sem divergência
+    if any(x in d for x in ["EXCLUSIVA ME", "EXCLUSIVO ME", "COTA EXCLUSIVA", "SOMENTE ME", "EXCLUSIVIDADE ME", "ME/EPP"]): return 1
+    if any(x in d for x in ["COTA RESERVADA", "RESERVADA ME", "RESERVADA PARA ME"]): return 3
+    return benef_atual
 
+CATALOGO = set()
+if os.path.exists(ARQ_CATALOGO):
+    try:
+        with open(ARQ_CATALOGO, 'r', encoding='latin-1') as f:
+            reader = csv.reader(f, delimiter=';')
+            next(reader, None)
+            for row in reader:
+                if row:
+                    termo = normalize(row[0])
+                    if len(termo) > 4: CATALOGO.add(termo)
+        print(f"📚 Catálogo Inteligente carregado: {len(CATALOGO)} produtos.")
+    except: print("⚠️ Aviso: Catálogo não encontrado.")
+
+def analisar_pertinencia(obj_norm, uf, itens_brutos):
+    """O CÉREBRO: Funil de Relevância"""
+    if uf in ESTADOS_BLOQUEADOS: return False
+
+    for veto in VETOS_IMEDIATOS:
+        if veto in obj_norm: return False
+
+    if "MEDICINA" in obj_norm or "MEDICO" in obj_norm:
+        if "GASES" in obj_norm and not any(s in obj_norm for s in TERMOS_SALVAMENTO): return False
+
+    if "FORMULA" in obj_norm or "LEITE" in obj_norm:
+        if not any(ctx in obj_norm for ctx in CONTEXTO_SAUDE): return False
+
+    if uf in NE_ESTADOS and any(t in obj_norm for t in TERMOS_NE_MMH_NUTRI): return True
+    if any(t in obj_norm for t in TERMOS_SALVAMENTO): return True
+
+    # Pente Fino (Catálogo)
+    if CATALOGO:
+        for it in itens_brutos:
+            desc_item = normalize(it.get('d', ''))
+            for prod in CATALOGO:
+                if prod in desc_item: return True
+
+    return False
+
+# --- EXECUÇÃO ---
 if not os.path.exists(ARQDADOS): exit()
 
-print("🧹 Iniciando processo de Limpeza e Lapidação...")
+print("🔄 Iniciando Auditoria Completa no Banco de Dados...")
 
-with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
-    dados_brutos = json.load(f)
+with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f: 
+    banco_bruto = json.load(f)
 
 web_data = []
 
-for p in dados_brutos:
-    itens_fmt = []
-    c_exclusivos = 0
-    
-    for it in p.get('itens', []):
-        benef_api = int(it.get('benef') or 4)
+for p in banco_bruto:
+    try:
+        dt = datetime.fromisoformat(p.get('dt_enc', '').replace('Z', '+00:00')).replace(tzinfo=None)
+        if dt < DATA_CORTE_2026: continue
+    except: continue
+
+    obj_norm = normalize(p.get('obj', ''))
+    uf = p.get('uf', '').upper()
+    itens_brutos = p.get('itens', [])
+
+    if analisar_pertinencia(obj_norm, uf, itens_brutos):
+        itens_fmt = []
         
-        # AUDITORIA SEMÂNTICA DE ME/EPP
-        benef_corrigido, divergente = auditar_beneficio(it.get('d', ''), benef_api)
-        is_me_epp = benef_corrigido in [1, 2, 3]
-        
-        if is_me_epp: c_exclusivos += 1
-        
-        # Mapeamento Exato para o que o index.html espera
-        itens_fmt.append({
-            'n': it.get('n'), 
-            'desc': it.get('d'), 
-            'qtd': it.get('q'), 
-            'un': it.get('u'),
-            'valUnit': it.get('v_est'), 
-            'valHomologado': it.get('res_val'), 
-            'fornecedor': it.get('res_forn'),
-            'situacao': it.get('sit', 'EM ANDAMENTO'), 
-            'benef': benef_corrigido, 
-            'me_epp': is_me_epp, 
-            'divergente': divergente
+        for it in itens_brutos:
+            desc = it.get('d', '')
+            desc_norm = normalize(desc)
+            
+            # PURGA DO LIXO INTERNO: Joga fora itens inúteis mesmo em editais aprovados
+            if any(lixo in desc_norm for lixo in LIXO_INTERNO): continue
+
+            # Formatação Exata Esperada pelo Frontend
+            benef_bruto = int(it.get('benef') or 4)
+            benef_corrigido = inferir_beneficio(desc, benef_bruto)
+            
+            itens_fmt.append({
+                'n': it.get('n'), 
+                'desc': desc, 
+                'qtd': it.get('q', 0),
+                'un': it.get('u', ''), 
+                'valUnit': it.get('v_est', 0),
+                'valHomologado': it.get('res_val', 0), 
+                'fornecedor': it.get('res_forn'),
+                'situacao': it.get('sit', 'EM ANDAMENTO'), 
+                'benef': benef_corrigido  # MANTIDO COMO INTEIRO 1 A 5
+            })
+            
+        if not itens_fmt: continue
+
+        todos_exclusivos = all(i['benef'] in [1, 2, 3] for i in itens_fmt)
+        algum_exclusivo = any(i['benef'] in [1, 2, 3] for i in itens_fmt)
+        tipo_lic = "EXCLUSIVO" if todos_exclusivos else ("PARCIAL" if algum_exclusivo else "AMPLO")
+
+        web_data.append({
+            'id': p.get('id'), 
+            'uf': p.get('uf'), 
+            'uasg': p.get('uasg'),
+            'orgao': p.get('org'), 
+            'unidade': p.get('unid_nome'),
+            'edital': p.get('edit'), 
+            'cidade': p.get('cid'), 
+            'objeto': p.get('obj'),
+            'valor_estimado': p.get('val_tot', 0), 
+            'data_enc': p.get('dt_enc'),
+            'link': p.get('link'),
+            'tipo_licitacao': tipo_lic,
+            'itens': itens_fmt
         })
-        
-    if not itens_fmt: continue
 
-    # Define classificação da Licitação para a Tag visual
-    tipo_lic = "EXCLUSIVO" if c_exclusivos == len(itens_fmt) else ("PARCIAL" if c_exclusivos > 0 else "AMPLO")
-
-    web_data.append({
-        'id': p.get('id'), 
-        'data_enc': p.get('dt_enc'), 
-        'uf': p.get('uf'), 
-        'uasg': p.get('uasg'),
-        'orgao': p.get('org'), 
-        'unidade': p.get('unid_nome'), 
-        'cidade': p.get('cid'), 
-        'objeto': p.get('obj'), 
-        'edital': p.get('edit'), 
-        'link': p.get('link'),
-        'valor_estimado': p.get('val_tot'), 
-        'tipo_licitacao': tipo_lic, 
-        'itens': itens_fmt
-    })
-
-# Ordenação cronológica (os mais recentes primeiro)
 web_data.sort(key=lambda x: x['data_enc'], reverse=True)
 
-with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f:
+with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f: 
     json.dump(web_data, f, ensure_ascii=False)
 
-print(f"✅ Limpeza concluída: {len(dados_brutos)} capturados -> {len(web_data)} lapidados.")
+print(f"✅ Auditoria Inteligente Concluída! Banco Limpo Salvo com {len(web_data)} editais.")
