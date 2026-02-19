@@ -9,7 +9,9 @@ from datetime import datetime
 ARQDADOS = 'dadosoportunidades.json.gz'          
 ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'     
 ARQ_CATALOGO = 'Exportar Dados.csv'              
-DATA_CORTE_2026 = datetime(2025, 12, 1)           
+
+# NOVA DATA DE CORTE: Apenas de 01/01/2026 em diante
+DATA_CORTE_2026 = datetime(2026, 1, 1)           
 
 NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
 ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
@@ -90,6 +92,7 @@ with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
 web_data = []
 
 for p in banco_bruto:
+    # FILTRO DE DATA ATUALIZADO (Apenas 01/01/2026 em diante)
     try:
         dt = datetime.fromisoformat(p.get('dt_enc', '').replace('Z', '+00:00')).replace(tzinfo=None)
         if dt < DATA_CORTE_2026: continue
@@ -106,7 +109,7 @@ for p in banco_bruto:
             desc = it.get('d', '')
             desc_norm = normalize(desc)
             
-            # PURGA DO LIXO INTERNO: Joga fora itens inúteis mesmo em editais aprovados
+            # PURGA DO LIXO INTERNO
             if any(lixo in desc_norm for lixo in LIXO_INTERNO): continue
 
             # Formatação Exata Esperada pelo Frontend
@@ -122,7 +125,7 @@ for p in banco_bruto:
                 'valHomologado': it.get('res_val', 0), 
                 'fornecedor': it.get('res_forn'),
                 'situacao': it.get('sit', 'EM ANDAMENTO'), 
-                'benef': benef_corrigido  # MANTIDO COMO INTEIRO 1 A 5
+                'benef': benef_corrigido  
             })
             
         if not itens_fmt: continue
@@ -152,4 +155,4 @@ web_data.sort(key=lambda x: x['data_enc'], reverse=True)
 with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f: 
     json.dump(web_data, f, ensure_ascii=False)
 
-print(f"✅ Auditoria Inteligente Concluída! Banco Limpo Salvo com {len(web_data)} editais.")
+print(f"✅ Auditoria Inteligente Concluída! Banco Limpo Salvo com {len(web_data)} editais (A partir de 2026).")
