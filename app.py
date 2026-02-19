@@ -13,7 +13,7 @@ from urllib3.util.retry import Retry
 import concurrent.futures
 
 # --- CONFIGURAÇÕES ---
-ARQDADOS = 'dadosoportunidades.json.gz'
+ARQDADOS = 'pregacoes_pharma_limpos.json.gz' # Atualizado para o nome esperado pelo JS
 ARQ_LOCK = 'execucao.lock'
 ARQ_CATALOGO = 'Exportar Dados.csv'
 MAXWORKERS = 10 
@@ -21,6 +21,7 @@ DATA_CORTE_FIXA = datetime(2025, 12, 1)
 
 # --- GEOGRAFIA ---
 NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
+# Deixei a lista vazia ou ajustável, caso queira parar de vetar o Sul/Norte
 ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
 
 # --- MAPA OFICIAL PNCP (SITUAÇÃO) ---
@@ -61,16 +62,14 @@ if os.path.exists(ARQ_CATALOGO):
     except: pass
 
 # --- LISTAS DE PALAVRAS-CHAVE ---
-TERMOS_UNIVERSAIS_NE = [
-    "FRALDA", "ABSORVENTE", "ALCOOL 70", "ALCOOL ETILICO", "ALCOOL GEL", "ALCOOL EM GEL"
-]
+TERMOS_UNIVERSAIS_NE = ["FRALDA", "ABSORVENTE", "ALCOOL 70", "ALCOOL ETILICO", "ALCOOL GEL"]
 
 VETOS_GERAIS = [normalize(x) for x in [
-    "ALIMENTACAO", "MERENDA", "HORTIFRUTI", "CARNES", "PANIFICACAO", "COFFEE BREAK", "BUFFET",
+    "MERENDA", "HORTIFRUTI", "CARNES", "PANIFICACAO", "COFFEE BREAK", "BUFFET",
     "MATERIAL ESCOLAR", "PEDAGOGICO", "BRINQUEDOS", "LIVROS", "TRANSPORTE",
-    "OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "REFORMA", "MANUTENCAO", 
-    "LIMPEZA URBANA", "LOCACAO", "COMBUSTIVEL", "PNEUS", "PECAS", 
-    "VIGILANCIA", "SEGURANCA", "FARDAMENTO", "INFORMATICA", "IMPRESSAO"
+    "OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "REFORMA", "MANUTENCAO PREDIO", 
+    "LIMPEZA URBANA", "COMBUSTIVEL", "PNEUS", "PECAS", 
+    "VIGILANCIA", "SEGURANCA ARMADA", "FARDAMENTO", "IMPRESSAO"
 ]]
 
 WL_MEDICAMENTOS = [normalize(x) for x in [
@@ -86,32 +85,18 @@ WL_NUTRI_MATERIAIS = [normalize(x) for x in [
 
 def criar_sessao():
     s = requests.Session()
-    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/9.7'})
+    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/10.0'})
     retry = Retry(total=5, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
     s.mount('https://', HTTPAdapter(max_retries=retry))
     return s
 
 def veta_edital(obj_raw, uf):
     obj = normalize(obj_raw)
-    
-    # 1. SALVA-VIDAS UNIVERSAL NE
-    if uf in NE_ESTADOS:
-        if any(univ in obj for univ in TERMOS_UNIVERSAIS_NE):
-            return False 
-
-    # 2. VETOS GERAIS
+    if uf in NE_ESTADOS and any(univ in obj for univ in TERMOS_UNIVERSAIS_NE):
+        return False 
     for v in VETOS_GERAIS:
         if v in obj:
-            if "NUTRICAO" in v or "ALIMENT" in v:
-                if any(bom in obj for bom in WL_NUTRI_MATERIAIS) and "ESCOLAR" not in obj:
-                    return False
             return True
-            
-    # 3. VETO DE LIMPEZA
-    if "LIMPEZA" in obj or "HIGIENE" in obj:
-        if not any(x in obj for x in ["HOSPITALAR", "UBS", "SAUDE", "CLINICA"]):
-            return True
-            
     return False
 
 def safe_float(val):
@@ -125,9 +110,8 @@ def safe_int(val, default=4):
 def processar_licitacao(lic, session):
     id_ref = "DESC"
     try:
-        if not isinstance(lic, dict): return ('ERRO', {'msg': 'Formato inválido', 'id': 'N/A'}, 0, 0)
+        if not isinstance(lic, dict): return ('ERRO', {'msg': 'Formato inválido'}, 0, 0)
         
-        # Identificação para Log de Erro
         cnpj = lic.get('orgaoEntidade', {}).get('cnpj', '0000')
         ano = lic.get('anoCompra', '0000')
         seq = lic.get('sequencialCompra', '0000')
@@ -135,7 +119,6 @@ def processar_licitacao(lic, session):
 
         uo = lic.get('unidadeOrgao', {})
         uf = uo.get('ufSigla', '').upper()
-        
         if uf in ESTADOS_BLOQUEADOS: return ('VETADO', None, 0, 0)
 
         dt_enc_str = lic.get('dataEncerramentoProposta')
@@ -146,108 +129,111 @@ def processar_licitacao(lic, session):
         obj_raw = lic.get('objetoCompra') or "Sem Objeto"
         if veta_edital(obj_raw, uf): return ('VETADO', None, 0, 0)
 
-        # ANÁLISE DE INTERESSE
+        # NOVA ABORDAGEM: Verifica se o ÓRGÃO ou OBJETO é de Saúde
         obj_norm = normalize(obj_raw)
-        tem_interesse = False
+        orgao_nome = normalize(lic.get('orgaoEntidade', {}).get('razaoSocial', ''))
+        unidade_nome = normalize(uo.get('nomeUnidade', ''))
         
-        if uf in NE_ESTADOS and any(t in obj_norm for t in TERMOS_UNIVERSAIS_NE):
-            tem_interesse = True
-        elif any(t in obj_norm for t in WL_MEDICAMENTOS):
-            tem_interesse = True
-        elif uf in NE_ESTADOS and any(t in obj_norm for t in WL_NUTRI_MATERIAIS):
-            tem_interesse = True
-        elif "SAUDE" in obj_norm or "HOSPITAL" in obj_norm:
-            tem_interesse = True
+        is_saude = any(x in orgao_nome or x in unidade_nome for x in ["SAUDE", "FMS", "HOSPITAL", "CLINICA", "FUNDO MUNICIPAL"])
+        
+        tem_interesse = is_saude
+        if not tem_interesse:
+            if any(t in obj_norm for t in WL_MEDICAMENTOS + WL_NUTRI_MATERIAIS): tem_interesse = True
+            elif uf in NE_ESTADOS and any(t in obj_norm for t in TERMOS_UNIVERSAIS_NE): tem_interesse = True
 
         if not tem_interesse: return ('IGNORADO', None, 0, 0)
 
-        # CAPTURA DE ITENS
         url_itens = f'https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens'
         r_itens = session.get(url_itens, params={'pagina': 1, 'tamanhoPagina': 100}, timeout=20)
-        
-        # Erro de HTTP ao buscar itens
-        if r_itens.status_code != 200: 
-            return ('ERRO', {'msg': f'HTTP {r_itens.status_code} em Itens', 'id': id_ref}, 0, 0)
+        if r_itens.status_code != 200: return ('ERRO', {'msg': f'HTTP {r_itens.status_code}', 'id': id_ref}, 0, 0)
         
         itens_raw = r_itens.json().get('data', []) if isinstance(r_itens.json(), dict) else []
         if not itens_raw: return ('IGNORADO', None, 0, 0)
 
         itens_limpos = []
         homologados = 0
-        tem_item_catalogo = False
+        tem_item_alvo = False
         
         for it in itens_raw:
             desc = normalize(it.get('descricao', ''))
+            ncm = str(it.get('ncmNbsCodigo', ''))
             
-            if any(v in desc for v in ["ARROZ", "FEIJAO", "CARNE", "PNEU", "GASOLINA", "RODA", "LIVRO"]):
-                continue
-
-            if any(term in desc for term in CATALOGO_TERMOS):
-                tem_item_catalogo = True
+            # Filtro inteligente: Verifica NCM (30 = Produtos Farmacêuticos) ou Catálogo
+            is_med_item = ncm.startswith('30') or any(term in desc for term in CATALOGO_TERMOS) or any(m in desc for m in WL_MEDICAMENTOS)
+            
+            if is_med_item: tem_item_alvo = True
+            elif not is_saude: continue # Descarta itens irrelevantes se o edital não for estritamente de saúde
             
             sit_id = safe_int(it.get('situacaoCompraItem'), 1)
-            sit_nome = it.get('situacaoCompraItemName', 'EM ANDAMENTO')
-            status_final = MAPA_SITUACAO.get(sit_id, sit_nome).upper()
+            status_final = MAPA_SITUACAO.get(sit_id, "EM ANDAMENTO")
             
             res_forn = None
             res_val = 0.0
             
+            # Busca de Resultados/Fornecedores (Apenas se homologado/encerrado)
             if it.get('temResultado') or sit_id == 2:
                 try:
                     r_res = session.get(f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{it['numeroItem']}/resultados", timeout=10)
                     if r_res.status_code == 200:
                         rl = r_res.json()
-                        if isinstance(rl, list) and len(rl) > 0:
+                        if rl:
                             res_obj = rl[0]
-                            res_forn = res_obj.get('nomeRazaoSocialFornecedor') or res_obj.get('razaoSocial')
+                            nome_forn = res_obj.get('nomeRazaoSocialFornecedor') or res_obj.get('razaoSocial')
+                            ni_forn = res_obj.get('niFornecedor')
+                            if nome_forn:
+                                res_forn = f"{nome_forn} (CNPJ: {ni_forn})" if ni_forn else nome_forn
                             res_val = safe_float(res_obj.get('valorUnitarioHomologado'))
-                            if sit_id == 1 and res_forn:
-                                status_final = "HOMOLOGADO"
+                            if sit_id == 1 and res_forn: status_final = "HOMOLOGADO"
                 except: pass
 
             if status_final == "HOMOLOGADO": homologados += 1
 
+            # Nomes das chaves ajustados para casar EXATAMENTE com o index.html
             itens_limpos.append({
                 'n': it.get('numeroItem'), 
-                'd': it.get('descricao'), 
-                'q': safe_float(it.get('quantidade')),
-                'u': it.get('unidadeMedida', ''), 
-                'v_est': safe_float(it.get('valorUnitarioEstimado')),
-                'benef': safe_int(it.get('tipoBeneficioId'), 4),
-                'sit': status_final, 
-                'res_forn': res_forn,
-                'res_val': res_val
+                'desc': it.get('descricao'), 
+                'qtd': safe_float(it.get('quantidade')),
+                'un': it.get('unidadeMedida', 'UN'), 
+                'valUnit': safe_float(it.get('valorUnitarioEstimado')),
+                'valHomologado': res_val,
+                'benef': safe_int(it.get('tipoBeneficioId'), 4), # 1,2,3=ME/EPP
+                'situacao': status_final, 
+                'fornecedor': res_forn
             })
 
-        if not itens_limpos: return ('IGNORADO', None, 0, 0)
-        
-        if uf not in NE_ESTADOS:
-            if not tem_item_catalogo and not any(m in obj_norm for m in WL_MEDICAMENTOS):
-                 return ('IGNORADO', None, 0, 0)
+        if not itens_limpos or (not tem_item_alvo and not is_saude): 
+            return ('IGNORADO', None, 0, 0)
 
+        # Regra de negócio para "tipo_licitacao" (Amplo vs Exclusivo)
+        todos_exclusivos = all(i['benef'] in [1, 2, 3] for i in itens_limpos)
+        algum_exclusivo = any(i['benef'] in [1, 2, 3] for i in itens_limpos)
+        tipo_lic = "EXCLUSIVO" if todos_exclusivos else ("PARCIAL" if algum_exclusivo else "AMPLO")
+
+        # Nomes das chaves ajustados para casar com o JS
         dados_finais = {
-            'id': f"{cnpj}{ano}{seq}", 'dt_enc': dt_enc_str, 'uf': uf, 
+            'id': f"{cnpj}{ano}{seq}", 
+            'data_enc': dt_enc_str, 
+            'uf': uf, 
             'uasg': lic['unidadeOrgao'].get('codigoUnidade', '---'),
-            'org': lic['orgaoEntidade']['razaoSocial'], 'unid_nome': lic['unidadeOrgao'].get('nomeUnidade', '---'),
-            'cid': lic['unidadeOrgao'].get('municipioNome'), 'obj': obj_raw, 
-            'edit': f"{str(lic.get('numeroCompra', '')).zfill(5)}/{ano}",
+            'orgao': lic['orgaoEntidade']['razaoSocial'], 
+            'unidade': lic['unidadeOrgao'].get('nomeUnidade', '---'),
+            'cidade': lic['unidadeOrgao'].get('municipioNome'), 
+            'objeto': obj_raw, 
+            'edital': f"{str(lic.get('numeroCompra', '')).zfill(5)}/{ano}",
             'link': f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}", 
-            'val_tot': safe_float(lic.get('valorTotalEstimado')), 
+            'valor_estimado': safe_float(lic.get('valorTotalEstimado')), 
+            'tipo_licitacao': tipo_lic,
             'itens': itens_limpos
         }
         
         return ('CAPTURADO', dados_finais, len(itens_limpos), homologados)
 
     except Exception as e:
-        # Captura erro genérico
         return ('ERRO', {'msg': str(e), 'id': id_ref}, 0, 0)
 
 def buscar_periodo(session, banco, d_ini, d_fim):
     stats = {'vetados': 0, 'capturados': 0, 'itens': 0, 'homologados': 0, 'ignorados': 0, 'erros': 0}
     
-    # Lista para guardar os detalhes dos erros
-    lista_erros_detalhados = [] 
-
     delta = d_fim - d_ini
     for i in range(delta.days + 1):
         dia = (d_ini + timedelta(days=i)).strftime('%Y%m%d')
@@ -257,13 +243,9 @@ def buscar_periodo(session, banco, d_ini, d_fim):
         while True:
             try:
                 r = session.get(url, params={'dataInicial': dia, 'dataFinal': dia, 'codigoModalidadeContratacao': 6, 'pagina': pag, 'tamanhoPagina': 50}, timeout=30)
-                if r.status_code != 200:
-                    print(f"   ⚠️ Erro HTTP {r.status_code} na página {pag}")
-                    break
+                if r.status_code != 200: break
                 dados = r.json()
-            except Exception as e:
-                print(f"   ⚠️ Erro de conexão na página {pag}: {e}")
-                break
+            except: break
 
             lics = dados.get('data', [])
             if not lics: break
@@ -280,34 +262,16 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                         if d: banco[d['id']] = d
                     elif st == 'VETADO': s_pag['vetados'] += 1
                     elif st == 'IGNORADO': s_pag['ignorados'] += 1
-                    else: 
-                        s_pag['erros'] += 1
-                        if d: lista_erros_detalhados.append(d) # Guarda o detalhe do erro
+                    else: s_pag['erros'] += 1
             
             for k in stats: stats[k] += s_pag[k]
             print(f"   📄 Pág {pag}/{tot_pag}: 🎯 {s_pag['capturados']} Caps | 🚫 {s_pag['vetados']} Vetos | 👁️ {s_pag['ignorados']} Ign | 🔥 {s_pag['erros']} Err")
             if pag >= tot_pag: break
             pag += 1
 
-    print(f"\n{'='*40}")
-    print("📊 RESUMO GERAL")
-    print(f"{'='*40}")
-    print(f"✅ CAPTURADOS: {stats['capturados']}")
-    print(f"🚫 VETADOS:    {stats['vetados']}")
-    print(f"👁️ IGNORADOS:  {stats['ignorados']}")
-    print(f"📦 ITENS:      {stats['itens']}")
-    print(f"🔥 ERROS:      {stats['erros']}")
-    
-    # Exibe o relatório detalhado de erros se houver
-    if lista_erros_detalhados:
-        print(f"\n{'='*40}")
-        print("🛠️ RELATÓRIO DE ERROS DETALHADO")
-        print(f"{'='*40}")
-        for err in lista_erros_detalhados:
-            print(f"⚠️ ID: {err.get('id')} | Motivo: {err.get('msg')}")
-        print(f"{'='*40}\n")
-    else:
-        print(f"{'='*40}\n")
+    print(f"\n{'='*40}\n📊 RESUMO GERAL\n{'='*40}")
+    print(f"✅ CAPTURADOS: {stats['capturados']}\n🚫 VETADOS:    {stats['vetados']}")
+    print(f"👁️ IGNORADOS:  {stats['ignorados']}\n📦 ITENS:      {stats['itens']}\n🔥 ERROS:      {stats['erros']}")
 
 if __name__ == '__main__':
     if os.path.exists(ARQ_LOCK): sys.exit(0)
