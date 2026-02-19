@@ -20,7 +20,6 @@
         .benef-sim { color: var(--red-df) !important; font-weight: bold !important; }
         .benef-nao { color: var(--green-df) !important; font-weight: bold !important; }
 
-        /* Classes para a Classificação do Processo */
         .badge-tipo { font-weight: 800; padding: 5px 10px; border-radius: 4px; font-size: 0.75rem; letter-spacing: 0.5px; display: inline-flex; align-items: center; }
         .badge-amplo { background-color: var(--green-df); color: white; }
         .badge-exclusivo { background-color: var(--red-df); color: white; }
@@ -35,7 +34,11 @@
         .val-homologado { background-color: #f2f7ff; }
         
         .header-fornecedor { background-color: #f8f9fa; color: var(--blue-df); font-weight: bold; }
-        .header-status-aguardando { background-color: #fff9db; font-weight: bold; color: #856404; text-align: center; }
+        
+        /* CORES SEPARADAS PARA CADA STATUS */
+        .header-status-andamento { background-color: #fff9db; font-weight: bold; color: #856404; text-align: center; }
+        .header-status-deserto { background-color: #f8d7da; font-weight: bold; color: #721c24; text-align: center; }
+        .header-status-cancelado { background-color: #e2e3e5; font-weight: bold; color: #383d41; text-align: center; }
         
         .pagination-container { display: flex; align-items: center; justify-content: center; gap: 15px; margin-top: 20px; padding-bottom: 40px; }
         
@@ -151,7 +154,6 @@ function renderMonitor() {
             ? `R$ ${lic.valor_estimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` 
             : 'Sigiloso/Não inf.';
 
-        // Lógica de Classificação do Processo baseado nos itens
         let tipoLic = "AMPLO";
         let cssTipo = "badge-amplo";
         
@@ -236,14 +238,21 @@ function abrirItens(id) {
     document.getElementById('linkPncp').href = lic.link;
 
     const grupos = {};
-    const aguardando = [];
+    const andamento = [];
+    const desertos = [];
+    const cancelados = [];
 
+    // SEPARAÇÃO INTELIGENTE DE STATUS
     lic.itens.forEach(it => {
-        if (it.fornecedor && it.situacao === "HOMOLOGADO") {
+        if (it.situacao === "HOMOLOGADO" && it.fornecedor) {
             if (!grupos[it.fornecedor]) grupos[it.fornecedor] = [];
             grupos[it.fornecedor].push(it);
+        } else if (it.situacao === "CANCELADO") {
+            cancelados.push(it);
+        } else if (it.situacao === "DESERTO" || it.situacao === "FRACASSADO") {
+            desertos.push(it);
         } else {
-            aguardando.push(it);
+            andamento.push(it);
         }
     });
 
@@ -251,11 +260,19 @@ function abrirItens(id) {
         <tr><th class="text-center">#</th><th>Descrição</th><th class="text-center">ME/EPP</th><th class="text-center">Qtd/Un</th><th class="text-center">Est. Unit.</th><th class="text-center">Final Unit.</th><th class="text-center">Total</th></tr>
         </thead><tbody>`;
 
-    if (aguardando.length > 0) {
-        html += `<tr><td colspan="7" class="header-status-aguardando py-1 small">ITENS EM ANDAMENTO</td></tr>`;
-        aguardando.forEach(it => html += renderLinhaItem(it));
+    // BLOCOS DINÂMICOS NA TELA
+    if (andamento.length > 0) {
+        html += `<tr><td colspan="7" class="header-status-andamento py-1 small">ITENS EM ANDAMENTO</td></tr>`;
+        andamento.forEach(it => html += renderLinhaItem(it));
     }
-
+    if (desertos.length > 0) {
+        html += `<tr><td colspan="7" class="header-status-deserto py-1 small">ITENS DESERTOS / FRACASSADOS</td></tr>`;
+        desertos.forEach(it => html += renderLinhaItem(it));
+    }
+    if (cancelados.length > 0) {
+        html += `<tr><td colspan="7" class="header-status-cancelado py-1 small">ITENS CANCELADOS</td></tr>`;
+        cancelados.forEach(it => html += renderLinhaItem(it));
+    }
     for (const forn in grupos) {
         html += `<tr class="header-fornecedor"><td colspan="7">Fornecedor: ${forn}</td></tr>`;
         grupos[forn].forEach(it => html += renderLinhaItem(it));
@@ -285,7 +302,7 @@ function excluirLicitacao(id) {
 }
 
 function abrirInclusaoManual() {
-    alert("Para Inclusão Manual:\n\nAdicione o link da licitação no ficheiro 'links_manuais.txt' no GitHub. Ele será lido e adicionado no próximo processamento do robô.");
+    alert("Para Inclusão Manual:\\n\\nAdicione o link da licitação no ficheiro 'links_manuais.txt' no GitHub. Ele será lido e adicionado no próximo processamento do robô.");
 }
 
 document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
