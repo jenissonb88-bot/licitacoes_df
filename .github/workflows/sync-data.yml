@@ -2,7 +2,7 @@ name: Sniper Pharma Controller
 
 on:
   schedule:
-    - cron: '0 9 * * *'  # Roda todo dia às 06:00 BRT
+    - cron: '0 9 * * *'  
   workflow_dispatch:
     inputs:
       mode:
@@ -38,84 +38,47 @@ jobs:
     - name: Install deps
       run: pip install requests
 
-    # --- 1. LÓGICA DE DATAS ---
     - name: Definir Datas e Modo
       id: config
       run: |
         export TZ="America/Sao_Paulo"
         TODAY=$(date +'%Y-%m-%d')
-        DAY_OF_MONTH=$(date +'%d')
-
+        
         if [ "${{ github.event_name }}" == "schedule" ]; then
-          if [ "$DAY_OF_MONTH" == "01" ] || [ "$DAY_OF_MONTH" == "16" ]; then
-            # Quinzenalmente faz varredura ampla
-            echo "START_DATE=2026-01-01" >> $GITHUB_ENV
+            echo "START_DATE=$(date -d '2 days ago' +'%Y-%m-%d')" >> $GITHUB_ENV
             echo "END_DATE=$TODAY" >> $GITHUB_ENV
-            echo "MODE=full_scan" >> $GITHUB_ENV
-          else
-            # Diariamente olha os ultimos 5 dias para garantir
-            START_5DAYS=$(date -d "5 days ago" +'%Y-%m-%d')
-            echo "START_DATE=$START_5DAYS" >> $GITHUB_ENV
-            echo "END_DATE=$TODAY" >> $GITHUB_ENV
-            echo "MODE=daily_update" >> $GITHUB_ENV
-          fi
+            echo "MODE=single_run" >> $GITHUB_ENV
         else
-          # Manual
-          INPUT_DATE="${{ inputs.target_date }}"
-          echo "START_DATE=$INPUT_DATE" >> $GITHUB_ENV
-          echo "END_DATE=$INPUT_DATE" >> $GITHUB_ENV 
-          echo "MODE=${{ inputs.mode }}" >> $GITHUB_ENV
+            echo "START_DATE=${{ inputs.target_date }}" >> $GITHUB_ENV
+            echo "END_DATE=${{ inputs.target_date }}" >> $GITHUB_ENV
+            echo "MODE=${{ inputs.mode }}" >> $GITHUB_ENV
         fi
 
-    # --- 2. EXECUÇÃO DOS ROBÔS ---
-    - name: Run app.py (Coleta)
+    # 1. PASSO: CAPTURA BRUTA
+    - name: 🚀 1. Run Core Crawler (app.py)
       run: python app.py --start "$START_DATE" --end "$END_DATE"
 
-    # === O MÉDICO: AUDITORIA E CORREÇÃO ===
-    - name: Run atualiza.py (Correção de Status e ME/EPP)
-      run: python atualiza.py
-
-    - name: Run limpeza.py (Filtro e Tratamento Final)
+    # 2. PASSO: LIMPEZA E LAPIDAÇÃO
+    - name: 🧹 2. Run Data Cleaner (limpeza.py)
       run: python limpeza.py
 
-    # --- 3. COMMIT E PUSH ---
-    - name: Commit results
+    # 3. PASSO: AUDITORIA PROFUNDA NOS PROCESSOS LIMPOS
+    - name: 🩺 3. Run Auditor (atualiza.py)
+      run: python atualiza.py
+
+    - name: 💾 4. Commit results
       run: |
         git config user.name "Sniper Pharma Bot"
         git config user.email "sniper@pharma.bot"
         
         echo "🔄 Preparando envio dos dados acumulados..."
         
-        # 1. Adiciona os arquivos gerados no Stage
         git add dadosoportunidades.json.gz || true
         git add pregacoes_pharma_limpos.json.gz || true
-        git add checkpoint.txt || true 
+        git add links_manuais.txt || true
         
-        # 2. Verifica se tem algo novo para commitar
-        git diff --staged --quiet || git commit -m "Sniper Data: $START_DATE | Mode: $MODE"
+        git diff --staged --quiet || git commit -m "Sniper Data Atualizado"
         
-        # 3. TRUQUE PARA EVITAR CONFLITO:
-        # Puxa o servidor. Se houver conflito, 'theirs' (o que o bot gerou agora) VENCE.
         git pull origin main --rebase -X theirs
-        
-        # 4. Envia
         git push origin main
-        echo "✅ Dados salvos com sucesso!"
-
-    # --- 4. LOOP (SE FOR MANUAL) ---
-    - name: Trigger Próximo Dia
-      if: inputs.mode == 'manual_loop'
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        CURRENT="${{ inputs.target_date }}"
-        # Cálculo seguro de data +1 dia
-        NEXT_DAY=$(date -d "$CURRENT + 1 day" +'%Y-%m-%d')
-        TODAY=$(date +'%Y-%m-%d')
-        
-        if [[ "$NEXT_DAY" < "$TODAY" ]] || [[ "$NEXT_DAY" == "$TODAY" ]]; then
-          echo "🔁 Próximo dia: $NEXT_DAY"
-          gh workflow run sync-data.yml -f mode=manual_loop -f target_date="$NEXT_DAY"
-        else
-          echo "🏁 Fim do Loop (Chegou na data de hoje)."
-        fi
+        echo "✅ Workflow concluído com sucesso!"
