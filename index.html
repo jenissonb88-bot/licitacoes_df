@@ -117,7 +117,6 @@ async function loadData() {
         const text = await new Response(decompressedStream).text();
         
         allData = JSON.parse(text);
-        allData.sort((a, b) => new Date(b.data_enc) - new Date(a.data_enc));
         filteredData = [...allData];
         renderMonitor();
     } catch (e) { 
@@ -186,9 +185,7 @@ function filtrar() {
     const edt = document.getElementById('filterEdital').value.toUpperCase();
 
     filteredData = allData.filter(lic => {
-        // Formatar data_enc para comparação YYYY-MM-DD
         const dataLic = lic.data_enc.split('T')[0];
-        
         return (!dataEnc || dataLic === dataEnc) &&
                (!uf || lic.uf.includes(uf)) &&
                (!cid || lic.cidade.toUpperCase().includes(cid)) &&
@@ -196,15 +193,13 @@ function filtrar() {
                (!edt || lic.edital.includes(edt));
     });
     
-    currentPage = 1;
-    renderMonitor();
+    currentPage = 1; renderMonitor();
 }
 
 function limparFiltros() {
     document.querySelectorAll('.form-control').forEach(i => i.value = '');
     filteredData = [...allData];
-    currentPage = 1;
-    renderMonitor();
+    currentPage = 1; renderMonitor();
 }
 
 function abrirItens(id) {
@@ -225,7 +220,7 @@ function abrirItens(id) {
     });
 
     let html = `<div class="table-responsive"><table class="table table-sm table-bordered table-itens align-middle"><thead class="table-dark">
-        <tr><th>#</th><th>Descrição</th><th class="text-center">ME/EPP</th><th class="text-center">Qtd/Un</th><th class="text-center">Est. Unit.</th><th class="text-center">Final Unit.</th><th class="text-center">Total</th></tr>
+        <tr><th class="text-center">#</th><th>Descrição</th><th class="text-center">ME/EPP</th><th class="text-center">Qtd/Un</th><th class="text-center">Est. Unit.</th><th class="text-center">Final Unit.</th><th class="text-center">Total</th></tr>
         </thead><tbody>`;
 
     if (aguardando.length > 0) {
@@ -244,14 +239,29 @@ function abrirItens(id) {
 }
 
 function renderLinhaItem(it) {
-    const isMeEpp = [1, 2, 3].includes(parseInt(it.benef));
-    const meEppHtml = isMeEpp ? '<span class="benef-sim">SIM</span>' : '<span class="benef-nao">NÃO</span>';
+    let meEppHtml = '';
+    // Tratamento Visual de Divergência
+    if (it.me_epp) {
+        if (it.divergente) {
+            meEppHtml = '<span style="color: #fd7e14; font-weight: bold;" title="Benefício corrigido via análise de texto pelo robô">SIM ⚠️ (Corrigido)</span>';
+        } else {
+            meEppHtml = '<span class="benef-sim">SIM</span>';
+        }
+    } else {
+        meEppHtml = '<span class="benef-nao">NÃO</span>';
+    }
+
     const valorTotal = it.valHomologado > 0 ? (it.valHomologado * it.qtd) : (it.valUnit * it.qtd);
 
-    return `<tr><td class="text-center fw-bold">${it.n}</td><td>${it.desc}</td><td class="text-center">${meEppHtml}</td>
-            <td class="text-center">${it.qtd} ${it.un}</td><td class="text-center val-estimado">R$ ${it.valUnit.toFixed(4)}</td>
-            <td class="text-center val-homologado">${it.valHomologado > 0 ? 'R$ ' + it.valHomologado.toFixed(4) : '---'}</td>
-            <td class="text-center fw-bold">R$ ${valorTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td></tr>`;
+    return `<tr>
+        <td class="text-center fw-bold">${it.n}</td>
+        <td>${it.desc}</td>
+        <td class="text-center">${meEppHtml}</td>
+        <td class="text-center">${it.qtd} ${it.un}</td>
+        <td class="text-center val-estimado">R$ ${it.valUnit.toFixed(4)}</td>
+        <td class="text-center val-homologado">${it.valHomologado > 0 ? 'R$ ' + it.valHomologado.toFixed(4) : '---'}</td>
+        <td class="text-center fw-bold">R$ ${valorTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+    </tr>`;
 }
 
 function excluirLicitacao(id) {
