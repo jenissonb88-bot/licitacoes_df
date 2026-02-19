@@ -6,23 +6,19 @@ import concurrent.futures
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-# --- CONFIGURAÇÕES ---
-ARQDADOS = 'pregacoes_pharma_limpos.json.gz' # AGORA ELE LÊ O LIMPO!
+ARQDADOS = 'pregacoes_pharma_limpos.json.gz' 
 MAXWORKERS = 10  
-
-# --- MAPAS OFICIAIS ---
-MAPA_SITUACAO = {1: "EM ANDAMENTO", 2: "HOMOLOGADO", 3: "CANCELADO", 4: "DESERTO", 5: "FRACASSADO"}
 
 def criar_sessao():
     s = requests.Session()
-    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/12.0'})
+    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/13.0'})
     retry = Retry(total=5, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
     s.mount('https://', HTTPAdapter(max_retries=retry))
     return s
 
 def precisa_atualizar(lic):
-    # Só atualiza se tiver itens "EM ANDAMENTO"
-    return any(it.get('situacao') == "EM ANDAMENTO" and not it.get('fornecedor') for it in lic.get('itens', []))
+    # CORREÇÃO: Audita se NÃO TEM FORNECEDOR E não foi cancelado/fracassado
+    return any(not it.get('fornecedor') and it.get('situacao') in ["EM ANDAMENTO", "HOMOLOGADO"] for it in lic.get('itens', []))
 
 def atualizar_licitacao(lid, dados_antigos, session):
     try:
@@ -37,8 +33,8 @@ def atualizar_licitacao(lid, dados_antigos, session):
         for it in dados_antigos.get('itens', []):
             item_novo = it.copy()
             
-            # Só busca na API se o item estiver pendente
-            if it.get('situacao') == "EM ANDAMENTO" and not it.get('fornecedor'):
+            # Condição de busca: Sem fornecedor + Situação passível de ganho
+            if not it.get('fornecedor') and it.get('situacao') in ["EM ANDAMENTO", "HOMOLOGADO"]:
                 try:
                     num = it['n']
                     r = session.get(f"{url_base}/{num}/resultados", timeout=15)
@@ -66,10 +62,9 @@ def atualizar_licitacao(lid, dados_antigos, session):
     except Exception: return None
 
 # --- EXECUÇÃO ---
-
 if not os.path.exists(ARQDADOS): exit()
 
-print("🩺 Auditoria Profunda Iniciada (Apenas em Processos Filtrados)...")
+print("🩺 Auditoria Profunda de Resultados Iniciada...")
 
 with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
     banco_raw = json.load(f)
@@ -80,7 +75,7 @@ session = criar_sessao()
 alvos = [lid for lid, d in banco_dict.items() if precisa_atualizar(d)]
 
 print(f"📊 Banco Limpo Total: {len(banco_dict)}")
-print(f"🎯 Alvos para Revalidação no PNCP: {len(alvos)}")
+print(f"🎯 Alvos com Fornecedores Ocultos: {len(alvos)}")
 
 if alvos:
     atualizados = 0
@@ -95,9 +90,9 @@ if alvos:
                     atualizados += 1
             except: pass
 
-    print(f"💾 Salvando... ✅ {atualizados} licitações atualizadas com sucesso.")
+    print(f"💾 Salvando... ✅ {atualizados} licitações atualizadas com Vencedores.")
 
     with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
         json.dump(list(banco_dict.values()), f, ensure_ascii=False)
 else:
-    print("🏁 Nenhum item pendente de homologação.")
+    print("🏁 Nenhum item pendente de auditoria.")
