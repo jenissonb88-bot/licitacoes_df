@@ -6,20 +6,17 @@ import concurrent.futures
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-# --- CONFIGURAÇÕES ---
 ARQDADOS = 'pregacoes_pharma_limpos.json.gz' 
 MAXWORKERS = 10  
 
 def criar_sessao():
     s = requests.Session()
-    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/14.0'})
+    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/17.0'})
     retry = Retry(total=5, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
     s.mount('https://', HTTPAdapter(max_retries=retry))
     return s
 
 def precisa_atualizar(lic):
-    # Condição: Se um item não tiver fornecedor E for passível de ter ganho um.
-    # Mesmo se o app.py o taxar de "HOMOLOGADO", ele vasculha pois falta o dado.
     return any(not it.get('fornecedor') and it.get('situacao') in ["EM ANDAMENTO", "HOMOLOGADO"] for it in lic.get('itens', []))
 
 def atualizar_licitacao(lid, dados_antigos, session):
@@ -35,7 +32,6 @@ def atualizar_licitacao(lid, dados_antigos, session):
         for it in dados_antigos.get('itens', []):
             item_novo = it.copy()
             
-            # Condição de busca: Sem fornecedor + Situação passível
             if not it.get('fornecedor') and it.get('situacao') in ["EM ANDAMENTO", "HOMOLOGADO"]:
                 try:
                     num = it['n']
@@ -66,12 +62,11 @@ def atualizar_licitacao(lid, dados_antigos, session):
 # --- EXECUÇÃO PRINCIPAL ---
 if not os.path.exists(ARQDADOS): exit()
 
-print("🩺 Auditoria Profunda de Resultados Iniciada...")
+print("🩺 Auditoria Profunda Independente (Resultados) Iniciada...")
 
 with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
     banco_raw = json.load(f)
 
-# Converte pra dict para facilitar a substituição
 banco_dict = {item['id']: item for item in banco_raw}
 session = criar_sessao()
 
