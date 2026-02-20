@@ -66,7 +66,7 @@ WL_MATERIAIS_NE = [normalize(x) for x in ["MATERIAL MEDIC", "INSUMO HOSPITALAR",
 
 def criar_sessao():
     s = requests.Session()
-    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/15.0'})
+    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/18.0'})
     retry = Retry(total=5, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
     s.mount('https://', HTTPAdapter(max_retries=retry))
     return s
@@ -104,6 +104,7 @@ def processar_licitacao(lic, session, forcado=False):
         dt_enc_str = lic.get('dataEncerramentoProposta') or datetime.now().isoformat()
         
         if not forcado:
+            # 1. BLOQUEIO GEOGRÁFICO ABSOLUTO EM PRIMEIRO LUGAR
             if uf in ESTADOS_BLOQUEADOS: 
                 return ('VETADO', None, 0, 0)
             
@@ -120,58 +121,70 @@ def processar_licitacao(lic, session, forcado=False):
             if not tem_interesse: return ('IGNORADO', None, 0, 0)
 
         url_itens = f'https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens'
-        r_itens = session.get(url_itens, params={'pagina': 1, 'tamanhoPagina': 100}, timeout=20)
-        if r_itens.status_code != 200: return ('ERRO', {'msg': f'HTTP {r_itens.status_code}'}, 0, 0)
         
-        resp_json = r_itens.json()
-        if isinstance(resp_json, dict): itens_raw = resp_json.get('data', [])
-        elif isinstance(resp_json, list): itens_raw = resp_json
-        else: return ('IGNORADO', None, 0, 0)
-
-        if not itens_raw: return ('IGNORADO', None, 0, 0)
-
         itens_brutos = []
         tem_item_catalogo = forcado 
+        pagina_atual = 1
         
-        for it in itens_raw:
-            if not isinstance(it, dict): continue
+        # --- MOTOR DE PAGINAÇÃO INFINITA ---
+        while True:
+            r_itens = session.get(url_itens, params={'pagina': pagina_atual, 'tamanhoPagina': 100}, timeout=20)
+            if r_itens.status_code != 200: 
+                if pagina_atual == 1: return ('ERRO', {'msg': f'HTTP {r_itens.status_code}'}, 0, 0)
+                else: break # Grava o que já capturou nas páginas anteriores caso a API falhe a meio
             
-            desc = it.get('descricao', '')
-            desc_norm = normalize(desc)
-            ncm = str(it.get('ncmNbsCodigo', ''))
-            
-            if any(v in desc_norm for v in ["ARROZ", "FEIJAO", "CARNE", "PNEU", "GASOLINA", "RODA", "LIVRO", "COPO", "CAFE", "ACUCAR"]):
-                continue
+            resp_json = r_itens.json()
+            if isinstance(resp_json, dict): 
+                itens_raw = resp_json.get('data', [])
+                total_paginas = resp_json.get('totalPaginas', 1)
+            elif isinstance(resp_json, list): 
+                itens_raw = resp_json
+                total_paginas = 1
+            else: break
 
-            if ncm.startswith('30') or any(term in desc_norm for term in CATALOGO_TERMOS):
-                tem_item_catalogo = True
-            
-            sit_id = int(it.get('situacaoCompraItem') or 1)
-            sit_nome = MAPA_SITUACAO.get(sit_id, "EM ANDAMENTO")
-            
-            # --- VALIDAÇÃO CRUZADA HÍBRIDA DE BENEFÍCIO ME/EPP ---
-            benef_id = it.get('tipoBeneficioId')
-            benef_nome_api = str(it.get('tipoBeneficioNome', '')).upper()
-            
-            if benef_id in [1, 2, 3]:
-                benef_final = benef_id
-            elif "ME/EPP" in benef_nome_api or "EXCLUSIVA" in benef_nome_api or "COTA" in benef_nome_api:
-                benef_final = 1 if "EXCLUSIVA" in benef_nome_api else 3
-            else:
-                benef_final = 4
-            # -----------------------------------------------------
+            if not itens_raw: break
 
-            itens_brutos.append({
-                'n': it.get('numeroItem'), 
-                'd': desc, 
-                'q': safe_float(it.get('quantidade')),
-                'u': it.get('unidadeMedida', 'UN'), 
-                'v_est': safe_float(it.get('valorUnitarioEstimado')),
-                'benef': benef_final, 
-                'sit': sit_nome, 
-                'res_forn': None, 
-                'res_val': 0.0
-            })
+            for it in itens_raw:
+                if not isinstance(it, dict): continue
+                
+                desc = it.get('descricao', '')
+                desc_norm = normalize(desc)
+                ncm = str(it.get('ncmNbsCodigo', ''))
+                
+                if any(v in desc_norm for v in ["ARROZ", "FEIJAO", "CARNE", "PNEU", "GASOLINA", "RODA", "LIVRO", "COPO", "CAFE", "ACUCAR"]):
+                    continue
+
+                if ncm.startswith('30') or any(term in desc_norm for term in CATALOGO_TERMOS):
+                    tem_item_catalogo = True
+                
+                sit_id = int(it.get('situacaoCompraItem') or 1)
+                sit_nome = MAPA_SITUACAO.get(sit_id, "EM ANDAMENTO")
+                
+                # --- VALIDAÇÃO CRUZADA HÍBRIDA DO BENEFÍCIO (ME/EPP) ---
+                benef_id = it.get('tipoBeneficioId')
+                benef_nome_api = str(it.get('tipoBeneficioNome', '')).upper()
+                
+                if benef_id in [1, 2, 3]:
+                    benef_final = benef_id
+                elif "ME/EPP" in benef_nome_api or "EXCLUSIVA" in benef_nome_api or "COTA" in benef_nome_api:
+                    benef_final = 1 if "EXCLUSIVA" in benef_nome_api else 3
+                else:
+                    benef_final = 4
+
+                itens_brutos.append({
+                    'n': it.get('numeroItem'), 
+                    'd': desc, 
+                    'q': safe_float(it.get('quantidade')),
+                    'u': it.get('unidadeMedida', 'UN'), 
+                    'v_est': safe_float(it.get('valorUnitarioEstimado')),
+                    'benef': benef_final, 
+                    'sit': sit_nome, 
+                    'res_forn': None, 
+                    'res_val': 0.0
+                })
+            
+            if pagina_atual >= total_paginas: break
+            pagina_atual += 1
 
         if not itens_brutos: return ('IGNORADO', None, 0, 0)
         
@@ -242,7 +255,9 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                     st, d, i, h = f.result()
                     if st == 'CAPTURADO':
                         s_pag['capturados'] += 1; s_pag['itens'] += i; s_pag['homologados'] += h
-                        if d: banco[d['id']] = d
+                        if d: 
+                            # Aqui ocorre a SOBRESCRITA NATURAL DO HISTÓRICO
+                            banco[d['id']] = d
                     elif st == 'VETADO': s_pag['vetados'] += 1
                     elif st == 'IGNORADO': s_pag['ignorados'] += 1
                     else: s_pag['erros'] += 1
