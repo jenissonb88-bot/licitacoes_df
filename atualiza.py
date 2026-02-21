@@ -11,7 +11,7 @@ MAXWORKERS = 10
 
 def criar_sessao():
     s = requests.Session()
-    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/17.0'})
+    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/21.0'})
     retry = Retry(total=5, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
     s.mount('https://', HTTPAdapter(max_retries=retry))
     return s
@@ -56,24 +56,15 @@ def atualizar_licitacao(lid, dados_antigos, session):
             dados_novos['itens'] = itens_atualizados
             return dados_novos
         return None
-
     except Exception: return None
 
-# --- EXECUÇÃO PRINCIPAL ---
 if not os.path.exists(ARQDADOS): exit()
 
-print("🩺 Auditoria Profunda Independente (Resultados) Iniciada...")
-
-with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
-    banco_raw = json.load(f)
+with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f: banco_raw = json.load(f)
 
 banco_dict = {item['id']: item for item in banco_raw}
 session = criar_sessao()
-
 alvos = [lid for lid, d in banco_dict.items() if precisa_atualizar(d)]
-
-print(f"📊 Banco Limpo Total: {len(banco_dict)}")
-print(f"🎯 Alvos com Fornecedores Ocultos: {len(alvos)}")
 
 if alvos:
     atualizados = 0
@@ -87,10 +78,5 @@ if alvos:
                     banco_dict[lid] = res
                     atualizados += 1
             except: pass
-
-    print(f"💾 Salvando... ✅ {atualizados} licitações atualizadas com Vencedores.")
-
     with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
         json.dump(list(banco_dict.values()), f, ensure_ascii=False)
-else:
-    print("🏁 Nenhum item pendente de auditoria.")
