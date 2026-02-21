@@ -66,7 +66,7 @@ WL_MATERIAIS_NE = [normalize(x) for x in ["MATERIAL MEDIC", "INSUMO HOSPITALAR",
 
 def criar_sessao():
     s = requests.Session()
-    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/18.0'})
+    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/18.1'})
     retry = Retry(total=5, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
     s.mount('https://', HTTPAdapter(max_retries=retry))
     return s
@@ -126,7 +126,7 @@ def processar_licitacao(lic, session, forcado=False):
         tem_item_catalogo = forcado 
         pagina_atual = 1
         
-        # --- MOTOR DE PAGINAÇÃO INFINITA ---
+        # --- MOTOR DE PAGINAÇÃO INFINITA CORRIGIDO ---
         while True:
             r_itens = session.get(url_itens, params={'pagina': pagina_atual, 'tamanhoPagina': 100}, timeout=20)
             if r_itens.status_code != 200: 
@@ -136,10 +136,8 @@ def processar_licitacao(lic, session, forcado=False):
             resp_json = r_itens.json()
             if isinstance(resp_json, dict): 
                 itens_raw = resp_json.get('data', [])
-                total_paginas = resp_json.get('totalPaginas', 1)
             elif isinstance(resp_json, list): 
                 itens_raw = resp_json
-                total_paginas = 1
             else: break
 
             if not itens_raw: break
@@ -183,7 +181,10 @@ def processar_licitacao(lic, session, forcado=False):
                     'res_val': 0.0
                 })
             
-            if pagina_atual >= total_paginas: break
+            # SE A API DEVOLVEU MENOS DE 100 ITENS, CHEGAMOS AO FIM.
+            if len(itens_raw) < 100:
+                break
+                
             pagina_atual += 1
 
         if not itens_brutos: return ('IGNORADO', None, 0, 0)
@@ -256,7 +257,7 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                     if st == 'CAPTURADO':
                         s_pag['capturados'] += 1; s_pag['itens'] += i; s_pag['homologados'] += h
                         if d: 
-                            # Aqui ocorre a SOBRESCRITA NATURAL DO HISTÓRICO
+                            # SOBRESCRITA NATURAL DO HISTÓRICO
                             banco[d['id']] = d
                     elif st == 'VETADO': s_pag['vetados'] += 1
                     elif st == 'IGNORADO': s_pag['ignorados'] += 1
@@ -278,6 +279,7 @@ if __name__ == '__main__':
         parser = argparse.ArgumentParser()
         parser.add_argument('--start', type=str); parser.add_argument('--end', type=str)
         args = parser.parse_args()
+        
         dt_start = datetime.strptime(args.start, '%Y-%m-%d').date() if args.start else date.today() - timedelta(days=2)
         dt_end = datetime.strptime(args.end, '%Y-%m-%d').date() if args.end else date.today()
         
