@@ -1,15 +1,8 @@
-import json
-import gzip
-import os
-import unicodedata
-import csv
+import json, gzip, os, unicodedata, csv
 from datetime import datetime
 
-# --- CONFIGURAÇÕES ---
-ARQDADOS = 'dadosoportunidades.json.gz'          
-ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'     
-ARQ_CATALOGO = 'Exportar Dados.csv'              
-DATA_CORTE_2026 = datetime(2026, 1, 1)           
+ARQDADOS, ARQLIMPO, ARQ_CATALOGO = 'dadosoportunidades.json.gz', 'pregacoes_pharma_limpos.json.gz', 'Exportar Dados.csv'
+DATA_CORTE_2026 = datetime(2026, 1, 1)
 
 NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
 ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
@@ -26,11 +19,8 @@ TERMOS_NE_MMH_NUTRI = [
 ]
 TERMOS_SALVAMENTO = ["MEDICAMENT", "FARMAC", "REMEDIO", "FARMACO", "INJETAVEL"]
 CONTEXTO_SAUDE = ["HOSPITALAR", "DIETA", "MEDICAMENTO", "SAUDE", "CLINICA", "PACIENTE"]
-LIXO_INTERNO = ["ARROZ", "FEIJAO", "CARNE", "PNEU", "GASOLINA", "RODA", "LIVRO", "COPO", "CAFE", "ACUCAR", "COMPUTADOR", "VEICULO"]
 
-def normalize(t):
-    if not t: return ""
-    return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
+def normalize(t): return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn') if t else ""
 
 def inferir_beneficio(desc, benef_atual):
     if benef_atual in [1, 2, 3]: return benef_atual
@@ -46,10 +36,7 @@ if os.path.exists(ARQ_CATALOGO):
             reader = csv.reader(f, delimiter=';')
             next(reader, None)
             for row in reader:
-                if row:
-                    termo = normalize(row[0])
-                    if len(termo) > 4: CATALOGO.add(termo)
-        print(f"📚 Catálogo Inteligente carregado: {len(CATALOGO)} produtos.")
+                if row: CATALOGO.add(normalize(row[0]))
     except: pass
 
 def analisar_pertinencia(obj_norm, uf, itens_brutos):
@@ -64,19 +51,14 @@ def analisar_pertinencia(obj_norm, uf, itens_brutos):
     if any(t in obj_norm for t in TERMOS_SALVAMENTO): return True
     if CATALOGO:
         for it in itens_brutos:
-            desc_item = normalize(it.get('d', ''))
-            for prod in CATALOGO:
-                if prod in desc_item: return True
+            if any(prod in normalize(it.get('d', '')) for prod in CATALOGO): return True
     return False
 
 if not os.path.exists(ARQDADOS): exit()
-print("🔄 Iniciando Auditoria Completa no Banco de Dados...")
 
-with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f: 
-    banco_bruto = json.load(f)
+with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f: banco_bruto = json.load(f)
 
 banco_deduplicado = {}
-
 for p in banco_bruto:
     try:
         dt = datetime.fromisoformat(p.get('dt_enc', '').replace('Z', '+00:00')).replace(tzinfo=None)
@@ -85,25 +67,17 @@ for p in banco_bruto:
 
     obj_norm = normalize(p.get('obj', ''))
     uf = p.get('uf', '').upper()
-    itens_brutos = p.get('itens', [])
-
-    if analisar_pertinencia(obj_norm, uf, itens_brutos):
+    
+    if analisar_pertinencia(obj_norm, uf, p.get('itens', [])):
         itens_fmt = []
-        for it in itens_brutos:
-            desc = it.get('d', '')
-            desc_norm = normalize(desc)
-            if any(lixo in desc_norm for lixo in LIXO_INTERNO): continue
-
-            benef_bruto = int(it.get('benef') or 4)
-            benef_corrigido = inferir_beneficio(desc, benef_bruto)
-            
+        for it in p.get('itens', []):
             itens_fmt.append({
-                'n': it.get('n'), 'desc': desc, 'qtd': it.get('q', 0), 'un': it.get('u', ''), 
+                'n': it.get('n'), 'desc': it.get('d'), 'qtd': it.get('q', 0), 'un': it.get('u', ''), 
                 'valUnit': it.get('v_est', 0), 'valHomologado': it.get('res_val', 0), 
                 'fornecedor': it.get('res_forn'), 'situacao': it.get('sit', 'EM ANDAMENTO'), 
-                'benef': benef_corrigido  
+                'benef': inferir_beneficio(it.get('d', ''), int(it.get('benef', 4)))
             })
-            
+        
         if not itens_fmt: continue
 
         todos_exclusivos = all(i['benef'] in [1, 2, 3] for i in itens_fmt)
@@ -111,28 +85,16 @@ for p in banco_bruto:
         tipo_lic = "EXCLUSIVO" if todos_exclusivos else ("PARCIAL" if algum_exclusivo else "AMPLO")
 
         card = {
-            'id': p.get('id'), 'uf': p.get('uf'), 'uasg': p.get('uasg'), 'orgao': p.get('org'), 
+            'id': p.get('id'), 'uf': uf, 'uasg': p.get('uasg'), 'orgao': p.get('org'), 
             'unidade': p.get('unid_nome'), 'edital': p.get('edit'), 'cidade': p.get('cid'), 
             'objeto': p.get('obj'), 'valor_estimado': p.get('val_tot', 0), 'data_enc': p.get('dt_enc'),
-            'link': p.get('link'), 'tipo_licitacao': tipo_lic, 'itens': itens_fmt
+            'link': p.get('link'), 'tipo_licitacao': tipo_lic, 'itens': itens_fmt,
+            'sit_global': p.get('sit_global', 'DIVULGADA') 
         }
         
-        cnpj_orgao = p.get('id', '')[:14]
-        numero_edital = p.get('edit', '')
-        chave_unica = f"{cnpj_orgao}_{numero_edital}"
-        
-        if chave_unica not in banco_deduplicado:
-            banco_deduplicado[chave_unica] = card
-        else:
-            dt_nova = datetime.fromisoformat(card['data_enc'].replace('Z', '+00:00')).replace(tzinfo=None)
-            dt_antiga = datetime.fromisoformat(banco_deduplicado[chave_unica]['data_enc'].replace('Z', '+00:00')).replace(tzinfo=None)
-            if dt_nova > dt_antiga:
-                banco_deduplicado[chave_unica] = card
+        chave = f"{p.get('id', '')[:14]}_{p.get('edit', '')}"
+        if chave not in banco_deduplicado or datetime.fromisoformat(card['data_enc'].replace('Z','+00:00')).replace(tzinfo=None) > datetime.fromisoformat(banco_deduplicado[chave]['data_enc'].replace('Z','+00:00')).replace(tzinfo=None):
+            banco_deduplicado[chave] = card
 
-web_data = list(banco_deduplicado.values())
-web_data.sort(key=lambda x: x['data_enc'], reverse=True)
-
-with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f: 
-    json.dump(web_data, f, ensure_ascii=False)
-
-print(f"✅ Banco Limpo e Deduplicado salvo com {len(web_data)} editais únicos.")
+web_data = sorted(list(banco_deduplicado.values()), key=lambda x: x['data_enc'], reverse=True)
+with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f: json.dump(web_data, f, ensure_ascii=False)
