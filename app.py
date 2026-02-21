@@ -63,7 +63,7 @@ WL_MATERIAIS_NE = [normalize(x) for x in ["MATERIAL MEDIC", "INSUMO HOSPITALAR",
 
 def criar_sessao():
     s = requests.Session()
-    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/22.0'})
+    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/22.1'})
     retry = Retry(total=5, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
     s.mount('https://', HTTPAdapter(max_retries=retry))
     return s
@@ -117,15 +117,23 @@ def processar_licitacao(lic, session, forcado=False):
         tem_item_catalogo = forcado 
         pagina_atual = 1
         
-        # --- MOTOR DE PAGINAÇÃO (CAPTURA TOTAL) ---
         while True:
             r_itens = session.get(url_itens, params={'pagina': pagina_atual, 'tamanhoPagina': 100}, timeout=20)
             if r_itens.status_code != 200: 
-                # Se falhar na primeira página, é um erro real. Se falhar nas seguintes, salvamos o que já temos.
                 if pagina_atual == 1: return ('ERRO', {'msg': f"HTTP {r_itens.status_code} ao aceder a {url_itens}"}, 0, 0)
                 else: break
             
-            itens_raw = r_itens.json().get('data', []) if isinstance(r_itens.json(), dict) else []
+            resp_json = r_itens.json()
+            
+            # --- CORREÇÃO DO BUG DA API (Dict vs List) ---
+            if isinstance(resp_json, dict):
+                itens_raw = resp_json.get('data', [])
+            elif isinstance(resp_json, list):
+                itens_raw = resp_json
+            else:
+                break
+            # ----------------------------------------------
+
             if not itens_raw: break
 
             for it in itens_raw:
@@ -154,7 +162,6 @@ def processar_licitacao(lic, session, forcado=False):
 
         if not itens_brutos: return ('IGNORADO', None, 0, 0)
         
-        # O Pente Fino Final
         if not forcado and uf not in NE_ESTADOS and not tem_item_catalogo and not any(m in obj_norm for m in WL_MEDICAMENTOS):
             return ('IGNORADO', None, 0, 0)
 
@@ -172,7 +179,6 @@ def processar_licitacao(lic, session, forcado=False):
         }
         return ('CAPTURADO', dados_finais, len(itens_brutos), 0)
     except Exception as e: 
-        # Captura qualquer falha de rede (Timeout) ou quebra de código (Exception)
         return ('ERRO', {'msg': f"Erro interno em {id_ref}: {str(e)}"}, 0, 0)
 
 def processar_inclusoes_manuais(session, banco):
@@ -224,15 +230,18 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                 futuros = [exe.submit(processar_licitacao, l, session) for l in lics]
                 for f in concurrent.futures.as_completed(futuros):
                     st, d, i, h = f.result()
+                    
                     if st == 'CAPTURADO' and d:
-                        s_pag['capturados'] += 1; s_pag['itens'] += i
-                        # CHAVE LÓGICA: Previne duplicidades
+                        # --- CORREÇÃO DO BUG DE MEMÓRIA (KEYERROR) ---
+                        s_pag['capturados'] += 1
+                        s_pag['itens'] += i
+                        # ---------------------------------------------
                         banco[f"{d['id'][:14]}_{d['edit']}"] = d
+                        
                     elif st == 'VETADO': s_pag['vetados'] += 1
                     elif st == 'IGNORADO': s_pag['ignorados'] += 1
                     elif st == 'ERRO': 
                         s_pag['erros'] += 1
-                        # --- O LOG DE ERRO CIRÚRGICO IMPRESSO NO TERMINAL ---
                         print(f"      [!] LOG ERRO: {d['msg']}")
             
             for k in stats: stats[k] += s_pag[k]
@@ -240,15 +249,14 @@ def buscar_periodo(session, banco, d_ini, d_fim):
             if pag >= tot_pag: break
             pag += 1
 
-    # --- O QUADRO FINAL DE ESTATÍSTICAS COMPLETO ---
     print("\n" + "="*50)
     print("📊 RESUMO GERAL DA OPERAÇÃO DE CAPTURA")
     print("="*50)
     print(f"✅ EDITAIS CAPTURADOS: {stats['capturados']}")
     print(f"📦 ITENS TOTALIZADOS:  {stats['itens']}")
-    print(f"🚫 EDITAIS VETADOS:    {stats['vetados']} (Bloqueio Geográfico ou Objeto Proibido)")
-    print(f"👁️ EDITAIS IGNORADOS:  {stats['ignorados']} (Fora do Perfil de Interesse)")
-    print(f"🔥 ERROS DA API:       {stats['erros']} (Falhas do PNCP ou Timeout)")
+    print(f"🚫 EDITAIS VETADOS:    {stats['vetados']}")
+    print(f"👁️ EDITAIS IGNORADOS:  {stats['ignorados']}")
+    print(f"🔥 ERROS DA API:       {stats['erros']}")
     print("="*50)
 
 if __name__ == '__main__':
