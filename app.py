@@ -66,7 +66,7 @@ WL_MATERIAIS_NE = [normalize(x) for x in ["MATERIAL MEDIC", "INSUMO HOSPITALAR",
 
 def criar_sessao():
     s = requests.Session()
-    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/18.1'})
+    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/19.0'})
     retry = Retry(total=5, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
     s.mount('https://', HTTPAdapter(max_retries=retry))
     return s
@@ -87,15 +87,13 @@ def safe_float(val):
     except: return 0.0
 
 def processar_licitacao(lic, session, forcado=False):
-    id_ref = "DESC"
     try:
         if not isinstance(lic, dict): return ('ERRO', {'msg': 'Formato inválido'}, 0, 0)
         
         cnpj = lic.get('orgaoEntidade', {}).get('cnpj', '0000')
         ano = lic.get('anoCompra', '0000')
         seq = lic.get('sequencialCompra', '0000')
-        id_ref = f"{cnpj}/{ano}/{seq}"
-
+        
         uo = lic.get('unidadeOrgao', {})
         uf = uo.get('ufSigla', '').upper()
         obj_raw = lic.get('objetoCompra') or "Sem Objeto"
@@ -104,13 +102,11 @@ def processar_licitacao(lic, session, forcado=False):
         dt_enc_str = lic.get('dataEncerramentoProposta') or datetime.now().isoformat()
         
         if not forcado:
-            # 1. BLOQUEIO GEOGRÁFICO ABSOLUTO EM PRIMEIRO LUGAR
             if uf in ESTADOS_BLOQUEADOS: 
                 return ('VETADO', None, 0, 0)
             
             dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
             if dt_enc < DATA_CORTE_FIXA: return ('IGNORADO', None, 0, 0)
-            
             if veta_edital(obj_raw, uf): return ('VETADO', None, 0, 0)
 
             tem_interesse = False
@@ -126,18 +122,16 @@ def processar_licitacao(lic, session, forcado=False):
         tem_item_catalogo = forcado 
         pagina_atual = 1
         
-        # --- MOTOR DE PAGINAÇÃO INFINITA CORRIGIDO ---
+        # --- MOTOR DE PAGINAÇÃO INFINITA ---
         while True:
             r_itens = session.get(url_itens, params={'pagina': pagina_atual, 'tamanhoPagina': 100}, timeout=20)
             if r_itens.status_code != 200: 
                 if pagina_atual == 1: return ('ERRO', {'msg': f'HTTP {r_itens.status_code}'}, 0, 0)
-                else: break # Grava o que já capturou nas páginas anteriores caso a API falhe a meio
+                else: break 
             
             resp_json = r_itens.json()
-            if isinstance(resp_json, dict): 
-                itens_raw = resp_json.get('data', [])
-            elif isinstance(resp_json, list): 
-                itens_raw = resp_json
+            if isinstance(resp_json, dict): itens_raw = resp_json.get('data', [])
+            elif isinstance(resp_json, list): itens_raw = resp_json
             else: break
 
             if not itens_raw: break
@@ -158,45 +152,32 @@ def processar_licitacao(lic, session, forcado=False):
                 sit_id = int(it.get('situacaoCompraItem') or 1)
                 sit_nome = MAPA_SITUACAO.get(sit_id, "EM ANDAMENTO")
                 
-                # --- VALIDAÇÃO CRUZADA HÍBRIDA DO BENEFÍCIO (ME/EPP) ---
+                # VALIDAÇÃO CRUZADA DE BENEFÍCIO
                 benef_id = it.get('tipoBeneficioId')
                 benef_nome_api = str(it.get('tipoBeneficioNome', '')).upper()
                 
-                if benef_id in [1, 2, 3]:
-                    benef_final = benef_id
+                if benef_id in [1, 2, 3]: benef_final = benef_id
                 elif "ME/EPP" in benef_nome_api or "EXCLUSIVA" in benef_nome_api or "COTA" in benef_nome_api:
                     benef_final = 1 if "EXCLUSIVA" in benef_nome_api else 3
-                else:
-                    benef_final = 4
+                else: benef_final = 4
 
                 itens_brutos.append({
-                    'n': it.get('numeroItem'), 
-                    'd': desc, 
-                    'q': safe_float(it.get('quantidade')),
-                    'u': it.get('unidadeMedida', 'UN'), 
-                    'v_est': safe_float(it.get('valorUnitarioEstimado')),
-                    'benef': benef_final, 
-                    'sit': sit_nome, 
-                    'res_forn': None, 
-                    'res_val': 0.0
+                    'n': it.get('numeroItem'), 'd': desc, 'q': safe_float(it.get('quantidade')),
+                    'u': it.get('unidadeMedida', 'UN'), 'v_est': safe_float(it.get('valorUnitarioEstimado')),
+                    'benef': benef_final, 'sit': sit_nome, 'res_forn': None, 'res_val': 0.0
                 })
             
-            # SE A API DEVOLVEU MENOS DE 100 ITENS, CHEGAMOS AO FIM.
-            if len(itens_raw) < 100:
-                break
-                
+            if len(itens_raw) < 100: break
             pagina_atual += 1
 
         if not itens_brutos: return ('IGNORADO', None, 0, 0)
         
         if not forcado and uf not in NE_ESTADOS:
-            if not tem_item_catalogo and not any(m in obj_norm for m in WL_MEDICAMENTOS):
-                 return ('IGNORADO', None, 0, 0)
+            if not tem_item_catalogo and not any(m in obj_norm for m in WL_MEDICAMENTOS): return ('IGNORADO', None, 0, 0)
 
         dados_finais = {
             'id': f"{cnpj}{ano}{seq}", 
-            'dt_enc': dt_enc_str, 
-            'uf': uf, 
+            'dt_enc': dt_enc_str, 'uf': uf, 
             'uasg': lic.get('unidadeOrgao', {}).get('codigoUnidade', '---'),
             'org': lic.get('orgaoEntidade', {}).get('razaoSocial', '---'), 
             'unid_nome': lic.get('unidadeOrgao', {}).get('nomeUnidade', '---'),
@@ -226,7 +207,9 @@ def processar_inclusoes_manuais(session, banco):
                 if r.status_code == 200:
                     st, d, i, h = processar_licitacao(r.json(), session, forcado=True)
                     if st == 'CAPTURADO' and d:
-                        banco[d['id']] = d
+                        # CHAVE LÓGICA MANUAL
+                        chave_negocio = f"{d['id'][:14]}_{d['edit']}"
+                        banco[chave_negocio] = d
                         print(f"   ✅ Captura Manual Sucesso: {cnpj}/{ano}/{seq}")
         open(ARQ_MANUAL, 'w').close() 
     except Exception as e: print(f"Erro Inclusão Manual: {e}")
@@ -257,8 +240,14 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                     if st == 'CAPTURADO':
                         s_pag['capturados'] += 1; s_pag['itens'] += i; s_pag['homologados'] += h
                         if d: 
-                            # SOBRESCRITA NATURAL DO HISTÓRICO
-                            banco[d['id']] = d
+                            # --- A NOVA CHAVE LÓGICA (ANTIDUPLICIDADE ABSOLUTA) ---
+                            cnpj_d = d['id'][:14]
+                            edit_d = d['edit']
+                            chave_negocio = f"{cnpj_d}_{edit_d}"
+                            
+                            # Sobrescreve garantindo que não haverá duplicidade de edital
+                            banco[chave_negocio] = d
+                            
                     elif st == 'VETADO': s_pag['vetados'] += 1
                     elif st == 'IGNORADO': s_pag['ignorados'] += 1
                     else: s_pag['erros'] += 1
@@ -285,10 +274,17 @@ if __name__ == '__main__':
         
         session = criar_sessao()
         banco = {}
+        
+        # CARREGAMENTO COM CHAVE LÓGICA PARA LIMPAR AS DUPLICATAS ANTIGAS
         if os.path.exists(ARQDADOS):
             try:
                 with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
-                    banco = {x['id']: x for x in json.load(f)}
+                    dados_antigos = json.load(f)
+                    for x in dados_antigos:
+                        cnpj_x = x.get('id', '')[:14]
+                        edit_x = x.get('edit', '')
+                        chave = f"{cnpj_x}_{edit_x}"
+                        banco[chave] = x
             except: pass
             
         processar_inclusoes_manuais(session, banco)
