@@ -1,10 +1,14 @@
 name: Sniper Pharma (Auditor de Resultados)
 
+# TRAVA DE CONCORRÊNCIA: Usa o mesmo grupo, forçando a fila de espera
+concurrency:
+  group: banco-dados-pharma
+  cancel-in-progress: false
+
 on:
   schedule:
-    # Roda automaticamente às 12:00 e 18:00 (Horário UTC, ajuste se necessário)
     - cron: '0 15,21 * * *'  
-  workflow_dispatch: # Permite que você clique no botão "Run workflow" manualmente
+  workflow_dispatch: 
 
 jobs:
   auditoria:
