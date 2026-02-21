@@ -1,4 +1,4 @@
-name: Sniper Pharma Controller
+name: Sniper Pharma (Captura)
 
 on:
   schedule:
@@ -19,7 +19,6 @@ on:
         default: '2026-01-01'
 
 jobs:
-  # TAREFA 1: Captura e Limpeza
   extracao_e_limpeza:
     runs-on: ubuntu-latest
     permissions:
@@ -52,9 +51,6 @@ jobs:
             echo "END_DATE=${{ inputs.target_date }}" >> $GITHUB_ENV
             echo "MODE=${{ inputs.mode }}" >> $GITHUB_ENV
         fi
-        # Guarda variavel para o proximo Job
-        echo "${{ inputs.target_date }}" > target_date.txt
-        echo "${{ inputs.mode }}" > mode.txt
 
     - name: 🚀 1. Run Core Crawler (app.py)
       run: python app.py --start "$START_DATE" --end "$END_DATE"
@@ -69,73 +65,21 @@ jobs:
         git add dadosoportunidades.json.gz || true
         git add pregacoes_pharma_limpos.json.gz || true
         git add links_manuais.txt || true
-        git diff --staged --quiet || git commit -m "Fase 1: Extracao e Limpeza ($START_DATE)"
-        git pull origin main --rebase -X theirs
-        git push origin main
-
-    - name: Store Artifacts for Next Job
-      uses: actions/upload-artifact@v4
-      with:
-        name: config-files
-        path: |
-          target_date.txt
-          mode.txt
-
-  # TAREFA 2: Auditoria (Só roda se a Tarefa 1 terminar com sucesso)
-  auditoria_e_loop:
-    needs: extracao_e_limpeza
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      actions: write
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0 
-        
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        
-    - name: Install deps
-      run: pip install requests
-
-    - name: Download Config Artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: config-files
-
-    # Certifica-se de que tem os ficheiros mais recentes gerados pela Fase 1
-    - name: Git Pull Latest
-      run: git pull origin main
-
-    - name: 🩺 3. Run Auditor (atualiza.py)
-      run: python atualiza.py
-
-    - name: 💾 Commit Auditoria
-      run: |
-        git config user.name "Sniper Pharma Bot"
-        git config user.email "sniper@pharma.bot"
-        git add pregacoes_pharma_limpos.json.gz || true
-        git diff --staged --quiet || git commit -m "Fase 2: Auditoria de Homologacoes"
+        git diff --staged --quiet || git commit -m "Captura e Limpeza: $START_DATE"
         git pull origin main --rebase -X theirs
         git push origin main
 
     - name: 🔄 Trigger Próximo Dia (Loop)
+      if: env.MODE == 'manual_loop'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        MODE=$(cat mode.txt)
-        if [ "$MODE" == "manual_loop" ]; then
-           START_DATE=$(cat target_date.txt)
-           NEXT_DAY=$(date -d "$START_DATE + 1 day" +'%Y-%m-%d')
-           TODAY=$(date +'%Y-%m-%d')
-           
-           if [[ "$NEXT_DAY" < "$TODAY" ]] || [[ "$NEXT_DAY" == "$TODAY" ]]; then
-              echo "🚀 Disparando o robô para o dia $NEXT_DAY..."
-              gh workflow run "Sniper Pharma Controller" -f mode="manual_loop" -f target_date="$NEXT_DAY"
-           else
-              echo "🏁 Loop finalizado. O robô alcançou o dia de hoje."
-           fi
+        NEXT_DAY=$(date -d "$START_DATE + 1 day" +'%Y-%m-%d')
+        TODAY=$(date +'%Y-%m-%d')
+        
+        if [[ "$NEXT_DAY" < "$TODAY" ]] || [[ "$NEXT_DAY" == "$TODAY" ]]; then
+           echo "🚀 Disparando o robô para o dia $NEXT_DAY..."
+           gh workflow run "Sniper Pharma (Captura)" -f mode="manual_loop" -f target_date="$NEXT_DAY"
+        else
+           echo "🏁 Loop finalizado. O robô alcançou o dia de hoje."
         fi
