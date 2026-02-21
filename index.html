@@ -35,7 +35,6 @@
         
         .header-fornecedor { background-color: #f8f9fa; color: var(--blue-df); font-weight: bold; }
         
-        /* CORES SEPARADAS PARA CADA STATUS */
         .header-status-andamento { background-color: #fff9db; font-weight: bold; color: #856404; text-align: center; }
         .header-status-deserto { background-color: #f8d7da; font-weight: bold; color: #721c24; text-align: center; }
         .header-status-cancelado { background-color: #e2e3e5; font-weight: bold; color: #383d41; text-align: center; }
@@ -130,8 +129,7 @@ async function loadData() {
         filteredData = [...allData];
         renderMonitor();
     } catch (e) { 
-        console.error("Erro ao carregar dados:", e);
-        document.getElementById('monitor-content').innerHTML = '<div class="alert alert-info">Aguardando dados da varredura (ficheiro .json.gz)...</div>';
+        document.getElementById('monitor-content').innerHTML = '<div class="alert alert-info">Aguardando dados...</div>';
     }
 }
 
@@ -144,7 +142,7 @@ function renderMonitor() {
     const pageItems = filteredData.slice(start, end);
 
     if (pageItems.length === 0) {
-        container.innerHTML = '<div class="text-center py-5 text-muted">Nenhuma licitação encontrada para os filtros aplicados.</div>';
+        container.innerHTML = '<div class="text-center py-5 text-muted">Nenhuma licitação encontrada.</div>';
     }
 
     pageItems.forEach(lic => {
@@ -160,14 +158,14 @@ function renderMonitor() {
         if (lic.itens && lic.itens.length > 0) {
             const todosExclusivos = lic.itens.every(it => [1, 2, 3].includes(parseInt(it.benef)));
             const algumExclusivo = lic.itens.some(it => [1, 2, 3].includes(parseInt(it.benef)));
-            
-            if (todosExclusivos) {
-                tipoLic = "EXCLUSIVO";
-                cssTipo = "badge-exclusivo";
-            } else if (algumExclusivo) {
-                tipoLic = "PARCIAL";
-                cssTipo = "badge-parcial";
-            }
+            if (todosExclusivos) { tipoLic = "EXCLUSIVO"; cssTipo = "badge-exclusivo"; } 
+            else if (algumExclusivo) { tipoLic = "PARCIAL"; cssTipo = "badge-parcial"; }
+        }
+
+        // --- ALERTA DE SITUAÇÃO GLOBAL DO PROCESSO ---
+        let alertaGlobalHtml = '';
+        if (["REVOGADA", "ANULADA", "SUSPENSA"].includes(lic.sit_global)) {
+            alertaGlobalHtml = `<div style="color: #dc3545; font-weight: 900; font-size: 0.85rem; margin-top: 5px; text-transform: uppercase; border: 1px solid #dc3545; border-radius: 4px; padding: 2px;">⚠️ PROCESSO ${lic.sit_global}</div>`;
         }
 
         div.innerHTML = `
@@ -192,8 +190,11 @@ function renderMonitor() {
                     </div>
                     <div class="col-md-4 text-center">
                         <small class="text-muted">VALOR ESTIMADO TOTAL</small>
-                        <h5 class="fw-bold text-primary mb-3">${valorTotal}</h5>
-                        <button class="btn btn-sm btn-primary px-4 fw-bold" onclick="abrirItens('${lic.id}')">DETALHAR ${lic.itens.length} ITENS</button>
+                        <h5 class="fw-bold text-primary mb-0">${valorTotal}</h5>
+                        ${alertaGlobalHtml}
+                        <div class="mt-3">
+                            <button class="btn btn-sm btn-primary px-4 fw-bold" onclick="abrirItens('${lic.id}')">DETALHAR ${lic.itens.length} ITENS</button>
+                        </div>
                     </div>
                 </div>
             </div>`;
@@ -213,14 +214,12 @@ function filtrar() {
 
     filteredData = allData.filter(lic => {
         const dataLic = lic.data_enc.split('T')[0];
-        
         return (!dataEnc || dataLic === dataEnc) &&
                (!uf || lic.uf.includes(uf)) &&
                (!cid || lic.cidade.toUpperCase().includes(cid)) &&
                (!org || lic.orgao.toUpperCase().includes(org) || (lic.uasg||"").includes(org)) &&
                (!edt || lic.edital.includes(edt));
     });
-    
     currentPage = 1;
     renderMonitor();
 }
@@ -238,29 +237,21 @@ function abrirItens(id) {
     document.getElementById('linkPncp').href = lic.link;
 
     const grupos = {};
-    const andamento = [];
-    const desertos = [];
-    const cancelados = [];
+    const andamento = [], desertos = [], cancelados = [];
 
-    // SEPARAÇÃO INTELIGENTE DE STATUS
     lic.itens.forEach(it => {
         if (it.situacao === "HOMOLOGADO" && it.fornecedor) {
             if (!grupos[it.fornecedor]) grupos[it.fornecedor] = [];
             grupos[it.fornecedor].push(it);
-        } else if (it.situacao === "CANCELADO") {
-            cancelados.push(it);
-        } else if (it.situacao === "DESERTO" || it.situacao === "FRACASSADO") {
-            desertos.push(it);
-        } else {
-            andamento.push(it);
-        }
+        } else if (it.situacao === "CANCELADO") { cancelados.push(it); } 
+        else if (it.situacao === "DESERTO" || it.situacao === "FRACASSADO") { desertos.push(it); } 
+        else { andamento.push(it); }
     });
 
     let html = `<div class="table-responsive"><table class="table table-sm table-bordered table-itens align-middle"><thead class="table-dark">
         <tr><th class="text-center">#</th><th>Descrição</th><th class="text-center">ME/EPP</th><th class="text-center">Qtd/Un</th><th class="text-center">Est. Unit.</th><th class="text-center">Final Unit.</th><th class="text-center">Total</th></tr>
         </thead><tbody>`;
 
-    // BLOCOS DINÂMICOS NA TELA
     if (andamento.length > 0) {
         html += `<tr><td colspan="7" class="header-status-andamento py-1 small">ITENS EM ANDAMENTO</td></tr>`;
         andamento.forEach(it => html += renderLinhaItem(it));
@@ -300,10 +291,7 @@ function excluirLicitacao(id) {
         filtrar();
     }
 }
-
-function abrirInclusaoManual() {
-    alert("Para Inclusão Manual:\\n\\nAdicione o link da licitação no ficheiro 'links_manuais.txt' no GitHub. Ele será lido e adicionado no próximo processamento do robô.");
-}
+function abrirInclusaoManual() { alert("Para Inclusão Manual:\\n\\nAdicione o link da licitação no ficheiro 'links_manuais.txt' no GitHub."); }
 
 document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
 document.getElementById('nextPage').onclick = () => { if(currentPage * itemsPerPage < filteredData.length) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
