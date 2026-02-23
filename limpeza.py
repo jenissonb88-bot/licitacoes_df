@@ -1,5 +1,6 @@
 import json, gzip, os, unicodedata, csv
 from datetime import datetime
+import concurrent.futures
 
 ARQDADOS, ARQLIMPO, ARQ_CATALOGO = 'dadosoportunidades.json.gz', 'pregacoes_pharma_limpos.json.gz', 'Exportar Dados.csv'
 DATA_CORTE_2026 = datetime(2026, 1, 1)
@@ -20,13 +21,18 @@ TERMOS_NE_MMH_NUTRI = [
 TERMOS_SALVAMENTO = ["MEDICAMENT", "FARMAC", "REMEDIO", "FARMACO", "INJETAVEL"]
 CONTEXTO_SAUDE = ["HOSPITALAR", "DIETA", "MEDICAMENTO", "SAUDE", "CLINICA", "PACIENTE"]
 
-def normalize(t): return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn') if t else ""
+# Cache de normalização para evitar retrabalho no processador
+CACHE_NORM = {}
+def normalize(t): 
+    if not t: return ""
+    if t not in CACHE_NORM:
+        CACHE_NORM[t] = ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
+    return CACHE_NORM[t]
 
-def inferir_beneficio(desc, benef_atual):
+def inferir_beneficio(desc_norm, benef_atual):
     if benef_atual in [1, 2, 3]: return benef_atual
-    d = normalize(desc)
-    if any(x in d for x in ["EXCLUSIVA ME", "EXCLUSIVO ME", "COTA EXCLUSIVA", "SOMENTE ME", "EXCLUSIVIDADE ME", "ME/EPP"]): return 1
-    if any(x in d for x in ["COTA RESERVADA", "RESERVADA ME", "RESERVADA PARA ME"]): return 3
+    if any(x in desc_norm for x in ["EXCLUSIVA ME", "EXCLUSIVO ME", "COTA EXCLUSIVA", "SOMENTE ME", "EXCLUSIVIDADE ME", "ME/EPP"]): return 1
+    if any(x in desc_norm for x in ["COTA RESERVADA", "RESERVADA ME", "RESERVADA PARA ME"]): return 3
     return benef_atual
 
 CATALOGO = set()
@@ -54,62 +60,84 @@ def analisar_pertinencia(obj_norm, uf, itens_brutos):
             if any(prod in normalize(it.get('d', '')) for prod in CATALOGO): return True
     return False
 
-if not os.path.exists(ARQDADOS): exit()
-
-with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f: banco_bruto = json.load(f)
-
-banco_deduplicado = {}
-for p in banco_bruto:
+# --- FUNÇÃO ISOLADA PARA PROCESSAMENTO PARALELO ---
+def processar_licitacao_limpeza(p):
     try:
-        dt = datetime.fromisoformat(p.get('dt_enc', '').replace('Z', '+00:00')).replace(tzinfo=None)
-        if dt < DATA_CORTE_2026: continue
-    except: continue
+        dt_str = p.get('dt_enc', '')
+        if not dt_str: return None
+        dt_obj = datetime.fromisoformat(dt_str.replace('Z', '+00:00')).replace(tzinfo=None)
+        if dt_obj < DATA_CORTE_2026: return None
+    except: return None
 
     obj_norm = normalize(p.get('obj', ''))
     uf = p.get('uf', '').upper()
     
-    if analisar_pertinencia(obj_norm, uf, p.get('itens', [])):
-        itens_fmt = []
-        for it in p.get('itens', []):
-            itens_fmt.append({
-                'n': it.get('n'), 'desc': it.get('d'), 'qtd': it.get('q', 0), 'un': it.get('u', ''), 
-                'valUnit': it.get('v_est', 0), 'valHomologado': it.get('res_val', 0), 
-                'fornecedor': it.get('res_forn'), 'situacao': it.get('sit', 'EM ANDAMENTO'), 
-                'benef': inferir_beneficio(it.get('d', ''), int(it.get('benef', 4)))
-            })
-        
-        if not itens_fmt: continue
+    itens_brutos = p.get('itens', [])
+    if not analisar_pertinencia(obj_norm, uf, itens_brutos): return None
 
-        todos_exclusivos = all(i['benef'] in [1, 2, 3] for i in itens_fmt)
-        algum_exclusivo = any(i['benef'] in [1, 2, 3] for i in itens_fmt)
-        tipo_lic = "EXCLUSIVO" if todos_exclusivos else ("PARCIAL" if algum_exclusivo else "AMPLO")
+    itens_fmt = []
+    for it in itens_brutos:
+        desc_bruta = it.get('d', '')
+        desc_norm = normalize(desc_bruta)
+        itens_fmt.append({
+            'n': it.get('n'), 'desc': desc_bruta, 'qtd': it.get('q', 0), 'un': it.get('u', ''), 
+            'valUnit': it.get('v_est', 0), 'valHomologado': it.get('res_val', 0), 
+            'fornecedor': it.get('res_forn'), 'situacao': it.get('sit', 'EM ANDAMENTO'), 
+            'benef': inferir_beneficio(desc_norm, int(it.get('benef', 4)))
+        })
+    
+    if not itens_fmt: return None
 
-        card = {
-            'id': p.get('id'), 'uf': uf, 'uasg': p.get('uasg'), 'orgao': p.get('org'), 
-            'unidade': p.get('unid_nome'), 'edital': p.get('edit'), 'cidade': p.get('cid'), 
-            'objeto': p.get('obj'), 'valor_estimado': p.get('val_tot', 0), 'data_enc': p.get('dt_enc'),
-            'link': p.get('link'), 'tipo_licitacao': tipo_lic, 'itens': itens_fmt,
-            'sit_global': p.get('sit_global', 'DIVULGADA') 
-        }
+    todos_exclusivos = all(i['benef'] in [1, 2, 3] for i in itens_fmt)
+    algum_exclusivo = any(i['benef'] in [1, 2, 3] for i in itens_fmt)
+    tipo_lic = "EXCLUSIVO" if todos_exclusivos else ("PARCIAL" if algum_exclusivo else "AMPLO")
+
+    card = {
+        'id': p.get('id'), 'uf': uf, 'uasg': p.get('uasg'), 'orgao': p.get('org'), 
+        'unidade': p.get('unid_nome'), 'edital': p.get('edit'), 'cidade': p.get('cid'), 
+        'objeto': p.get('obj'), 'valor_estimado': p.get('val_tot', 0), 'data_enc': dt_str,
+        'link': p.get('link'), 'tipo_licitacao': tipo_lic, 'itens': itens_fmt,
+        'sit_global': p.get('sit_global', 'DIVULGADA') 
+    }
+    
+    chave = f"{p.get('id', '')[:14]}_{p.get('edit', '')}"
+    return (chave, card, dt_obj, len(itens_fmt))
+
+# --- EXECUÇÃO PRINCIPAL ---
+if __name__ == '__main__':
+    if not os.path.exists(ARQDADOS): exit()
+
+    print("Descompactando base bruta...")
+    with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f: 
+        banco_bruto = json.load(f)
+
+    banco_deduplicado = {}
+
+    print(f"Processando {len(banco_bruto)} licitações com processamento paralelo...")
+    
+    # Utilizando ThreadPool para acelerar o processamento (15 trabalhadores igual o app.py)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
+        resultados = executor.map(processar_licitacao_limpeza, banco_bruto)
+
+    # Coleta e desempate (Deduplicação)
+    for res in resultados:
+        if res is None: continue
+        chave, card, dt_novo, qtd_itens_novo = res
         
-        chave = f"{p.get('id', '')[:14]}_{p.get('edit', '')}"
-        
-        # --- LÓGICA DE DEDUPLICAÇÃO CORRIGIDA ---
         if chave not in banco_deduplicado:
-            banco_deduplicado[chave] = card
+            banco_deduplicado[chave] = {'card': card, 'dt': dt_novo, 'qtd': qtd_itens_novo}
         else:
-            qtd_itens_novo = len(card['itens'])
-            qtd_itens_antigo = len(banco_deduplicado[chave]['itens'])
-            
-            # Se a nova captura tem MAIS itens, substitui a antiga
+            qtd_itens_antigo = banco_deduplicado[chave]['qtd']
             if qtd_itens_novo > qtd_itens_antigo:
-                banco_deduplicado[chave] = card
-            # Se tem a mesma quantidade, avalia qual tem a data de encerramento mais recente
+                banco_deduplicado[chave] = {'card': card, 'dt': dt_novo, 'qtd': qtd_itens_novo}
             elif qtd_itens_novo == qtd_itens_antigo:
-                dt_novo = datetime.fromisoformat(card['data_enc'].replace('Z','+00:00')).replace(tzinfo=None)
-                dt_antigo = datetime.fromisoformat(banco_deduplicado[chave]['data_enc'].replace('Z','+00:00')).replace(tzinfo=None)
-                if dt_novo > dt_antigo:
-                    banco_deduplicado[chave] = card
+                if dt_novo > banco_deduplicado[chave]['dt']:
+                    banco_deduplicado[chave] = {'card': card, 'dt': dt_novo, 'qtd': qtd_itens_novo}
 
-web_data = sorted(list(banco_deduplicado.values()), key=lambda x: x['data_enc'], reverse=True)
-with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f: json.dump(web_data, f, ensure_ascii=False)
+    print("Ordenando e salvando arquivo limpo...")
+    web_data = [v['card'] for v in sorted(banco_deduplicado.values(), key=lambda x: x['dt'], reverse=True)]
+    
+    with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f: 
+        json.dump(web_data, f, ensure_ascii=False)
+    
+    print("Limpeza concluída com sucesso!")
