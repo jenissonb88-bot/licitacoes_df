@@ -93,8 +93,23 @@ for p in banco_bruto:
         }
         
         chave = f"{p.get('id', '')[:14]}_{p.get('edit', '')}"
-        if chave not in banco_deduplicado or datetime.fromisoformat(card['data_enc'].replace('Z','+00:00')).replace(tzinfo=None) > datetime.fromisoformat(banco_deduplicado[chave]['data_enc'].replace('Z','+00:00')).replace(tzinfo=None):
+        
+        # --- LÓGICA DE DEDUPLICAÇÃO CORRIGIDA ---
+        if chave not in banco_deduplicado:
             banco_deduplicado[chave] = card
+        else:
+            qtd_itens_novo = len(card['itens'])
+            qtd_itens_antigo = len(banco_deduplicado[chave]['itens'])
+            
+            # Se a nova captura tem MAIS itens, substitui a antiga
+            if qtd_itens_novo > qtd_itens_antigo:
+                banco_deduplicado[chave] = card
+            # Se tem a mesma quantidade, avalia qual tem a data de encerramento mais recente
+            elif qtd_itens_novo == qtd_itens_antigo:
+                dt_novo = datetime.fromisoformat(card['data_enc'].replace('Z','+00:00')).replace(tzinfo=None)
+                dt_antigo = datetime.fromisoformat(banco_deduplicado[chave]['data_enc'].replace('Z','+00:00')).replace(tzinfo=None)
+                if dt_novo > dt_antigo:
+                    banco_deduplicado[chave] = card
 
 web_data = sorted(list(banco_deduplicado.values()), key=lambda x: x['data_enc'], reverse=True)
 with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f: json.dump(web_data, f, ensure_ascii=False)
