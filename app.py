@@ -27,9 +27,20 @@ ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
 MAPA_SITUACAO_ITEM = {1: "EM ANDAMENTO", 2: "HOMOLOGADO", 3: "CANCELADO", 4: "DESERTO", 5: "FRACASSADO"}
 MAPA_SITUACAO_GLOBAL = {1: "DIVULGADA", 2: "REVOGADA", 3: "ANULADA", 4: "SUSPENSA"}
 
-def normalize(t):
+# Cache de normalização
+CACHE_NORM = {}
+def normalize(t): 
     if not t: return ""
-    return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
+    if t not in CACHE_NORM:
+        CACHE_NORM[t] = ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
+    return CACHE_NORM[t]
+
+# Função Motor de Busca Flexível (RegEx)
+def busca_flexivel(lista_regex, texto):
+    for padrao in lista_regex:
+        if re.search(padrao, texto):
+            return True
+    return False
 
 # --- CARREGAMENTO DO CATÁLOGO ---
 CATALOGO_TERMOS = set()
@@ -51,38 +62,96 @@ if os.path.exists(ARQ_CATALOGO):
             except: continue
     except: pass
 
-VETOS_ALIMENTACAO = [normalize(x) for x in ["ALIMENTACAO ESCOLAR", "GENEROS ALIMENTICIOS", "MERENDA", "PNAE", "PERECIVEIS", "HORTIFRUTI", "CARNES", "PANIFICACAO", "CESTAS BASICAS", "LANCHE", "REFEICOES", "COFFEE BREAK", "BUFFET", "COZINHA", "AÇOUGUE", "POLPA DE FRUTA", "ESTIAGEM"]]
-VETOS_EDUCACAO = [normalize(x) for x in ["MATERIAL ESCOLAR", "PEDAGOGICO", "DIDATICO", "BRINQUEDOS", "LIVROS", "TRANSPORTE ESCOLAR", "KIT ALUNO", "REDE MUNICIPAL DE ENSINO", "SECRETARIA DE EDUCACAO"]]
-VETOS_OPERACIONAL = [normalize(x) for x in ["OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "REFORMA", "MANUTENCAO PREDIAL", "LIMPEZA URBANA", "RESIDUOS SOLIDOS", "LOCACAO DE VEICULOS", "TRANSPORTE", "COMBUSTIVEL", "DIESEL", "GASOLINA", "PNEUS", "PECAS AUTOMOTIVAS", "OFICINA", "VIGILANCIA", "SEGURANCA", "BOMBEIRO", "SALVAMENTO", "RESGATE", "VIATURA", "FARDAMENTO", "VESTUARIO", "INFORMATICA", "COMPUTADORES", "IMPRESSAO", "EVENTOS"]]
-VETOS_ADM = [normalize(x) for x in ["ADESAO", "INTENCAO", "IRP", "CREDENCIAMENTO", "LEILAO", "ALIENACAO"]]
+# --- LISTAS FLEXÍVEIS COM REGEX (Sem acentos, em Maiúsculo) ---
+VETOS_ALIMENTACAO = [
+    r"ALIMENTACAO ESCOLAR", r"GENEROS ALIMENTICIOS", r"MERENDA", r"PNAE", r"PERECIVEIS", 
+    r"HORTIFRUTI", r"CARNES", r"PANIFICACAO", r"CESTAS BASICAS", r"LANCHE", r"REFEICOES", 
+    r"COFFEE BREAK", r"BUFFET", r"COZINHA", r"ACOUGUE", r"POLPA DE FRUTA", r"ESTIAGEM"
+]
+VETOS_EDUCACAO = [
+    r"MATERIAL ESCOLAR", r"PEDAGOGICO", r"DIDATICO", r"BRINQUEDOS", r"LIVROS", 
+    r"TRANSPORTE ESCOLAR", r"KIT ALUNO", r"REDE MUNICIPAL DE ENSINO", r"SECRETARIA DE EDUCACAO"
+]
+VETOS_OPERACIONAL = [
+    r"OBRAS", r"CONSTRUCAO", r"PAVIMENTACAO", r"REFORMA", r"MANUTENCAO PREDIAL", 
+    r"LIMPEZA URBANA", r"RESIDUOS SOLIDOS", r"LOCACAO DE VEICULOS", r"TRANSPORTE", 
+    r"COMBUSTIVEL", r"DIESEL", r"GASOLINA", r"PNEUS", r"PECAS AUTOMOTIVAS", 
+    r"OFICINA", r"VIGILANCIA", r"SEGURANCA", r"BOMBEIRO", r"SALVAMENTO", r"RESGATE", 
+    r"VIATURA", r"FARDAMENTO", r"VESTUARIO", r"INFORMATICA", r"COMPUTADORES", r"IMPRESSAO", r"EVENTOS"
+]
+VETOS_ADM = [r"ADESAO", r"INTENCAO", r"IRP", r"CREDENCIAMENTO", r"LEILAO", r"ALIENACAO"]
 TODOS_VETOS = VETOS_ALIMENTACAO + VETOS_EDUCACAO + VETOS_OPERACIONAL + VETOS_ADM
 
-WL_MEDICAMENTOS = [normalize(x) for x in ["MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOAL", "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA", "ANTIBIOTICO", "ACETILCISTEINA", "ACETILSALICILICO", "ACICLOVIR", "ADENOSINA", "ADRENALINA", "ALBENDAZOL", "ALENDRONATO", 
-                                          "ALFAEPOETINA", "ALFAINTERFERONA", "ALFAST", "ALOPURINOL", "ALPRAZOLAM", "AMBROXOL", "AMBROXOL XPE", "AMINOFILINA", "AMIODARONA", "AMITRIPTILINA", "AMOXICILINA", "AMPICILINA", "ANASTROZOL", "ANFOTERICINA", "ANLODIPINO", "ARIPIPRAZOL", 
-                                          "ARIPIPRAZOL.", "ATENOLOL", "ATORVASTANTINA", "ATORVASTATINA", "ATORVASTATINA CALCICA", "ATRACURIO", "ATROPINA", "AZITROMICINA", "AZTREONAM", "BACLOFENO", "BAMIFILINA", "BENZILPENICILINA", "BENZOATO", "BETAMETASONA", "BEZAFIBRATO", 
-                                          "BIMATOPROSTA", "BISACODIL", "BISSULFATO", "BOPRIV", "BROMOPRIDA", "BUDESONIDA", "BUPROPIONA", "BUTILBROMETO", "CABERGOLINA", "CALCITRIOL", "CANDESARTANA", "CAPTOPRIL", "CARBAMAZEPINA", "CARBONATO", "CARVEDILOL", "CAVERDILOL", "CEFALEXINA", 
-                                          "CEFALOTINA", "CEFAZOLINA", "CEFEPIMA", "CEFOTAXIMA", "CEFOXITINA", "CEFTAZIDIMA", "CEFTRIAXONA", "CEFUROXIMA", "CETOCONAZOL", "CETOPROFENO", "CETOROLACO", "CICLOBENZAPRINA", "CICLOSPORINA", "CILOSTAZOL", "CIMETIDINA", "CIPROFLOXACINO", 
-                                          "CIPROFLOXACINA", "CITALOPRAM", "CLARITROMICINA", "CLINDAMICINA", "CLOBETASOL", "CLOMIPRAMINA", "CLONAZEPAM", "CLONIDINA", "CLOPIDOGREL", "CLORETO", "CLORIDRATO", "CLORIDRATO DE CIPROFLOXACINO", "CLORPROMAZINA", "CLORTALIDONA", "CLOTRIMAZOL", 
-                                          "CLOZAPINA", "CODEINA", "COLCHICINA", "COLECALCIFEROL", "COLISTIMETATO", "COMPLEXO B", "DACARBZINA", "DAPAGLIFLOZINA", "DAPAGLIFLOZINA.", "DAPSONA", "DAPTOMICINA", "DARBEPOETINA", "DESLANOSIDEO", "DESLORATADINA", "DEXAMETASONA", "DEXCLORFENIRAMINA", 
-                                          "DEXPANTENOL", "DIAZEPAM", "DIETILAMONIO", "DICLOFENACO", "DIGOXINA", "DILTIAZEM", "DIMETICONA", "DIOSMINA", "DIPIRONA", "DOBUTAMINA", "DOMPERIDONA", "DONEPEZILA", "DOPAMINA", "DOXAZOSINA", "DOXICICLINA", "DROPERIDOL", "DULAGLUTIDA", "DULOXETINA", 
-                                          "DUTASTERIDA", "ECONAZOL", "EMULSAO", "ENALAPRIL", "ENOXAPARINA", "ENTACAPONA", "EPINEFRINA", "ERITROMICINA", "ESCITALOPRAM", "ESOMEPRAZOL", "ESPIRONOLACTONA", "ESTRADIOL", "ESTRIOL", "ESTROGENIOS", "ETANERCEPTE", "ETANERCEPTE", "ETILEFRINA", 
-                                          "ETOMIDATO", "ETOPOSIDEO", "EZETIMIBA", "FAMOTIDINA", "FENITOINA", "FENOBARBITAL", "FENOTEROL", "FENTANILA", "FERRO", "FIBRINOGENIO", "FILGRASTIM", "FINASTERIDA", "FITOMENADIONA", "FLUCONAZOL", "FLUDROCORTISONA", "FLUMAZENIL", "FLUNARIZINA", 
-                                          "FLUOXETINA", "FLUTICASONA", "FOLATO", "FONDAPARINUX", "FORMOTEROL", "FOSFATO", "FUROSEMIDA", "GABAPENTINA", "GANCICLOVIR", "GELADEIRA", "GENCITABINA", "GENTAMICINA", "GLIBENCLAMIDA", "GLICEROL", "GLICLAZIDA", "GLICOSE", "GLIMEPIRIDA", "GLUCAGON", 
-                                          "HALOPERIDOL", "HEPARINA", "HIDRALAZINA", "HIDROCLOROTIAZIDA", "HIDROCORTISONA", "HIDROTALCITA", "HIDROXIDOPROGESTERONA", "HIDROXIDO", "HIDROXIPROGESTERONA", "HIDROXIUREIA", "HIOSCINA", "HIPROMELOSE", "IBUPROFENO", "IMIPENEM", "IMIPRAMINA", "INDAPAMIDA", 
-                                          "INSULINA", "IOIMBINA", "IPRATROPIO", "IRBESARTANA", "IRINOTECANO", "ISOSSORBIDA", "ISOTRETINOINA", "ITRACONAZOL", "IVERMECTINA", "LACTULOSE", "LAMOTRIGINA", "LANSOPRAZOL", "LATANOPROSTA", "LEFLUNOMIDA", "LERCANIDIPINO", "LETROZOL", "LEVODOPA", "LEVOFLOXACINO", 
-                                          "LEVOMEPROMAZINA", "LEVONORGESTREL", "LEVOTIROXINA", "LIDOCAINA", "LINEZOLIDA", "LINOGLIPTINA", "LIPIDICA", "LISINOPRIL", "LITIO", "LOPERAMIDA", "LORATADINA", "LORAZEPAM", "LOSARTANA", "LOVASTATINA", "MAGNESIO", "MANITOL", "MEBENDAZOL", "MEDROXIPROGESTERONA", 
-                                          "MEMANTINA", "MEROPENEM", "MESALAZINA", "METILDOPA", "METILPREDNISOLONA", "METOCLOPRAMIDA", "METOPROLOL", "METOTREXATO", "METRONIDAZOL", "MICOFENOLATO", "MIDAZOLAM", "MIRTAZAPINA", "MISOPROSTOL", "MORFINA", "MUPIROCINA", "NARATRIPTANA", "NEOMICINA", "NEOSTIGMINA", 
-                                          "NIFEDIPINO", "NIMESULIDA", "NIMODIPINO", "NISTATINA", "NITROFURANTOINA", "NITROGLICERINA", "NITROPRUSSIATO", "NORETISTERONA", "NORFLOXACINO", "NORTRIPTILINA", "OCTREOTIDA", "OLANZAPINA", "OLMESARTANA", "OMEPRAZOL", "ONDANSETRONA", "OXALIPLATINA", "OXCARBAZEPINA", 
-                                          "OXIBUTININA", "OXIGENIO", "PACLITAXEL", "PALONOSETRONA", "PANTOPRAZOL", "PARACETAMOL", "PAROXETINA", "PENICILINA", "PERICIAZINA", "PERMETRINA", "PETIDINA", "PIRAZINAMIDA", "PIRIDOSTIGMINA", "PIRIDOXINA", "POLIMIXINA", "POLIVITAMINICO", "POTASSIO", "PRAMIPEXOL", 
-                                          "PRAVASTATINA", "PREDNISOLONA", "PREDNISONA", "PREGABALINA", "PROMETAZINA", "PROPATILNITRATO", "PROPOFOL", "PROPRANOLOL", "PROSTIGMINA", "QUETIAPINA", "RAMIPRIL", "RANITIDINA", "RESERPINA", "RIFAMPICINA", "RISPERIDONA", "RITONAVIR", "RIVAROXABANA", "ROCURONIO", 
-                                          "ROSUVASTATINA", "SACARATO", "SALBUTAMOL", "SECAM", "SERTRALINA", "SEVELAMER", "SINVASTATINA", "SODIO", "SUCCINILCOLINA", "SUCRALFATO", "SULFADIAZINA", "SULFAMETOXAZOL", "SULFATO", "SULPIRIDA", "SUXAMETONIO", "TAMOXIFENO", "TANSULOSINA", "TEMOZOLAMIDA", "TEMOZOLOMIDA", 
-                                          "TENOXICAN", "TERBUTALINA", "TIAMINA", "TIGECICLINA", "TIOPENTAL", "TIORIDAZINA", "TOBRAMICINA", "TOPIRAMATO", "TRAMADOL", "TRAVOPROSTA", "TRIMETOPRIMA", "TROMETAMOL", "TROPICAMIDA", "VALSARTANA", "VANCOMICINA", "VARFARINA", "VASELINA"]]
-WL_NUTRI_CLINICA = [normalize(x) for x in ["NUTRICAO ENTERAL", "FORMULA INFANTIL", "SUPLEMENTO ALIMENTAR", "DIETA ENTERAL", "DIETA PARENTERAL", "NUTRICAO CLINICA"]]
-WL_MATERIAIS_NE = [normalize(x) for x in ["MATERIAL MEDIC", "INSUMO HOSPITALAR", "MMH", "SERINGA", "AGULHA", "GAZE", "ATADURA", "SONDA", "CATETER", "EQUIPO", "LUVAS DE PROCEDIMENTO", "MASCARA", "MASCARA CIRURGICA", "PENSO", "MATERIAL PENSO", "MATERIAL-MEDICO", "MATERIAIS-MEDICO", "FRALDA", "ABSORVENTE", "MEDICO-HOSPITALAR"]]
+WL_MEDICAMENTOS = [
+    r"MEDICAMENT", r"FARMAC", r"REMEDIO", r"SORO", r"FARMACO", r"AMPOAL", r"COMPRIMIDO", r"INJETAVEL", r"VACINA", 
+    r"INSULINA", r"ANTIBIOTICO", r"ACETILCISTEINA", r"ACETILSALICILICO", r"ACICLOVIR", r"ADENOSINA", r"ADRENALINA", 
+    r"ALBENDAZOL", r"ALENDRONATO", r"ALFAEPOETINA", r"ALFAINTERFERONA", r"ALFAST", r"ALOPURINOL", r"ALPRAZOLAM", 
+    r"AMBROXOL", r"AMBROXOL XPE", r"AMINOFILINA", r"AMIODARONA", r"AMITRIPTILINA", r"AMOXICILINA", r"AMPICILINA", 
+    r"ANASTROZOL", r"ANFOTERICINA", r"ANLODIPINO", r"ARIPIPRAZOL", r"ARIPIPRAZOL\.", r"ATENOLOL", r"ATORVASTANTINA", 
+    r"ATORVASTATINA", r"ATORVASTATINA CALCICA", r"ATRACURIO", r"ATROPINA", r"AZITROMICINA", r"AZTREONAM", r"BACLOFENO", 
+    r"BAMIFILINA", r"BENZILPENICILINA", r"BENZOATO", r"BETAMETASONA", r"BEZAFIBRATO", r"BIMATOPROSTA", r"BISACODIL", 
+    r"BISSULFATO", r"BOPRIV", r"BROMOPRIDA", r"BUDESONIDA", r"BUPROPIONA", r"BUTILBROMETO", r"CABERGOLINA", r"CALCITRIOL", 
+    r"CANDESARTANA", r"CAPTOPRIL", r"CARBAMAZEPINA", r"CARBONATO", r"CARVEDILOL", r"CAVERDILOL", r"CEFALEXINA", 
+    r"CEFALOTINA", r"CEFAZOLINA", r"CEFEPIMA", r"CEFOTAXIMA", r"CEFOXITINA", r"CEFTAZIDIMA", r"CEFTRIAXONA", r"CEFUROXIMA", 
+    r"CETOCONAZOL", r"CETOPROFENO", r"CETOROLACO", r"CICLOBENZAPRINA", r"CICLOSPORINA", r"CILOSTAZOL", r"CIMETIDINA", 
+    r"CIPROFLOXACINO", r"CIPROFLOXACINA", r"CITALOPRAM", r"CLARITROMICINA", r"CLINDAMICINA", r"CLOBETASOL", r"CLOMIPRAMINA", 
+    r"CLONAZEPAM", r"CLONIDINA", r"CLOPIDOGREL", r"CLORETO", r"CLORIDRATO", r"CLORIDRATO DE CIPROFLOXACINO", r"CLORPROMAZINA", 
+    r"CLORTALIDONA", r"CLOTRIMAZOL", r"CLOZAPINA", r"CODEINA", r"COLCHICINA", r"COLECALCIFEROL", r"COLISTIMETATO", 
+    r"COMPLEXO B", r"DACARBZINA", r"DAPAGLIFLOZINA", r"DAPAGLIFLOZINA\.", r"DAPSONA", r"DAPTOMICINA", r"DARBEPOETINA", 
+    r"DESLANOSIDEO", r"DESLORATADINA", r"DEXAMETASONA", r"DEXCLORFENIRAMINA", r"DEXPANTENOL", r"DIAZEPAM", r"DIETILAMONIO", 
+    r"DICLOFENACO", r"DIGOXINA", r"DILTIAZEM", r"DIMETICONA", r"DIOSMINA", r"DIPIRONA", r"DOBUTAMINA", r"DOMPERIDONA", 
+    r"DONEPEZILA", r"DOPAMINA", r"DOXAZOSINA", r"DOXICICLINA", r"DROPERIDOL", r"DULAGLUTIDA", r"DULOXETINA", r"DUTASTERIDA", 
+    r"ECONAZOL", r"EMULSAO", r"ENALAPRIL", r"ENOXAPARINA", r"ENTACAPONA", r"EPINEFRINA", r"ERITROMICINA", r"ESCITALOPRAM", 
+    r"ESOMEPRAZOL", r"ESPIRONOLACTONA", r"ESTRADIOL", r"ESTRIOL", r"ESTROGENIOS", r"ETANERCEPTE", r"ETILEFRINA", r"ETOMIDATO", 
+    r"ETOPOSIDEO", r"EZETIMIBA", r"FAMOTIDINA", r"FENITOINA", r"FENOBARBITAL", r"FENOTEROL", r"FENTANILA", r"FERRO", 
+    r"FIBRINOGENIO", r"FILGRASTIM", r"FINASTERIDA", r"FITOMENADIONA", r"FLUCONAZOL", r"FLUDROCORTISONA", r"FLUMAZENIL", 
+    r"FLUNARIZINA", r"FLUOXETINA", r"FLUTICASONA", r"FOLATO", r"FONDAPARINUX", r"FORMOTEROL", r"FOSFATO", r"FUROSEMIDA", 
+    r"GABAPENTINA", r"GANCICLOVIR", r"GELADEIRA", r"GENCITABINA", r"GENTAMICINA", r"GLIBENCLAMIDA", r"GLICEROL", r"GLICLAZIDA", 
+    r"GLICOSE", r"GLIMEPIRIDA", r"GLUCAGON", r"HALOPERIDOL", r"HEPARINA", r"HIDRALAZINA", r"HIDROCLOROTIAZIDA", 
+    r"HIDROCORTISONA", r"HIDROTALCITA", r"HIDROXIDOPROGESTERONA", r"HIDROXIDO", r"HIDROXIPROGESTERONA", r"HIDROXIUREIA", 
+    r"HIOSCINA", r"HIPROMELOSE", r"IBUPROFENO", r"IMIPENEM", r"IMIPRAMINA", r"INDAPAMIDA", r"INSULINA", r"IOIMBINA", 
+    r"IPRATROPIO", r"IRBESARTANA", r"IRINOTECANO", r"ISOSSORBIDA", r"ISOTRETINOINA", r"ITRACONAZOL", r"IVERMECTINA", 
+    r"LACTULOSE", r"LAMOTRIGINA", r"LANSOPRAZOL", r"LATANOPROSTA", r"LEFLUNOMIDA", r"LERCANIDIPINO", r"LETROZOL", r"LEVODOPA", 
+    r"LEVOFLOXACINO", r"LEVOMEPROMAZINA", r"LEVONORGESTREL", r"LEVOTIROXINA", r"LIDOCAINA", r"LINEZOLIDA", r"LINOGLIPTINA", 
+    r"LIPIDICA", r"LISINOPRIL", r"LITIO", r"LOPERAMIDA", r"LORATADINA", r"LORAZEPAM", r"LOSARTANA", r"LOVASTATINA", r"MAGNESIO", 
+    r"MANITOL", r"MEBENDAZOL", r"MEDROXIPROGESTERONA", r"MEMANTINA", r"MEROPENEM", r"MESALAZINA", r"METILDOPA", 
+    r"METILPREDNISOLONA", r"METOCLOPRAMIDA", r"METOPROLOL", r"METOTREXATO", r"METRONIDAZOL", r"MICOFENOLATO", r"MIDAZOLAM", 
+    r"MIRTAZAPINA", r"MISOPROSTOL", r"MORFINA", r"MUPIROCINA", r"NARATRIPTANA", r"NEOMICINA", r"NEOSTIGMINA", r"NIFEDIPINO", 
+    r"NIMESULIDA", r"NIMODIPINO", r"NISTATINA", r"NITROFURANTOINA", r"NITROGLICERINA", r"NITROPRUSSIATO", r"NORETISTERONA", 
+    r"NORFLOXACINO", r"NORTRIPTILINA", r"OCTREOTIDA", r"OLANZAPINA", r"OLMESARTANA", r"OMEPRAZOL", r"ONDANSETRONA", 
+    r"OXALIPLATINA", r"OXCARBAZEPINA", r"OXIBUTININA", r"OXIGENIO", r"PACLITAXEL", r"PALONOSETRONA", r"PANTOPRAZOL", 
+    r"PARACETAMOL", r"PAROXETINA", r"PENICILINA", r"PERICIAZINA", r"PERMETRINA", r"PETIDINA", r"PIRAZINAMIDA", r"PIRIDOSTIGMINA", 
+    r"PIRIDOXINA", r"POLIMIXINA", r"POLIVITAMINICO", r"POTASSIO", r"PRAMIPEXOL", r"PRAVASTATINA", r"PREDNISOLONA", r"PREDNISONA", 
+    r"PREGABALINA", r"PROMETAZINA", r"PROPATILNITRATO", r"PROPOFOL", r"PROPRANOLOL", r"PROSTIGMINA", r"QUETIAPINA", r"RAMIPRIL", 
+    r"RANITIDINA", r"RESERPINA", r"RIFAMPICINA", r"RISPERIDONA", r"RITONAVIR", r"RIVAROXABANA", r"ROCURONIO", r"ROSUVASTATINA", 
+    r"SACARATO", r"SALBUTAMOL", r"SECAM", r"SERTRALINA", r"SEVELAMER", r"SINVASTATINA", r"SODIO", r"SUCCINILCOLINA", 
+    r"SUCRALFATO", r"SULFADIAZINA", r"SULFAMETOXAZOL", r"SULFATO", r"SULPIRIDA", r"SUXAMETONIO", r"TAMOXIFENO", r"TANSULOSINA", 
+    r"TEMOZOLAMIDA", r"TEMOZOLOMIDA", r"TENOXICAN", r"TERBUTALINA", r"TIAMINA", r"TIGECICLINA", r"TIOPENTAL", r"TIORIDAZINA", 
+    r"TOBRAMICINA", r"TOPIRAMATO", r"TRAMADOL", r"TRAVOPROSTA", r"TRIMETOPRIMA", r"TROMETAMOL", r"TROPICAMIDA", r"VALSARTANA", 
+    r"VANCOMICINA", r"VARFARINA", r"VASELINA"
+]
+
+WL_NUTRI_CLINICA = [
+    r"NUTRICAO ENTERAL", r"FORMULA INFANTIL", r"SUPLEMENTO ALIMENTAR", r"DIETA ENTERAL", r"DIETA PARENTERAL", r"NUTRICAO CLINICA"
+]
+
+# Note o poder da Regex: MATERI(AL|AIS) e (S)? garantem captura de singulares e plurais automaticamente
+WL_MATERIAIS_NE = [
+    r"MATERI(AL|AIS)[\s\-]*MEDIC(O|A)?(S)?", 
+    r"INSUMO(S)? HOSPITALAR(ES)?", 
+    r"MMH", r"SERINGA(S)?", r"AGULHA(S)?", r"GAZE(S)?", 
+    r"ATADURA(S)?", r"SONDA(S)?", r"CATETER(ES)?", r"EQUIPO(S)?", 
+    r"LUVA(S)?", r"MASCARA(S)?", 
+    r"PENSO(S)?", r"MATERI(AL|AIS) PENSO", 
+    r"FRALDA(S)?", r"ABSORVENTE(S)?", 
+    r"MEDIC(O|A)?(S)?[\s\-]*HOSPITALAR(ES)?", 
+    r"LABORATORI(O|AL|AIS)", r"PRODUTO(S)? PARA SAUDE", 
+    r"ANTISSEPTIC(O|A)?(S)?", r"CLOREXIDINA", r"PVPI"
+]
 
 def criar_sessao():
     s = requests.Session()
-    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/22.1'})
+    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/23.0 RegexEdition'})
     retry = Retry(total=5, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
     s.mount('https://', HTTPAdapter(max_retries=retry))
     return s
@@ -90,9 +159,10 @@ def criar_sessao():
 def veta_edital(obj_raw, uf):
     obj = normalize(obj_raw)
     for v in TODOS_VETOS:
-        if v in obj:
-            if "NUTRICAO" in v or "ALIMENT" in v:
-                if any(bom in obj for bom in WL_NUTRI_CLINICA) and "ESCOLAR" not in obj: return False
+        if re.search(v, obj):
+            if re.search(r"NUTRICAO|ALIMENT", v):
+                if busca_flexivel(WL_NUTRI_CLINICA, obj) and not re.search(r"ESCOLAR", obj): 
+                    continue # Ignora o veto, pois tem suplemento e não é escolar
             return True
     return False
 
@@ -103,7 +173,7 @@ def safe_float(val):
 def processar_licitacao(lic, session, forcado=False):
     id_ref = "DESCONHECIDO"
     try:
-        if not isinstance(lic, dict): return ('ERRO', {'msg': 'Formato JSON inválido da API principal'}, 0, 0)
+        if not isinstance(lic, dict): return ('ERRO', {'msg': 'Formato JSON inválido'}, 0, 0)
         
         cnpj = lic.get('orgaoEntidade', {}).get('cnpj', '0000')
         ano = lic.get('anoCompra', '0000')
@@ -125,9 +195,9 @@ def processar_licitacao(lic, session, forcado=False):
             if dt_enc < DATA_CORTE_FIXA: return ('IGNORADO', None, 0, 0)
             if veta_edital(obj_raw, uf): return ('VETADO', None, 0, 0)
 
-            tem_interesse = any(t in obj_norm for t in WL_MEDICAMENTOS) or \
-                            (uf in NE_ESTADOS and any(t in obj_norm for t in WL_MATERIAIS_NE + WL_NUTRI_CLINICA)) or \
-                            any(x in obj_norm for x in ["SAUDE", "HOSPITAL"])
+            tem_interesse = busca_flexivel(WL_MEDICAMENTOS, obj_norm) or \
+                            (uf in NE_ESTADOS and busca_flexivel(WL_MATERIAIS_NE + WL_NUTRI_CLINICA, obj_norm)) or \
+                            busca_flexivel([r"SAUDE", r"HOSPITAL"], obj_norm)
 
             if not tem_interesse: return ('IGNORADO', None, 0, 0)
 
@@ -139,19 +209,12 @@ def processar_licitacao(lic, session, forcado=False):
         while True:
             r_itens = session.get(url_itens, params={'pagina': pagina_atual, 'tamanhoPagina': 100}, timeout=20)
             if r_itens.status_code != 200: 
-                if pagina_atual == 1: return ('ERRO', {'msg': f"HTTP {r_itens.status_code} ao aceder a {url_itens}"}, 0, 0)
-                else: break
+                return ('ERRO', {'msg': f"HTTP {r_itens.status_code} na pág {pagina_atual}. Cancelado para não truncar."}, 0, 0)
             
             resp_json = r_itens.json()
-            
-            # --- CORREÇÃO DO BUG DA API (Dict vs List) ---
-            if isinstance(resp_json, dict):
-                itens_raw = resp_json.get('data', [])
-            elif isinstance(resp_json, list):
-                itens_raw = resp_json
-            else:
-                break
-            # ----------------------------------------------
+            if isinstance(resp_json, dict): itens_raw = resp_json.get('data', [])
+            elif isinstance(resp_json, list): itens_raw = resp_json
+            else: break
 
             if not itens_raw: break
 
@@ -181,7 +244,7 @@ def processar_licitacao(lic, session, forcado=False):
 
         if not itens_brutos: return ('IGNORADO', None, 0, 0)
         
-        if not forcado and uf not in NE_ESTADOS and not tem_item_catalogo and not any(m in obj_norm for m in WL_MEDICAMENTOS):
+        if not forcado and uf not in NE_ESTADOS and not tem_item_catalogo and not busca_flexivel(WL_MEDICAMENTOS, obj_norm):
             return ('IGNORADO', None, 0, 0)
 
         dados_finais = {
@@ -193,8 +256,7 @@ def processar_licitacao(lic, session, forcado=False):
             'obj': obj_raw, 'edit': f"{str(lic.get('numeroCompra', '')).zfill(5)}/{ano}",
             'link': f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}", 
             'val_tot': safe_float(lic.get('valorTotalEstimado')), 
-            'itens': itens_brutos,
-            'sit_global': sit_global_nome
+            'itens': itens_brutos, 'sit_global': sit_global_nome
         }
         return ('CAPTURADO', dados_finais, len(itens_brutos), 0)
     except Exception as e: 
@@ -214,11 +276,10 @@ def processar_inclusoes_manuais(session, banco):
                 if r.status_code == 200:
                     st, d, i, h = processar_licitacao(r.json(), session, forcado=True)
                     if st == 'CAPTURADO' and d:
-                        chave_negocio = f"{d['id'][:14]}_{d['edit']}"
-                        banco[chave_negocio] = d
+                        banco[f"{d['id'][:14]}_{d['edit']}"] = d
                         print(f"   ✅ Captura Manual Sucesso: {cnpj}/{ano}/{seq}")
                     elif st == 'ERRO':
-                        print(f"   ❌ Falha Manual em {cnpj}/{ano}/{seq}: {d['msg']}")
+                        print(f"   ❌ Falha Manual: {d['msg']}")
         open(ARQ_MANUAL, 'w').close() 
     except Exception as e: print(f"Erro Inclusão Manual: {e}")
 
@@ -233,14 +294,10 @@ def buscar_periodo(session, banco, d_ini, d_fim):
         while True:
             try:
                 r = session.get(url, params={'dataInicial': dia, 'dataFinal': dia, 'codigoModalidadeContratacao': 6, 'pagina': pag, 'tamanhoPagina': 50}, timeout=30)
-                if r.status_code != 200: 
-                    print(f"   ⚠️ Erro crítico da API (Página Inicial): HTTP {r.status_code}")
-                    break
+                if r.status_code != 200: break
                 dados = r.json(); lics = dados.get('data', [])
                 if not lics: break
-            except Exception as e: 
-                print(f"   ⚠️ Falha de conexão com PNCP ao buscar dia {dia}: {e}")
-                break
+            except: break
             
             tot_pag = dados.get('totalPaginas', 1)
             s_pag = {'vetados': 0, 'capturados': 0, 'itens': 0, 'ignorados': 0, 'erros': 0}
@@ -248,20 +305,13 @@ def buscar_periodo(session, banco, d_ini, d_fim):
             with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
                 futuros = [exe.submit(processar_licitacao, l, session) for l in lics]
                 for f in concurrent.futures.as_completed(futuros):
-                    st, d, i, h = f.result()
-                    
+                    st, d, itn, _ = f.result()
                     if st == 'CAPTURADO' and d:
-                        # --- CORREÇÃO DO BUG DE MEMÓRIA (KEYERROR) ---
-                        s_pag['capturados'] += 1
-                        s_pag['itens'] += i
-                        # ---------------------------------------------
+                        s_pag['capturados'] += 1; s_pag['itens'] += itn
                         banco[f"{d['id'][:14]}_{d['edit']}"] = d
-                        
                     elif st == 'VETADO': s_pag['vetados'] += 1
                     elif st == 'IGNORADO': s_pag['ignorados'] += 1
-                    elif st == 'ERRO': 
-                        s_pag['erros'] += 1
-                        print(f"      [!] LOG ERRO: {d['msg']}")
+                    elif st == 'ERRO': s_pag['erros'] += 1
             
             for k in stats: stats[k] += s_pag[k]
             print(f"   📄 Pág {pag}/{tot_pag}: 🎯 {s_pag['capturados']} Caps | 📦 {s_pag['itens']} Itens | 🔥 {s_pag['erros']} Erros")
@@ -275,7 +325,6 @@ def buscar_periodo(session, banco, d_ini, d_fim):
     print(f"📦 ITENS TOTALIZADOS:  {stats['itens']}")
     print(f"🚫 EDITAIS VETADOS:    {stats['vetados']}")
     print(f"👁️ EDITAIS IGNORADOS:  {stats['ignorados']}")
-    print(f"🔥 ERROS DA API:       {stats['erros']}")
     print("="*50)
 
 if __name__ == '__main__':
