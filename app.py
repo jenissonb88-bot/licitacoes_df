@@ -16,6 +16,7 @@ from urllib3.util.retry import Retry
 ARQDADOS = 'dadosoportunidades.json.gz'
 ARQ_LOCK = 'execucao.lock'
 ARQ_CATALOGO = 'Exportar Dados.csv'
+ARQ_REGRAS_CSV = 'regras_materiais.csv' # Seu novo arquivo de regras de contexto
 ARQ_MANUAL = 'links_manuais.txt' 
 MAXWORKERS = 15 
 DATA_CORTE_FIXA = datetime(2025, 12, 1)
@@ -35,11 +36,42 @@ def normalize(t):
         CACHE_NORM[t] = ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
     return CACHE_NORM[t]
 
-# Função Motor de Busca Flexível (RegEx)
+# Função Motor de Busca Flexível com Escudo Global (\b)
 def busca_flexivel(lista_regex, texto):
     for padrao in lista_regex:
-        if re.search(padrao, texto):
+        # O \b garante que a palavra seja exata. Ex: \bFERRO\b ignora FERROVIARIO
+        if re.search(rf"\b{padrao}\b", texto):
             return True
+    return False
+
+# --- CARREGAMENTO DAS REGRAS DO CSV (O NOVO CÉREBRO) ---
+REGRAS_CONTEXTUAIS = []
+if os.path.exists(ARQ_REGRAS_CSV):
+    try:
+        with open(ARQ_REGRAS_CSV, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f, delimiter=',')
+            for row in reader:
+                pc = normalize(row.get('palavra_chave', ''))
+                if not pc: continue
+                af = [normalize(x.strip()) for x in row.get('afirmacao', '').split(';') if x.strip()]
+                neg = [normalize(x.strip()) for x in row.get('negacao', '').split(';') if x.strip()]
+                REGRAS_CONTEXTUAIS.append({'pc': pc, 'af': af, 'neg': neg})
+        print(f"🧠 Motor Semântico ativado: {len(REGRAS_CONTEXTUAIS)} regras carregadas.")
+    except Exception as e: 
+        print(f"⚠️ Erro ao ler {ARQ_REGRAS_CSV}: {e}")
+
+def avalia_regras_contextuais(texto):
+    if not REGRAS_CONTEXTUAIS: return False
+    for regra in REGRAS_CONTEXTUAIS:
+        if re.search(rf"\b{regra['pc']}\b", texto):
+            passou_afirmacao = True
+            if regra['af']: passou_afirmacao = any(re.search(rf"\b{a}\b", texto) for a in regra['af'])
+            
+            if passou_afirmacao:
+                passou_negacao = True
+                if regra['neg']: 
+                    if any(re.search(rf"\b{n}\b", texto) for n in regra['neg']): passou_negacao = False
+                if passou_negacao: return True
     return False
 
 # --- CARREGAMENTO DO CATÁLOGO ---
@@ -62,7 +94,7 @@ if os.path.exists(ARQ_CATALOGO):
             except: continue
     except: pass
 
-# --- LISTAS FLEXÍVEIS COM REGEX (Sem acentos, em Maiúsculo) ---
+# --- LISTAS FLEXÍVEIS COM REGEX ---
 VETOS_ALIMENTACAO = [
     r"ALIMENTACAO ESCOLAR", r"GENEROS ALIMENTICIOS", r"MERENDA", r"PNAE", r"PERECIVEIS", 
     r"HORTIFRUTI", r"CARNES", r"PANIFICACAO", r"CESTAS BASICAS", r"LANCHE", r"REFEICOES", 
@@ -77,7 +109,8 @@ VETOS_OPERACIONAL = [
     r"LIMPEZA URBANA", r"RESIDUOS SOLIDOS", r"LOCACAO DE VEICULOS", r"TRANSPORTE", 
     r"COMBUSTIVEL", r"DIESEL", r"GASOLINA", r"PNEUS", r"PECAS AUTOMOTIVAS", 
     r"OFICINA", r"VIGILANCIA", r"SEGURANCA", r"BOMBEIRO", r"SALVAMENTO", r"RESGATE", 
-    r"VIATURA", r"FARDAMENTO", r"VESTUARIO", r"INFORMATICA", r"COMPUTADORES", r"IMPRESSAO", r"EVENTOS"
+    r"VIATURA", r"FARDAMENTO", r"VESTUARIO", r"INFORMATICA", r"COMPUTADORES", r"IMPRESSAO", r"EVENTOS",
+    r"VEICULO(S)?", r"ASFALTO", r"TAPA[\s\-]*BURACO", r"FERROVIA(RIO)?", r"AUTOMOTIVO" # Reforços Adicionados
 ]
 VETOS_ADM = [r"ADESAO", r"INTENCAO", r"IRP", r"CREDENCIAMENTO", r"LEILAO", r"ALIENACAO"]
 TODOS_VETOS = VETOS_ALIMENTACAO + VETOS_EDUCACAO + VETOS_OPERACIONAL + VETOS_ADM
@@ -103,7 +136,7 @@ WL_MEDICAMENTOS = [
     r"DONEPEZILA", r"DOPAMINA", r"DOXAZOSINA", r"DOXICICLINA", r"DROPERIDOL", r"DULAGLUTIDA", r"DULOXETINA", r"DUTASTERIDA", 
     r"ECONAZOL", r"EMULSAO", r"ENALAPRIL", r"ENOXAPARINA", r"ENTACAPONA", r"EPINEFRINA", r"ERITROMICINA", r"ESCITALOPRAM", 
     r"ESOMEPRAZOL", r"ESPIRONOLACTONA", r"ESTRADIOL", r"ESTRIOL", r"ESTROGENIOS", r"ETANERCEPTE", r"ETILEFRINA", r"ETOMIDATO", 
-    r"ETOPOSIDEO", r"EZETIMIBA", r"FAMOTIDINA", r"FENITOINA", r"FENOBARBITAL", r"FENOTEROL", r"FENTANILA", r"FERRO", 
+    r"ETOPOSIDEO", r"EZETIMIBA", r"FAMOTIDINA", r"FENITOINA", r"FENOBARBITAL", r"FENOTEROL", r"FENTANILA", r"FERRO(SO|SA)?(S)?", 
     r"FIBRINOGENIO", r"FILGRASTIM", r"FINASTERIDA", r"FITOMENADIONA", r"FLUCONAZOL", r"FLUDROCORTISONA", r"FLUMAZENIL", 
     r"FLUNARIZINA", r"FLUOXETINA", r"FLUTICASONA", r"FOLATO", r"FONDAPARINUX", r"FORMOTEROL", r"FOSFATO", r"FUROSEMIDA", 
     r"GABAPENTINA", r"GANCICLOVIR", r"GELADEIRA", r"GENCITABINA", r"GENTAMICINA", r"GLIBENCLAMIDA", r"GLICEROL", r"GLICLAZIDA", 
@@ -135,23 +168,17 @@ WL_NUTRI_CLINICA = [
     r"NUTRICAO ENTERAL", r"FORMULA INFANTIL", r"SUPLEMENTO ALIMENTAR", r"DIETA ENTERAL", r"DIETA PARENTERAL", r"NUTRICAO CLINICA"
 ]
 
-# Note o poder da Regex: MATERI(AL|AIS) e (S)? garantem captura de singulares e plurais automaticamente
+# As palavras simples (como Material, Luva, Mascara) saíram daqui para serem tratadas pelo CSV!
 WL_MATERIAIS_NE = [
-    r"MATERI(AL|AIS)[\s\-]*MEDIC(O|A)?(S)?", 
-    r"INSUMO(S)? HOSPITALAR(ES)?", 
-    r"MMH", r"SERINGA(S)?", r"AGULHA(S)?", r"GAZE(S)?", 
-    r"ATADURA(S)?", r"SONDA(S)?", r"CATETER(ES)?", r"EQUIPO(S)?", 
-    r"LUVA(S)?", r"MASCARA(S)?", 
-    r"PENSO(S)?", r"MATERI(AL|AIS) PENSO", 
-    r"FRALDA(S)?", r"ABSORVENTE(S)?", 
-    r"MEDIC(O|A)?(S)?[\s\-]*HOSPITALAR(ES)?", 
-    r"LABORATORI(O|AL|AIS)", r"PRODUTO(S)? PARA SAUDE", 
-    r"ANTISSEPTIC(O|A)?(S)?", r"CLOREXIDINA", r"PVPI"
+    r"INSUMO(S)? HOSPITALAR(ES)?", r"MMH", r"SERINGA(S)?", r"SONDA(S)?", r"CATETER(ES)?", 
+    r"MEDIC(O|A)?(S)?[\s\-]*HOSPITALAR(ES)?", r"LABORATORI(O|AL|AIS)", r"PRODUTO(S)? PARA SAUDE", 
+    r"ANTISSEPTIC(O|A)?(S)?", r"CLOREXIDINA", r"PVPI",
+    r"CURATIVO(S)?", r"COBERTURA(S)? (ESPECIAL|ESPECIAIS|PARA LESO(AO|ES)|ESTERIL)"
 ]
 
 def criar_sessao():
     s = requests.Session()
-    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/23.0 RegexEdition'})
+    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/24.0 AI Edition'})
     retry = Retry(total=5, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
     s.mount('https://', HTTPAdapter(max_retries=retry))
     return s
@@ -159,10 +186,10 @@ def criar_sessao():
 def veta_edital(obj_raw, uf):
     obj = normalize(obj_raw)
     for v in TODOS_VETOS:
-        if re.search(v, obj):
-            if re.search(r"NUTRICAO|ALIMENT", v):
-                if busca_flexivel(WL_NUTRI_CLINICA, obj) and not re.search(r"ESCOLAR", obj): 
-                    continue # Ignora o veto, pois tem suplemento e não é escolar
+        if re.search(rf"\b{v}\b", obj):
+            if re.search(r"\b(NUTRICAO|ALIMENT)\b", v):
+                if busca_flexivel(WL_NUTRI_CLINICA, obj) and not re.search(r"\bESCOLAR\b", obj): 
+                    continue
             return True
     return False
 
@@ -195,9 +222,11 @@ def processar_licitacao(lic, session, forcado=False):
             if dt_enc < DATA_CORTE_FIXA: return ('IGNORADO', None, 0, 0)
             if veta_edital(obj_raw, uf): return ('VETADO', None, 0, 0)
 
+            # Nova Inteligência: Verifica as Listas Blindadas OU o Motor de Regras do CSV
             tem_interesse = busca_flexivel(WL_MEDICAMENTOS, obj_norm) or \
                             (uf in NE_ESTADOS and busca_flexivel(WL_MATERIAIS_NE + WL_NUTRI_CLINICA, obj_norm)) or \
-                            busca_flexivel([r"SAUDE", r"HOSPITAL"], obj_norm)
+                            busca_flexivel([r"SAUDE", r"HOSPITAL"], obj_norm) or \
+                            avalia_regras_contextuais(obj_norm)
 
             if not tem_interesse: return ('IGNORADO', None, 0, 0)
 
@@ -244,7 +273,8 @@ def processar_licitacao(lic, session, forcado=False):
 
         if not itens_brutos: return ('IGNORADO', None, 0, 0)
         
-        if not forcado and uf not in NE_ESTADOS and not tem_item_catalogo and not busca_flexivel(WL_MEDICAMENTOS, obj_norm):
+        # Filtro final rigoroso unificando o CSV
+        if not forcado and uf not in NE_ESTADOS and not tem_item_catalogo and not (busca_flexivel(WL_MEDICAMENTOS, obj_norm) or avalia_regras_contextuais(obj_norm)):
             return ('IGNORADO', None, 0, 0)
 
         dados_finais = {
