@@ -1,80 +1,53 @@
-import json, gzip, os, unicodedata, csv, re
+import json, gzip, os, unicodedata, csv
 from datetime import datetime
 import concurrent.futures
 
 ARQDADOS, ARQLIMPO, ARQ_CATALOGO = 'dadosoportunidades.json.gz', 'pregacoes_pharma_limpos.json.gz', 'Exportar Dados.csv'
-ARQ_REGRAS_CSV = 'regras_materiais.csv'
 DATA_CORTE_2026 = datetime(2026, 1, 1)
 
 NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
 ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
 
+# CORRIGIDO: O termo genérico "MANUTENCAO" foi substituído por termos específicos
 VETOS_IMEDIATOS = [
-    r"PRESTACAO DE SERVICO", r"SERVICO ESPECIALIZADO", r"LOCACAO", r"INSTALACAO", 
-    r"MANUTENCAO PREDIAL", r"MANUTENCAO DE EQUIPAMENTO(S)?", r"MANUTENCAO PREVENTIVA", r"MANUTENCAO CORRETIVA",
-    r"UNIFORME(S)?", r"TEXTI(L|IS)", r"REFORMA", r"GASE(S)? MEDICINAI(S)?", 
-    r"OXIGENIO", r"CILINDRO", r"LIMPEZA PREDIAL", r"LAVANDERIA", r"IMPRESSAO"
+    "PRESTACAO DE SERVICO", "SERVICO ESPECIALIZADO", "LOCACAO", "INSTALACAO", 
+    "MANUTENCAO PREDIAL", "MANUTENCAO DE EQUIPAMENTOS", "MANUTENCAO PREVENTIVA", "MANUTENCAO CORRETIVA",
+    "UNIFORME", "TEXTIL", "REFORMA", "GASES MEDICINAIS", 
+    "OXIGENIO", "CILINDRO", "LIMPEZA PREDIAL", "LAVANDERIA", "IMPRESSAO"
 ]
 
 TERMOS_NE_MMH_NUTRI = [
-    r"INSUMO(S)? HOSPITALAR(ES)?", r"MMH", r"SERINGA(S)?", r"SONDA(S)?", r"CATETER(ES)?", 
-    r"NUTRICAO ENTERAL", r"FORMULA INFANTIL", r"SUPLEMENTO", r"DIETA", r"NUTRICAO CLINICA",
-    r"MEDIC(O|A)?(S)?[\s\-]*HOSPITALAR(ES)?", r"LABORATORI(O|AL|AIS)", r"PRODUTO(S)? PARA SAUDE", 
-    r"ANTISSEPTIC(O|A)?(S)?", r"CLOREXIDINA", r"PVPI",
-    r"CURATIVO(S)?", r"COBERTURA(S)? (ESPECIAL|ESPECIAIS|PARA LESO(AO|ES)|ESTERIL)"
+    "MATERIAL MEDIC", "INSUMO HOSPITALAR", "MMH", "SERINGA", "AGULHA", "GAZE", 
+    "ATADURA", "SONDA", "CATETER", "EQUIPO", "LUVAS", "MASCARA", 
+    "NUTRICAO ENTERAL", "FORMULA INFANTIL", "SUPLEMENTO", "DIETA", "NUTRICAO CLINICA"
 ]
 
 TERMOS_SALVAMENTO = [
-    r"MEDICAMENT", r"FARMAC", r"REMEDIO", r"SORO", r"FARMACO", r"AMPOAL", r"COMPRIMIDO", r"INJETAVEL", r"VACINA", 
-    r"INSULINA", r"ANTIBIOTICO", r"ACETILCISTEINA", r"ACETILSALICILICO", r"ACICLOVIR", r"ADENOSINA", r"ADRENALINA", 
-    r"ALBENDAZOL", r"ALENDRONATO", r"ALFAEPOETINA", r"ALFAINTERFERONA", r"ALFAST", r"ALOPURINOL", r"ALPRAZOLAM", 
-    r"AMBROXOL", r"AMBROXOL XPE", r"AMINOFILINA", r"AMIODARONA", r"AMITRIPTILINA", r"AMOXICILINA", r"AMPICILINA", 
-    r"ANASTROZOL", r"ANFOTERICINA", r"ANLODIPINO", r"ARIPIPRAZOL", r"ARIPIPRAZOL\.", r"ATENOLOL", r"ATORVASTANTINA", 
-    r"ATORVASTATINA", r"ATORVASTATINA CALCICA", r"ATRACURIO", r"ATROPINA", r"AZITROMICINA", r"AZTREONAM", r"BACLOFENO", 
-    r"BAMIFILINA", r"BENZILPENICILINA", r"BENZOATO", r"BETAMETASONA", r"BEZAFIBRATO", r"BIMATOPROSTA", r"BISACODIL", 
-    r"BISSULFATO", r"BOPRIV", r"BROMOPRIDA", r"BUDESONIDA", r"BUPROPIONA", r"BUTILBROMETO", r"CABERGOLINA", r"CALCITRIOL", 
-    r"CANDESARTANA", r"CAPTOPRIL", r"CARBAMAZEPINA", r"CARBONATO", r"CARVEDILOL", r"CAVERDILOL", r"CEFALEXINA", 
-    r"CEFALOTINA", r"CEFAZOLINA", r"CEFEPIMA", r"CEFOTAXIMA", r"CEFOXITINA", r"CEFTAZIDIMA", r"CEFTRIAXONA", r"CEFUROXIMA", 
-    r"CETOCONAZOL", r"CETOPROFENO", r"CETOROLACO", r"CICLOBENZAPRINA", r"CICLOSPORINA", r"CILOSTAZOL", r"CIMETIDINA", 
-    r"CIPROFLOXACINO", r"CIPROFLOXACINA", r"CITALOPRAM", r"CLARITROMICINA", r"CLINDAMICINA", r"CLOBETASOL", r"CLOMIPRAMINA", 
-    r"CLONAZEPAM", r"CLONIDINA", r"CLOPIDOGREL", r"CLORETO", r"CLORIDRATO", r"CLORIDRATO DE CIPROFLOXACINO", r"CLORPROMAZINA", 
-    r"CLORTALIDONA", r"CLOTRIMAZOL", r"CLOZAPINA", r"CODEINA", r"COLCHICINA", r"COLECALCIFEROL", r"COLISTIMETATO", 
-    r"COMPLEXO B", r"DACARBZINA", r"DAPAGLIFLOZINA", r"DAPAGLIFLOZINA\.", r"DAPSONA", r"DAPTOMICINA", r"DARBEPOETINA", 
-    r"DESLANOSIDEO", r"DESLORATADINA", r"DEXAMETASONA", r"DEXCLORFENIRAMINA", r"DEXPANTENOL", r"DIAZEPAM", r"DIETILAMONIO", 
-    r"DICLOFENACO", r"DIGOXINA", r"DILTIAZEM", r"DIMETICONA", r"DIOSMINA", r"DIPIRONA", r"DOBUTAMINA", r"DOMPERIDONA", 
-    r"DONEPEZILA", r"DOPAMINA", r"DOXAZOSINA", r"DOXICICLINA", r"DROPERIDOL", r"DULAGLUTIDA", r"DULOXETINA", r"DUTASTERIDA", 
-    r"ECONAZOL", r"EMULSAO", r"ENALAPRIL", r"ENOXAPARINA", r"ENTACAPONA", r"EPINEFRINA", r"ERITROMICINA", r"ESCITALOPRAM", 
-    r"ESOMEPRAZOL", r"ESPIRONOLACTONA", r"ESTRADIOL", r"ESTRIOL", r"ESTROGENIOS", r"ETANERCEPTE", r"ETILEFRINA", r"ETOMIDATO", 
-    r"ETOPOSIDEO", r"EZETIMIBA", r"FAMOTIDINA", r"FENITOINA", r"FENOBARBITAL", r"FENOTEROL", r"FENTANILA", r"FERRO(SO|SA)?(S)?", 
-    r"FIBRINOGENIO", r"FILGRASTIM", r"FINASTERIDA", r"FITOMENADIONA", r"FLUCONAZOL", r"FLUDROCORTISONA", r"FLUMAZENIL", 
-    r"FLUNARIZINA", r"FLUOXETINA", r"FLUTICASONA", r"FOLATO", r"FONDAPARINUX", r"FORMOTEROL", r"FOSFATO", r"FUROSEMIDA", 
-    r"GABAPENTINA", r"GANCICLOVIR", r"GELADEIRA", r"GENCITABINA", r"GENTAMICINA", r"GLIBENCLAMIDA", r"GLICEROL", r"GLICLAZIDA", 
-    r"GLICOSE", r"GLIMEPIRIDA", r"GLUCAGON", r"HALOPERIDOL", r"HEPARINA", r"HIDRALAZINA", r"HIDROCLOROTIAZIDA", 
-    r"HIDROCORTISONA", r"HIDROTALCITA", r"HIDROXIDOPROGESTERONA", r"HIDROXIDO", r"HIDROXIPROGESTERONA", r"HIDROXIUREIA", 
-    r"HIOSCINA", r"HIPROMELOSE", r"IBUPROFENO", r"IMIPENEM", r"IMIPRAMINA", r"INDAPAMIDA", r"INSULINA", r"IOIMBINA", 
-    r"IPRATROPIO", r"IRBESARTANA", r"IRINOTECANO", r"ISOSSORBIDA", r"ISOTRETINOINA", r"ITRACONAZOL", r"IVERMECTINA", 
-    r"LACTULOSE", r"LAMOTRIGINA", r"LANSOPRAZOL", r"LATANOPROSTA", r"LEFLUNOMIDA", r"LERCANIDIPINO", r"LETROZOL", r"LEVODOPA", 
-    r"LEVOFLOXACINO", r"LEVOMEPROMAZINA", r"LEVONORGESTREL", r"LEVOTIROXINA", r"LIDOCAINA", r"LINEZOLIDA", r"LINOGLIPTINA", 
-    r"LIPIDICA", r"LISINOPRIL", r"LITIO", r"LOPERAMIDA", r"LORATADINA", r"LORAZEPAM", r"LOSARTANA", r"LOVASTATINA", r"MAGNESIO", 
-    r"MANITOL", r"MEBENDAZOL", r"MEDROXIPROGESTERONA", r"MEMANTINA", r"MEROPENEM", r"MESALAZINA", r"METILDOPA", 
-    r"METILPREDNISOLONA", r"METOCLOPRAMIDA", r"METOPROLOL", r"METOTREXATO", r"METRONIDAZOL", r"MICOFENOLATO", r"MIDAZOLAM", 
-    r"MIRTAZAPINA", r"MISOPROSTOL", r"MORFINA", r"MUPIROCINA", r"NARATRIPTANA", r"NEOMICINA", r"NEOSTIGMINA", r"NIFEDIPINO", 
-    r"NIMESULIDA", r"NIMODIPINO", r"NISTATINA", r"NITROFURANTOINA", r"NITROGLICERINA", r"NITROPRUSSIATO", r"NORETISTERONA", 
-    r"NORFLOXACINO", r"NORTRIPTILINA", r"OCTREOTIDA", r"OLANZAPINA", r"OLMESARTANA", r"OMEPRAZOL", r"ONDANSETRONA", 
-    r"OXALIPLATINA", r"OXCARBAZEPINA", r"OXIBUTININA", r"PACLITAXEL", r"PALONOSETRONA", r"PANTOPRAZOL", 
-    r"PARACETAMOL", r"PAROXETINA", r"PENICILINA", r"PERICIAZINA", r"PERMETRINA", r"PETIDINA", r"PIRAZINAMIDA", r"PIRIDOSTIGMINA", 
-    r"PIRIDOXINA", r"POLIMIXINA", r"POLIVITAMINICO", r"POTASSIO", r"PRAMIPEXOL", r"PRAVASTATINA", r"PREDNISOLONA", r"PREDNISONA", 
-    r"PREGABALINA", r"PROMETAZINA", r"PROPATILNITRATO", r"PROPOFOL", r"PROPRANOLOL", r"PROSTIGMINA", r"QUETIAPINA", r"RAMIPRIL", 
-    r"RANITIDINA", r"RESERPINA", r"RIFAMPICINA", r"RISPERIDONA", r"RITONAVIR", r"RIVAROXABANA", r"ROCURONIO", r"ROSUVASTATINA", 
-    r"SACARATO", r"SALBUTAMOL", r"SECAM", r"SERTRALINA", r"SEVELAMER", r"SINVASTATINA", r"SODIO", r"SUCCINILCOLINA", 
-    r"SUCRALFATO", r"SULFADIAZINA", r"SULFAMETOXAZOL", r"SULFATO", r"SULPIRIDA", r"SUXAMETONIO", r"TAMOXIFENO", r"TANSULOSINA", 
-    r"TEMOZOLAMIDA", r"TEMOZOLOMIDA", r"TENOXICAN", r"TERBUTALINA", r"TIAMINA", r"TIGECICLINA", r"TIOPENTAL", r"TIORIDAZINA", 
-    r"TOBRAMICINA", r"TOPIRAMATO", r"TRAMADOL", r"TRAVOPROSTA", r"TRIMETOPRIMA", r"TROMETAMOL", r"TROPICAMIDA", r"VALSARTANA", 
-    r"VANCOMICINA", r"VARFARINA", r"VASELINA"
+    "MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOAL", "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA", "ANTIBIOTICO", "ACETILCISTEINA", "ACETILSALICILICO", "ACICLOVIR", "ADENOSINA", "ADRENALINA", "ALBENDAZOL", "ALENDRONATO", 
+    "ALFAEPOETINA", "ALFAINTERFERONA", "ALFAST", "ALOPURINOL", "ALPRAZOLAM", "AMBROXOL", "AMBROXOL XPE", "AMINOFILINA", "AMIODARONA", "AMITRIPTILINA", "AMOXICILINA", "AMPICILINA", "ANASTROZOL", "ANFOTERICINA", "ANLODIPINO", "ARIPIPRAZOL", 
+    "ARIPIPRAZOL.", "ATENOLOL", "ATORVASTANTINA", "ATORVASTATINA", "ATORVASTATINA CALCICA", "ATRACURIO", "ATROPINA", "AZITROMICINA", "AZTREONAM", "BACLOFENO", "BAMIFILINA", "BENZILPENICILINA", "BENZOATO", "BETAMETASONA", "BEZAFIBRATO", 
+    "BIMATOPROSTA", "BISACODIL", "BISSULFATO", "BOPRIV", "BROMOPRIDA", "BUDESONIDA", "BUPROPIONA", "BUTILBROMETO", "CABERGOLINA", "CALCITRIOL", "CANDESARTANA", "CAPTOPRIL", "CARBAMAZEPINA", "CARBONATO", "CARVEDILOL", "CAVERDILOL", "CEFALEXINA", 
+    "CEFALOTINA", "CEFAZOLINA", "CEFEPIMA", "CEFOTAXIMA", "CEFOXITINA", "CEFTAZIDIMA", "CEFTRIAXONA", "CEFUROXIMA", "CETOCONAZOL", "CETOPROFENO", "CETOROLACO", "CICLOBENZAPRINA", "CICLOSPORINA", "CILOSTAZOL", "CIMETIDINA", "CIPROFLOXACINO", 
+    "CIPROFLOXACINA", "CITALOPRAM", "CLARITROMICINA", "CLINDAMICINA", "CLOBETASOL", "CLOMIPRAMINA", "CLONAZEPAM", "CLONIDINA", "CLOPIDOGREL", "CLORETO", "CLORIDRATO", "CLORIDRATO DE CIPROFLOXACINO", "CLORPROMAZINA", "CLORTALIDONA", "CLOTRIMAZOL", 
+    "CLOZAPINA", "CODEINA", "COLCHICINA", "COLECALCIFEROL", "COLISTIMETATO", "COMPLEXO B", "DACARBZINA", "DAPAGLIFLOZINA", "DAPAGLIFLOZINA.", "DAPSONA", "DAPTOMICINA", "DARBEPOETINA", "DESLANOSIDEO", "DESLORATADINA", "DEXAMETASONA", "DEXCLORFENIRAMINA", 
+    "DEXPANTENOL", "DIAZEPAM", "DIETILAMONIO", "DICLOFENACO", "DIGOXINA", "DILTIAZEM", "DIMETICONA", "DIOSMINA", "DIPIRONA", "DOBUTAMINA", "DOMPERIDONA", "DONEPEZILA", "DOPAMINA", "DOXAZOSINA", "DOXICICLINA", "DROPERIDOL", "DULAGLUTIDA", "DULOXETINA", 
+    "DUTASTERIDA", "ECONAZOL", "EMULSAO", "ENALAPRIL", "ENOXAPARINA", "ENTACAPONA", "EPINEFRINA", "ERITROMICINA", "ESCITALOPRAM", "ESOMEPRAZOL", "ESPIRONOLACTONA", "ESTRADIOL", "ESTRIOL", "ESTROGENIOS", "ETANERCEPTE", "ETANERCEPTE", "ETILEFRINA", 
+    "ETOMIDATO", "ETOPOSIDEO", "EZETIMIBA", "FAMOTIDINA", "FENITOINA", "FENOBARBITAL", "FENOTEROL", "FENTANILA", "FERRO", "FIBRINOGENIO", "FILGRASTIM", "FINASTERIDA", "FITOMENADIONA", "FLUCONAZOL", "FLUDROCORTISONA", "FLUMAZENIL", "FLUNARIZINA", 
+    "FLUOXETINA", "FLUTICASONA", "FOLATO", "FONDAPARINUX", "FORMOTEROL", "FOSFATO", "FUROSEMIDA", "GABAPENTINA", "GANCICLOVIR", "GELADEIRA", "GENCITABINA", "GENTAMICINA", "GLIBENCLAMIDA", "GLICEROL", "GLICLAZIDA", "GLICOSE", "GLIMEPIRIDA", "GLUCAGON", 
+    "HALOPERIDOL", "HEPARINA", "HIDRALAZINA", "HIDROCLOROTIAZIDA", "HIDROCORTISONA", "HIDROTALCITA", "HIDROXIDOPROGESTERONA", "HIDROXIDO", "HIDROXIPROGESTERONA", "HIDROXIUREIA", "HIOSCINA", "HIPROMELOSE", "IBUPROFENO", "IMIPENEM", "IMIPRAMINA", "INDAPAMIDA", 
+    "INSULINA", "IOIMBINA", "IPRATROPIO", "IRBESARTANA", "IRINOTECANO", "ISOSSORBIDA", "ISOTRETINOINA", "ITRACONAZOL", "IVERMECTINA", "LACTULOSE", "LAMOTRIGINA", "LANSOPRAZOL", "LATANOPROSTA", "LEFLUNOMIDA", "LERCANIDIPINO", "LETROZOL", "LEVODOPA", "LEVOFLOXACINO", 
+    "LEVOMEPROMAZINA", "LEVONORGESTREL", "LEVOTIROXINA", "LIDOCAINA", "LINEZOLIDA", "LINOGLIPTINA", "LIPIDICA", "LISINOPRIL", "LITIO", "LOPERAMIDA", "LORATADINA", "LORAZEPAM", "LOSARTANA", "LOVASTATINA", "MAGNESIO", "MANITOL", "MEBENDAZOL", "MEDROXIPROGESTERONA", 
+    "MEMANTINA", "MEROPENEM", "MESALAZINA", "METILDOPA", "METILPREDNISOLONA", "METOCLOPRAMIDA", "METOPROLOL", "METOTREXATO", "METRONIDAZOL", "MICOFENOLATO", "MIDAZOLAM", "MIRTAZAPINA", "MISOPROSTOL", "MORFINA", "MUPIROCINA", "NARATRIPTANA", "NEOMICINA", "NEOSTIGMINA", 
+    "NIFEDIPINO", "NIMESULIDA", "NIMODIPINO", "NISTATINA", "NITROFURANTOINA", "NITROGLICERINA", "NITROPRUSSIATO", "NORETISTERONA", "NORFLOXACINO", "NORTRIPTILINA", "OCTREOTIDA", "OLANZAPINA", "OLMESARTANA", "OMEPRAZOL", "ONDANSETRONA", "OXALIPLATINA", "OXCARBAZEPINA", 
+    "OXIBUTININA", "OXIGENIO", "PACLITAXEL", "PALONOSETRONA", "PANTOPRAZOL", "PARACETAMOL", "PAROXETINA", "PENICILINA", "PERICIAZINA", "PERMETRINA", "PETIDINA", "PIRAZINAMIDA", "PIRIDOSTIGMINA", "PIRIDOXINA", "POLIMIXINA", "POLIVITAMINICO", "POTASSIO", "PRAMIPEXOL", 
+    "PRAVASTATINA", "PREDNISOLONA", "PREDNISONA", "PREGABALINA", "PROMETAZINA", "PROPATILNITRATO", "PROPOFOL", "PROPRANOLOL", "PROSTIGMINA", "QUETIAPINA", "RAMIPRIL", "RANITIDINA", "RESERPINA", "RIFAMPICINA", "RISPERIDONA", "RITONAVIR", "RIVAROXABANA", "ROCURONIO", 
+    "ROSUVASTATINA", "SACARATO", "SALBUTAMOL", "SECAM", "SERTRALINA", "SEVELAMER", "SINVASTATINA", "SODIO", "SUCCINILCOLINA", "SUCRALFATO", "SULFADIAZINA", "SULFAMETOXAZOL", "SULFATO", "SULPIRIDA", "SUXAMETONIO", "TAMOXIFENO", "TANSULOSINA", "TEMOZOLAMIDA", "TEMOZOLOMIDA", 
+    "TENOXICAN", "TERBUTALINA", "TIAMINA", "TIGECICLINA", "TIOPENTAL", "TIORIDAZINA", "TOBRAMICINA", "TOPIRAMATO", "TRAMADOL", "TRAVOPROSTA", "TRIMETOPRIMA", "TROMETAMOL", "TROPICAMIDA", "VALSARTANA", "VANCOMICINA", "VARFARINA", "VASELINA"
 ]
 
-CONTEXTO_SAUDE = [r"HOSPITALAR", r"DIETA", r"MEDICAMENTO", r"SAUDE", r"CLINICA", r"PACIENTE"]
+CONTEXTO_SAUDE = ["HOSPITALAR", "DIETA", "MEDICAMENTO", "SAUDE", "CLINICA", "PACIENTE"]
 
+# Cache de normalização para evitar retrabalho no processador
 CACHE_NORM = {}
 def normalize(t): 
     if not t: return ""
@@ -82,44 +55,10 @@ def normalize(t):
         CACHE_NORM[t] = ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
     return CACHE_NORM[t]
 
-def busca_flexivel(lista_regex, texto):
-    for padrao in lista_regex:
-        if re.search(rf"\b{padrao}\b", texto):
-            return True
-    return False
-
-# --- CARREGAMENTO DAS REGRAS DO CSV ---
-REGRAS_CONTEXTUAIS = []
-if os.path.exists(ARQ_REGRAS_CSV):
-    try:
-        with open(ARQ_REGRAS_CSV, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f, delimiter=',')
-            for row in reader:
-                pc = normalize(row.get('palavra_chave', ''))
-                if not pc: continue
-                af = [normalize(x.strip()) for x in row.get('afirmacao', '').split(';') if x.strip()]
-                neg = [normalize(x.strip()) for x in row.get('negacao', '').split(';') if x.strip()]
-                REGRAS_CONTEXTUAIS.append({'pc': pc, 'af': af, 'neg': neg})
-    except Exception as e: pass
-
-def avalia_regras_contextuais(texto):
-    if not REGRAS_CONTEXTUAIS: return False
-    for regra in REGRAS_CONTEXTUAIS:
-        if re.search(rf"\b{regra['pc']}\b", texto):
-            passou_afirmacao = True
-            if regra['af']: passou_afirmacao = any(re.search(rf"\b{a}\b", texto) for a in regra['af'])
-            
-            if passou_afirmacao:
-                passou_negacao = True
-                if regra['neg']: 
-                    if any(re.search(rf"\b{n}\b", texto) for n in regra['neg']): passou_negacao = False
-                if passou_negacao: return True
-    return False
-
 def inferir_beneficio(desc_norm, benef_atual):
     if benef_atual in [1, 2, 3]: return benef_atual
-    if busca_flexivel([r"EXCLUSIVA ME", r"EXCLUSIVO ME", r"COTA EXCLUSIVA", r"SOMENTE ME", r"EXCLUSIVIDADE ME", r"ME/EPP"], desc_norm): return 1
-    if busca_flexivel([r"COTA RESERVADA", r"RESERVADA ME", r"RESERVADA PARA ME"], desc_norm): return 3
+    if any(x in desc_norm for x in ["EXCLUSIVA ME", "EXCLUSIVO ME", "COTA EXCLUSIVA", "SOMENTE ME", "EXCLUSIVIDADE ME", "ME/EPP"]): return 1
+    if any(x in desc_norm for x in ["COTA RESERVADA", "RESERVADA ME", "RESERVADA PARA ME"]): return 3
     return benef_atual
 
 CATALOGO = set()
@@ -134,23 +73,20 @@ if os.path.exists(ARQ_CATALOGO):
 
 def analisar_pertinencia(obj_norm, uf, itens_brutos):
     if uf in ESTADOS_BLOQUEADOS: return False
-    if busca_flexivel(VETOS_IMEDIATOS, obj_norm): return False
-    
-    if busca_flexivel([r"MEDICINA", r"MEDICO"], obj_norm):
-        if busca_flexivel([r"GASE(S)?"], obj_norm) and not busca_flexivel(TERMOS_SALVAMENTO, obj_norm): return False
-        
-    if busca_flexivel([r"FORMULA", r"LEITE"], obj_norm):
-        if not busca_flexivel(CONTEXTO_SAUDE, obj_norm): return False
-        
-    if uf in NE_ESTADOS and busca_flexivel(TERMOS_NE_MMH_NUTRI, obj_norm): return True
-    if busca_flexivel(TERMOS_SALVAMENTO, obj_norm): return True
-    if avalia_regras_contextuais(obj_norm): return True
-    
+    for veto in VETOS_IMEDIATOS:
+        if veto in obj_norm: return False
+    if "MEDICINA" in obj_norm or "MEDICO" in obj_norm:
+        if "GASES" in obj_norm and not any(s in obj_norm for s in TERMOS_SALVAMENTO): return False
+    if "FORMULA" in obj_norm or "LEITE" in obj_norm:
+        if not any(ctx in obj_norm for ctx in CONTEXTO_SAUDE): return False
+    if uf in NE_ESTADOS and any(t in obj_norm for t in TERMOS_NE_MMH_NUTRI): return True
+    if any(t in obj_norm for t in TERMOS_SALVAMENTO): return True
     if CATALOGO:
         for it in itens_brutos:
             if any(prod in normalize(it.get('d', '')) for prod in CATALOGO): return True
     return False
 
+# --- FUNÇÃO ISOLADA PARA PROCESSAMENTO PARALELO ---
 def processar_licitacao_limpeza(p):
     try:
         dt_str = p.get('dt_enc', '')
@@ -193,27 +129,25 @@ def processar_licitacao_limpeza(p):
     chave = f"{p.get('id', '')[:14]}_{p.get('edit', '')}"
     return (chave, card, dt_obj, len(itens_fmt))
 
+# --- EXECUÇÃO PRINCIPAL ---
 if __name__ == '__main__':
     if not os.path.exists(ARQDADOS): exit()
 
     print("Descompactando base bruta...")
     with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f: 
         banco_bruto = json.load(f)
-        
-    # --- VARIÁVEIS DE ESTATÍSTICA ---
-    total_editais_brutos = len(banco_bruto)
-    total_itens_brutos = sum(len(p.get('itens', [])) for p in banco_bruto)
-    editais_filtrados = 0
 
     banco_deduplicado = {}
-    print(f"Processando {total_editais_brutos} licitações com Regex e CSV Contextual...")
+
+    print(f"Processando {len(banco_bruto)} licitações com processamento paralelo...")
     
+    # Utilizando ThreadPool para acelerar o processamento (15 trabalhadores igual o app.py)
     with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
         resultados = executor.map(processar_licitacao_limpeza, banco_bruto)
 
+    # Coleta e desempate (Deduplicação)
     for res in resultados:
         if res is None: continue
-        editais_filtrados += 1
         chave, card, dt_novo, qtd_itens_novo = res
         
         if chave not in banco_deduplicado:
@@ -231,25 +165,5 @@ if __name__ == '__main__':
     
     with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f: 
         json.dump(web_data, f, ensure_ascii=False)
-        
-    # --- CÁLCULO FINAL DE ESTATÍSTICAS ---
-    total_editais_limpos = len(banco_deduplicado)
-    total_itens_limpos = sum(v['qtd'] for v in banco_deduplicado.values())
     
-    removidos_pelos_filtros = total_editais_brutos - editais_filtrados
-    removidos_por_duplicidade = editais_filtrados - total_editais_limpos
-    itens_descartados = total_itens_brutos - total_itens_limpos
-
-    print("\n" + "="*50)
-    print("📊 RESUMO GERAL DA OPERAÇÃO DE LIMPEZA")
-    print("="*50)
-    print(f"📥 EDITAIS BRUTOS AVALIADOS: {total_editais_brutos}")
-    print(f"📦 ITENS BRUTOS AVALIADOS:   {total_itens_brutos}")
-    print("-" * 50)
-    print(f"🚫 EDITAIS VETADOS:          {removidos_pelos_filtros} (Filtros, Datas ou UF)")
-    print(f"✂️ EDITAIS MESCLADOS:        {removidos_por_duplicidade} (Deduplicação de Versões)")
-    print(f"🗑️ ITENS DESCARTADOS:        {itens_descartados}")
-    print("-" * 50)
-    print(f"✅ EDITAIS FINAIS:           {total_editais_limpos}")
-    print(f"🎯 ITENS FINAIS:             {total_itens_limpos}")
-    print("="*50)
+    print("Limpeza concluída com sucesso!")
