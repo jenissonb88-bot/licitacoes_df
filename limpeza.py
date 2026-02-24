@@ -3,12 +3,12 @@ from datetime import datetime
 import concurrent.futures
 
 ARQDADOS, ARQLIMPO, ARQ_CATALOGO = 'dadosoportunidades.json.gz', 'pregacoes_pharma_limpos.json.gz', 'Exportar Dados.csv'
+ARQ_REGRAS_CSV = 'regras_materiais.csv'
 DATA_CORTE_2026 = datetime(2026, 1, 1)
 
 NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
 ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
 
-# Listas blindadas com Regex (S)?
 VETOS_IMEDIATOS = [
     r"PRESTACAO DE SERVICO", r"SERVICO ESPECIALIZADO", r"LOCACAO", r"INSTALACAO", 
     r"MANUTENCAO PREDIAL", r"MANUTENCAO DE EQUIPAMENTO(S)?", r"MANUTENCAO PREVENTIVA", r"MANUTENCAO CORRETIVA",
@@ -17,15 +17,11 @@ VETOS_IMEDIATOS = [
 ]
 
 TERMOS_NE_MMH_NUTRI = [
-    r"MATERI(AL|AIS)[\s\-]*MEDIC(O|A)?(S)?", 
-    r"INSUMO(S)? HOSPITALAR(ES)?", 
-    r"MMH", r"SERINGA(S)?", r"AGULHA(S)?", r"GAZE(S)?", 
-    r"ATADURA(S)?", r"SONDA(S)?", r"CATETER(ES)?", r"EQUIPO(S)?", 
-    r"LUVA(S)?", r"MASCARA(S)?", 
+    r"INSUMO(S)? HOSPITALAR(ES)?", r"MMH", r"SERINGA(S)?", r"SONDA(S)?", r"CATETER(ES)?", 
     r"NUTRICAO ENTERAL", r"FORMULA INFANTIL", r"SUPLEMENTO", r"DIETA", r"NUTRICAO CLINICA",
-    r"MEDIC(O|A)?(S)?[\s\-]*HOSPITALAR(ES)?", 
-    r"LABORATORI(O|AL|AIS)", r"PRODUTO(S)? PARA SAUDE", 
-    r"ANTISSEPTIC(O|A)?(S)?", r"CLOREXIDINA", r"PVPI"
+    r"MEDIC(O|A)?(S)?[\s\-]*HOSPITALAR(ES)?", r"LABORATORI(O|AL|AIS)", r"PRODUTO(S)? PARA SAUDE", 
+    r"ANTISSEPTIC(O|A)?(S)?", r"CLOREXIDINA", r"PVPI",
+    r"CURATIVO(S)?", r"COBERTURA(S)? (ESPECIAL|ESPECIAIS|PARA LESO(AO|ES)|ESTERIL)"
 ]
 
 TERMOS_SALVAMENTO = [
@@ -49,7 +45,7 @@ TERMOS_SALVAMENTO = [
     r"DONEPEZILA", r"DOPAMINA", r"DOXAZOSINA", r"DOXICICLINA", r"DROPERIDOL", r"DULAGLUTIDA", r"DULOXETINA", r"DUTASTERIDA", 
     r"ECONAZOL", r"EMULSAO", r"ENALAPRIL", r"ENOXAPARINA", r"ENTACAPONA", r"EPINEFRINA", r"ERITROMICINA", r"ESCITALOPRAM", 
     r"ESOMEPRAZOL", r"ESPIRONOLACTONA", r"ESTRADIOL", r"ESTRIOL", r"ESTROGENIOS", r"ETANERCEPTE", r"ETILEFRINA", r"ETOMIDATO", 
-    r"ETOPOSIDEO", r"EZETIMIBA", r"FAMOTIDINA", r"FENITOINA", r"FENOBARBITAL", r"FENOTEROL", r"FENTANILA", r"FERRO", 
+    r"ETOPOSIDEO", r"EZETIMIBA", r"FAMOTIDINA", r"FENITOINA", r"FENOBARBITAL", r"FENOTEROL", r"FENTANILA", r"FERRO(SO|SA)?(S)?", 
     r"FIBRINOGENIO", r"FILGRASTIM", r"FINASTERIDA", r"FITOMENADIONA", r"FLUCONAZOL", r"FLUDROCORTISONA", r"FLUMAZENIL", 
     r"FLUNARIZINA", r"FLUOXETINA", r"FLUTICASONA", r"FOLATO", r"FONDAPARINUX", r"FORMOTEROL", r"FOSFATO", r"FUROSEMIDA", 
     r"GABAPENTINA", r"GANCICLOVIR", r"GELADEIRA", r"GENCITABINA", r"GENTAMICINA", r"GLIBENCLAMIDA", r"GLICEROL", r"GLICLAZIDA", 
@@ -86,11 +82,38 @@ def normalize(t):
         CACHE_NORM[t] = ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
     return CACHE_NORM[t]
 
-# Motor Inteligente de Busca 
 def busca_flexivel(lista_regex, texto):
     for padrao in lista_regex:
-        if re.search(padrao, texto):
+        if re.search(rf"\b{padrao}\b", texto):
             return True
+    return False
+
+# --- CARREGAMENTO DAS REGRAS DO CSV ---
+REGRAS_CONTEXTUAIS = []
+if os.path.exists(ARQ_REGRAS_CSV):
+    try:
+        with open(ARQ_REGRAS_CSV, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f, delimiter=',')
+            for row in reader:
+                pc = normalize(row.get('palavra_chave', ''))
+                if not pc: continue
+                af = [normalize(x.strip()) for x in row.get('afirmacao', '').split(';') if x.strip()]
+                neg = [normalize(x.strip()) for x in row.get('negacao', '').split(';') if x.strip()]
+                REGRAS_CONTEXTUAIS.append({'pc': pc, 'af': af, 'neg': neg})
+    except Exception as e: pass
+
+def avalia_regras_contextuais(texto):
+    if not REGRAS_CONTEXTUAIS: return False
+    for regra in REGRAS_CONTEXTUAIS:
+        if re.search(rf"\b{regra['pc']}\b", texto):
+            passou_afirmacao = True
+            if regra['af']: passou_afirmacao = any(re.search(rf"\b{a}\b", texto) for a in regra['af'])
+            
+            if passou_afirmacao:
+                passou_negacao = True
+                if regra['neg']: 
+                    if any(re.search(rf"\b{n}\b", texto) for n in regra['neg']): passou_negacao = False
+                if passou_negacao: return True
     return False
 
 def inferir_beneficio(desc_norm, benef_atual):
@@ -121,10 +144,10 @@ def analisar_pertinencia(obj_norm, uf, itens_brutos):
         
     if uf in NE_ESTADOS and busca_flexivel(TERMOS_NE_MMH_NUTRI, obj_norm): return True
     if busca_flexivel(TERMOS_SALVAMENTO, obj_norm): return True
+    if avalia_regras_contextuais(obj_norm): return True
     
     if CATALOGO:
         for it in itens_brutos:
-            # Para o catálogo usamos busca exata de substring por questões de velocidade
             if any(prod in normalize(it.get('d', '')) for prod in CATALOGO): return True
     return False
 
@@ -176,15 +199,21 @@ if __name__ == '__main__':
     print("Descompactando base bruta...")
     with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f: 
         banco_bruto = json.load(f)
+        
+    # --- VARIÁVEIS DE ESTATÍSTICA ---
+    total_editais_brutos = len(banco_bruto)
+    total_itens_brutos = sum(len(p.get('itens', [])) for p in banco_bruto)
+    editais_filtrados = 0
 
     banco_deduplicado = {}
-    print(f"Processando {len(banco_bruto)} licitações com Regex Flexível...")
+    print(f"Processando {total_editais_brutos} licitações com Regex e CSV Contextual...")
     
     with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
         resultados = executor.map(processar_licitacao_limpeza, banco_bruto)
 
     for res in resultados:
         if res is None: continue
+        editais_filtrados += 1
         chave, card, dt_novo, qtd_itens_novo = res
         
         if chave not in banco_deduplicado:
@@ -202,5 +231,25 @@ if __name__ == '__main__':
     
     with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f: 
         json.dump(web_data, f, ensure_ascii=False)
+        
+    # --- CÁLCULO FINAL DE ESTATÍSTICAS ---
+    total_editais_limpos = len(banco_deduplicado)
+    total_itens_limpos = sum(v['qtd'] for v in banco_deduplicado.values())
     
-    print("Limpeza concluída com sucesso!")
+    removidos_pelos_filtros = total_editais_brutos - editais_filtrados
+    removidos_por_duplicidade = editais_filtrados - total_editais_limpos
+    itens_descartados = total_itens_brutos - total_itens_limpos
+
+    print("\n" + "="*50)
+    print("📊 RESUMO GERAL DA OPERAÇÃO DE LIMPEZA")
+    print("="*50)
+    print(f"📥 EDITAIS BRUTOS AVALIADOS: {total_editais_brutos}")
+    print(f"📦 ITENS BRUTOS AVALIADOS:   {total_itens_brutos}")
+    print("-" * 50)
+    print(f"🚫 EDITAIS VETADOS:          {removidos_pelos_filtros} (Filtros, Datas ou UF)")
+    print(f"✂️ EDITAIS MESCLADOS:        {removidos_por_duplicidade} (Deduplicação de Versões)")
+    print(f"🗑️ ITENS DESCARTADOS:        {itens_descartados}")
+    print("-" * 50)
+    print(f"✅ EDITAIS FINAIS:           {total_editais_limpos}")
+    print(f"🎯 ITENS FINAIS:             {total_itens_limpos}")
+    print("="*50)
