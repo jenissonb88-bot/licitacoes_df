@@ -5,8 +5,11 @@ import concurrent.futures
 ARQDADOS, ARQLIMPO, ARQ_CATALOGO = 'dadosoportunidades.json.gz', 'pregacoes_pharma_limpos.json.gz', 'Exportar Dados.csv'
 DATA_CORTE_2026 = datetime(2026, 1, 1)
 
+# --- GEOGRAFIA E MAPAS ---
 NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
 ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
+# Roteamento estrito para MMH e Dietas (inclui tolerância API/Órgãos Federais no DF)
+UFS_PERMITIDAS_MMH = NE_ESTADOS + ['DF', ''] 
 
 # CORRIGIDO: O termo genérico "MANUTENCAO" foi substituído por termos específicos
 VETOS_IMEDIATOS = [
@@ -75,18 +78,33 @@ if os.path.exists(ARQ_CATALOGO):
     except: pass
 
 def analisar_pertinencia(obj_norm, uf, itens_brutos):
-    if uf in ESTADOS_BLOQUEADOS: return False
+    # 1. Barreira Geográfica Global (corta os 7 estados onde não atua)
+    if uf and uf in ESTADOS_BLOQUEADOS: 
+        return False
+        
+    # 2. Aplicação de Vetos de Palavras
     for veto in VETOS_IMEDIATOS:
         if veto in obj_norm: return False
+        
+    # 3. Regras de Exceção de Contexto
     if "MEDICINA" in obj_norm or "MEDICO" in obj_norm:
         if "GASES" in obj_norm and not any(s in obj_norm for s in TERMOS_SALVAMENTO): return False
     if "FORMULA" in obj_norm or "LEITE" in obj_norm:
         if not any(ctx in obj_norm for ctx in CONTEXTO_SAUDE): return False
-    if uf in NE_ESTADOS and any(t in obj_norm for t in TERMOS_NE_MMH_NUTRI): return True
-    if any(t in obj_norm for t in TERMOS_SALVAMENTO): return True
+        
+    # 4. Roteamento de MMH e Dietas (Restrito ao Nordeste, DF ou Vazio)
+    if (uf in UFS_PERMITIDAS_MMH) and any(t in obj_norm for t in TERMOS_NE_MMH_NUTRI): 
+        return True
+        
+    # 5. Roteamento de Medicamentos (Livre para os 20 estados aprovados)
+    if any(t in obj_norm for t in TERMOS_SALVAMENTO): 
+        return True
+        
+    # 6. Catálogo de Produtos Genéricos
     if CATALOGO:
         for it in itens_brutos:
             if any(prod in normalize(it.get('d', '')) for prod in CATALOGO): return True
+            
     return False
 
 # --- FUNÇÃO ISOLADA PARA PROCESSAMENTO PARALELO ---
