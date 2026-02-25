@@ -23,8 +23,8 @@ DATA_CORTE_FIXA = datetime(2025, 12, 1)
 # --- GEOGRAFIA E MAPAS ---
 NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
 ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
-# Barreira geográfica rigorosa: Apenas NE, DF (Órgãos Federais/Matrizes) ou vazio (Falha da API)
-UFS_ACEITAS = NE_ESTADOS + ['DF', ''] 
+# Limite estrito para MMH e Dietas (inclui tolerância API/Órgãos Federais no DF)
+UFS_PERMITIDAS_MMH = NE_ESTADOS + ['DF', ''] 
 
 MAPA_SITUACAO_ITEM = {1: "EM ANDAMENTO", 2: "HOMOLOGADO", 3: "CANCELADO", 4: "DESERTO", 5: "FRACASSADO"}
 MAPA_SITUACAO_GLOBAL = {1: "DIVULGADA", 2: "REVOGADA", 3: "ANULADA", 4: "SUSPENSA"}
@@ -125,8 +125,8 @@ def processar_licitacao(lic, session, forcado=False):
         dt_enc_str = lic.get('dataEncerramentoProposta') or datetime.now().isoformat()
         
         if not forcado:
-            # 1. BARREIRA GEOGRÁFICA ABSOLUTA: Corta todo o resto do Brasil imediatamente
-            if uf and uf not in UFS_ACEITAS: 
+            # 1. BARREIRA GEOGRÁFICA GLOBAL: Corta sumariamente os estados que nunca atua
+            if uf and uf in ESTADOS_BLOQUEADOS: 
                 return ('IGNORADO', None, 0, 0)
             
             # 2. BARREIRA TEMPORAL E DE VETOS
@@ -134,9 +134,14 @@ def processar_licitacao(lic, session, forcado=False):
             if dt_enc < DATA_CORTE_FIXA: return ('IGNORADO', None, 0, 0)
             if veta_edital(obj_raw, uf): return ('VETADO', None, 0, 0)
 
-            # 3. BARREIRA DE INTERESSE: Medicamentos, Materiais e Nutrição têm o mesmo peso
-            tem_interesse = any(t in obj_norm for t in WL_MEDICAMENTOS + WL_MATERIAIS_NE + WL_NUTRI_CLINICA) or \
-                            any(x in obj_norm for x in ["SAUDE", "HOSPITAL"])
+            # 3. ROTEAMENTO DE INTERESSE POR CATEGORIA E GEOGRAFIA
+            tem_med = any(t in obj_norm for t in WL_MEDICAMENTOS) or any(x in obj_norm for x in ["SAUDE", "HOSPITAL"])
+            tem_mmh_nutri = any(t in obj_norm for t in WL_MATERIAIS_NE + WL_NUTRI_CLINICA)
+
+            # Regra de Negócio Dinâmica:
+            # - Medicamentos: Passam livremente (os bloqueados já foram barrados no passo 1).
+            # - MMH/Dietas: Passam APENAS se a UF for do Nordeste, for DF, ou for vazia.
+            tem_interesse = tem_med or (tem_mmh_nutri and (uf in UFS_PERMITIDAS_MMH))
 
             if not tem_interesse: return ('IGNORADO', None, 0, 0)
 
@@ -153,7 +158,6 @@ def processar_licitacao(lic, session, forcado=False):
             
             resp_json = r_itens.json()
             
-            # Correção para lidar com a variação na estrutura de dados da API do PNCP
             if isinstance(resp_json, dict):
                 itens_raw = resp_json.get('data', [])
             elif isinstance(resp_json, list):
@@ -188,9 +192,6 @@ def processar_licitacao(lic, session, forcado=False):
             pagina_atual += 1
 
         if not itens_brutos: return ('IGNORADO', None, 0, 0)
-        
-        # A antiga barreira complexa e vulnerável que ficava aqui no final foi removida!
-        # Agora o robô confia no "funil" que estruturamos no topo do código.
 
         dados_finais = {
             'id': f"{cnpj}{ano}{seq}", 'dt_enc': dt_enc_str, 'uf': uf, 
