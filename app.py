@@ -22,7 +22,9 @@ DATA_CORTE_FIXA = datetime(2025, 12, 1)
 
 # --- GEOGRAFIA E MAPAS ---
 NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
-ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR'] 
+ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
+# Barreira geográfica rigorosa: Apenas NE, DF (Órgãos Federais/Matrizes) ou vazio (Falha da API)
+UFS_ACEITAS = NE_ESTADOS + ['DF', ''] 
 
 MAPA_SITUACAO_ITEM = {1: "EM ANDAMENTO", 2: "HOMOLOGADO", 3: "CANCELADO", 4: "DESERTO", 5: "FRACASSADO"}
 MAPA_SITUACAO_GLOBAL = {1: "DIVULGADA", 2: "REVOGADA", 3: "ANULADA", 4: "SUSPENSA"}
@@ -123,13 +125,17 @@ def processar_licitacao(lic, session, forcado=False):
         dt_enc_str = lic.get('dataEncerramentoProposta') or datetime.now().isoformat()
         
         if not forcado:
-            if uf in ESTADOS_BLOQUEADOS: return ('VETADO', None, 0, 0)
+            # 1. BARREIRA GEOGRÁFICA ABSOLUTA: Corta todo o resto do Brasil imediatamente
+            if uf and uf not in UFS_ACEITAS: 
+                return ('IGNORADO', None, 0, 0)
+            
+            # 2. BARREIRA TEMPORAL E DE VETOS
             dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
             if dt_enc < DATA_CORTE_FIXA: return ('IGNORADO', None, 0, 0)
             if veta_edital(obj_raw, uf): return ('VETADO', None, 0, 0)
 
-            tem_interesse = any(t in obj_norm for t in WL_MEDICAMENTOS) or \
-                            (uf in NE_ESTADOS and any(t in obj_norm for t in WL_MATERIAIS_NE + WL_NUTRI_CLINICA)) or \
+            # 3. BARREIRA DE INTERESSE: Medicamentos, Materiais e Nutrição têm o mesmo peso
+            tem_interesse = any(t in obj_norm for t in WL_MEDICAMENTOS + WL_MATERIAIS_NE + WL_NUTRI_CLINICA) or \
                             any(x in obj_norm for x in ["SAUDE", "HOSPITAL"])
 
             if not tem_interesse: return ('IGNORADO', None, 0, 0)
@@ -147,14 +153,13 @@ def processar_licitacao(lic, session, forcado=False):
             
             resp_json = r_itens.json()
             
-            # --- CORREÇÃO DO BUG DA API (Dict vs List) ---
+            # Correção para lidar com a variação na estrutura de dados da API do PNCP
             if isinstance(resp_json, dict):
                 itens_raw = resp_json.get('data', [])
             elif isinstance(resp_json, list):
                 itens_raw = resp_json
             else:
                 break
-            # ----------------------------------------------
 
             if not itens_raw: break
 
@@ -184,8 +189,8 @@ def processar_licitacao(lic, session, forcado=False):
 
         if not itens_brutos: return ('IGNORADO', None, 0, 0)
         
-        if not forcado and uf not in NE_ESTADOS and not tem_item_catalogo and not any(m in obj_norm for m in WL_MEDICAMENTOS):
-            return ('IGNORADO', None, 0, 0)
+        # A antiga barreira complexa e vulnerável que ficava aqui no final foi removida!
+        # Agora o robô confia no "funil" que estruturamos no topo do código.
 
         dados_finais = {
             'id': f"{cnpj}{ano}{seq}", 'dt_enc': dt_enc_str, 'uf': uf, 
@@ -254,10 +259,8 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                     st, d, i, h = f.result()
                     
                     if st == 'CAPTURADO' and d:
-                        # --- CORREÇÃO DO BUG DE MEMÓRIA (KEYERROR) ---
                         s_pag['capturados'] += 1
                         s_pag['itens'] += i
-                        # ---------------------------------------------
                         banco[f"{d['id'][:14]}_{d['edit']}"] = d
                         
                     elif st == 'VETADO': s_pag['vetados'] += 1
