@@ -125,7 +125,7 @@ def processar_licitacao(lic, session, forcado=False):
         dt_enc_str = lic.get('dataEncerramentoProposta') or datetime.now().isoformat()
         
         if not forcado:
-            # 1. BARREIRA GEOGRÁFICA GLOBAL: Corta sumariamente os estados que nunca atua
+            # 1. BARREIRA GEOGRÁFICA GERAL: Bloqueia sumariamente estados que a empresa não atende nunca
             if uf and uf in ESTADOS_BLOQUEADOS: 
                 return ('IGNORADO', None, 0, 0)
             
@@ -134,14 +134,26 @@ def processar_licitacao(lic, session, forcado=False):
             if dt_enc < DATA_CORTE_FIXA: return ('IGNORADO', None, 0, 0)
             if veta_edital(obj_raw, uf): return ('VETADO', None, 0, 0)
 
-            # 3. ROTEAMENTO DE INTERESSE POR CATEGORIA E GEOGRAFIA
-            tem_med = any(t in obj_norm for t in WL_MEDICAMENTOS) or any(x in obj_norm for x in ["SAUDE", "HOSPITAL"])
+            # 3. ROTEAMENTO DE INTERESSE POR CATEGORIA E GEOGRAFIA (Regra Soberana)
+            tem_med = any(t in obj_norm for t in WL_MEDICAMENTOS)
             tem_mmh_nutri = any(t in obj_norm for t in WL_MATERIAIS_NE + WL_NUTRI_CLINICA)
+            
+            # Termos ambíguos que soam como saúde mas não são especificamente "medicamento"
+            tem_termo_amplo = any(x in obj_norm for x in ["SAUDE", "HOSPITAL"])
 
-            # Regra de Negócio Dinâmica:
-            # - Medicamentos: Passam livremente (os bloqueados já foram barrados no passo 1).
-            # - MMH/Dietas: Passam APENAS se a UF for do Nordeste, for DF, ou for vazia.
-            tem_interesse = tem_med or (tem_mmh_nutri and (uf in UFS_PERMITIDAS_MMH))
+            # REGRAS DE PASSAGEM:
+            if tem_med:
+                # SE É MEDICAMENTO: Passaporte Livre (vai capturar em SP, RJ, MG, etc.)
+                tem_interesse = True
+            elif tem_mmh_nutri and (uf in UFS_PERMITIDAS_MMH):
+                # SE É MMH/DIETA: Só passa se estiver nas UFs permitidas (Nordeste e DF)
+                tem_interesse = True
+            elif tem_termo_amplo and (uf in UFS_PERMITIDAS_MMH):
+                # Se só menciona "HOSPITAL/SAÚDE" e não é remédio, aplicamos a trava do Nordeste
+                tem_interesse = True
+            else:
+                # Caso contrário (Ex: MMH no Rio de Janeiro, ou termo inútil), barra o processo.
+                tem_interesse = False
 
             if not tem_interesse: return ('IGNORADO', None, 0, 0)
 
