@@ -1,8 +1,14 @@
 name: Sniper Pharma (Captura)
 
+# TRAVA DE SEGURANÇA: Impede que o Captura e o Auditor rodem simultaneamente
+# O nome do grupo deve ser idêntico em ambos os ficheiros .yml
+concurrency:
+  group: banco-dados-pharma
+  cancel-in-progress: false
+
 on:
   schedule:
-    - cron: '0 9 * * *'  
+    - cron: '0 9 * * *'  # Execução diária às 09:00 UTC
   workflow_dispatch:
     inputs:
       mode:
@@ -43,10 +49,12 @@ jobs:
         export TZ="America/Sao_Paulo"
         TODAY=$(date +'%Y-%m-%d')
         if [ "${{ github.event_name }}" == "schedule" ]; then
-            echo "START_DATE=$(date -d '2 days ago' +'%Y-%m-%d')" >> $GITHUB_ENV
+            # Varredura automática: recua 6 dias para compensar atrasos do PNCP
+            echo "START_DATE=$(date -d '6 days ago' +'%Y-%m-%d')" >> $GITHUB_ENV
             echo "END_DATE=$TODAY" >> $GITHUB_ENV
             echo "MODE=single_run" >> $GITHUB_ENV
         else
+            # Execução manual via interface
             echo "START_DATE=${{ inputs.target_date }}" >> $GITHUB_ENV
             echo "END_DATE=${{ inputs.target_date }}" >> $GITHUB_ENV
             echo "MODE=${{ inputs.mode }}" >> $GITHUB_ENV
@@ -58,7 +66,7 @@ jobs:
     - name: 🧹 2. Run Data Cleaner (limpeza.py)
       run: python limpeza.py
 
-    - name: 💾 Commit Extracao
+    - name: 💾 Commit Extracao e Limpeza
       run: |
         git config user.name "Sniper Pharma Bot"
         git config user.email "sniper@pharma.bot"
