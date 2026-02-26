@@ -125,7 +125,7 @@ def processar_licitacao(lic, session, forcado=False):
         dt_enc_str = lic.get('dataEncerramentoProposta') or datetime.now().isoformat()
         
         if not forcado:
-            # 1. BARREIRA GEOGRÁFICA GERAL: Bloqueia sumariamente estados que a empresa não atende nunca
+            # 1. BARREIRA GEOGRÁFICA GERAL
             if uf and uf in ESTADOS_BLOQUEADOS: 
                 return ('IGNORADO', None, 0, 0)
             
@@ -137,22 +137,16 @@ def processar_licitacao(lic, session, forcado=False):
             # 3. ROTEAMENTO DE INTERESSE POR CATEGORIA E GEOGRAFIA (Regra Soberana)
             tem_med = any(t in obj_norm for t in WL_MEDICAMENTOS)
             tem_mmh_nutri = any(t in obj_norm for t in WL_MATERIAIS_NE + WL_NUTRI_CLINICA)
-            
-            # Termos ambíguos que soam como saúde mas não são especificamente "medicamento"
             tem_termo_amplo = any(x in obj_norm for x in ["SAUDE", "HOSPITAL"])
 
             # REGRAS DE PASSAGEM:
             if tem_med:
-                # SE É MEDICAMENTO: Passaporte Livre (vai capturar em SP, RJ, MG, etc.)
                 tem_interesse = True
             elif tem_mmh_nutri and (uf in UFS_PERMITIDAS_MMH):
-                # SE É MMH/DIETA: Só passa se estiver nas UFs permitidas (Nordeste e DF)
                 tem_interesse = True
             elif tem_termo_amplo and (uf in UFS_PERMITIDAS_MMH):
-                # Se só menciona "HOSPITAL/SAÚDE" e não é remédio, aplicamos a trava do Nordeste
                 tem_interesse = True
             else:
-                # Caso contrário (Ex: MMH no Rio de Janeiro, ou termo inútil), barra o processo.
                 tem_interesse = False
 
             if not tem_interesse: return ('IGNORADO', None, 0, 0)
@@ -223,7 +217,7 @@ def processar_licitacao(lic, session, forcado=False):
 
 def processar_inclusoes_manuais(session, banco):
     if not os.path.exists(ARQ_MANUAL): return
-    print("\n⚙️ Processando Inclusões Manuais...")
+    print("\n⚙️ Processando Inclusões Manuais (Modo Anti-Bug PNCP)...")
     try:
         with open(ARQ_MANUAL, 'r', encoding='utf-8') as f: links = f.read().splitlines()
         padrao = re.compile(r'/editais/(\d+)/(\d+)/(\d+)')
@@ -231,15 +225,35 @@ def processar_inclusoes_manuais(session, banco):
             match = padrao.search(link)
             if match:
                 cnpj, ano, seq = match.groups()
-                r = session.get(f'https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}')
-                if r.status_code == 200:
-                    st, d, i, h = processar_licitacao(r.json(), session, forcado=True)
-                    if st == 'CAPTURADO' and d:
-                        chave_negocio = f"{d['id'][:14]}_{d['edit']}"
-                        banco[chave_negocio] = d
-                        print(f"   ✅ Captura Manual Sucesso: {cnpj}/{ano}/{seq}")
-                    elif st == 'ERRO':
-                        print(f"   ❌ Falha Manual em {cnpj}/{ano}/{seq}: {d['msg']}")
+                print(f"   Buscando bypass para: {cnpj}/{ano}/{seq}")
+                
+                # ESTRATÉGIA BYPASS: Procuramos na API de pesquisa ao invés da raiz direta quebrada (Erro 301)
+                url_busca = 'https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao'
+                encontrado = False
+                
+                # Vamos buscar nos 30 dias passados para achar a data de publicação original da capa
+                for i in range(30):
+                    dia_retro = (date.today() - timedelta(days=i)).strftime('%Y%m%d')
+                    r_busca = session.get(url_busca, params={'dataInicial': dia_retro, 'dataFinal': dia_retro, 'cnpjOrgao': cnpj}, timeout=15)
+                    
+                    if r_busca.status_code == 200:
+                        resultados = r_busca.json().get('data', [])
+                        # Filtra exatamente o edital desejado na lista
+                        lic_alvo = next((l for l in resultados if str(l.get('sequencialCompra')) == str(seq) and str(l.get('anoCompra')) == str(ano)), None)
+                        
+                        if lic_alvo:
+                            st, d, i_qtd, h = processar_licitacao(lic_alvo, session, forcado=True)
+                            if st == 'CAPTURADO' and d:
+                                chave_negocio = f"{d['id'][:14]}_{d['edit']}"
+                                banco[chave_negocio] = d
+                                print(f"   ✅ Captura Manual SUCESSO via Bypass: {cnpj}/{ano}/{seq} - {i_qtd} itens capturados.")
+                            elif st == 'ERRO':
+                                print(f"   ❌ Falha Manual em {cnpj}/{ano}/{seq}: {d.get('msg')}")
+                            encontrado = True
+                            break # Achou, para o loop de dias
+                if not encontrado:
+                    print(f"   ⚠️ Edital {cnpj}/{ano}/{seq} não encontrado no histórico de busca do PNCP (Bug severo de integração governamental).")
+                    
         open(ARQ_MANUAL, 'w').close() 
     except Exception as e: print(f"Erro Inclusão Manual: {e}")
 
@@ -269,11 +283,11 @@ def buscar_periodo(session, banco, d_ini, d_fim):
             with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
                 futuros = [exe.submit(processar_licitacao, l, session) for l in lics]
                 for f in concurrent.futures.as_completed(futuros):
-                    st, d, i, h = f.result()
+                    st, d, i_qtd, h = f.result()
                     
                     if st == 'CAPTURADO' and d:
                         s_pag['capturados'] += 1
-                        s_pag['itens'] += i
+                        s_pag['itens'] += i_qtd
                         banco[f"{d['id'][:14]}_{d['edit']}"] = d
                         
                     elif st == 'VETADO': s_pag['vetados'] += 1
@@ -304,7 +318,10 @@ if __name__ == '__main__':
         parser = argparse.ArgumentParser()
         parser.add_argument('--start', type=str); parser.add_argument('--end', type=str)
         args = parser.parse_args()
-        dt_start = datetime.strptime(args.start, '%Y-%m-%d').date() if args.start else date.today() - timedelta(days=2)
+        
+        # Estratégia A: Ampliada a janela de 2 para 6 dias na varredura automatizada 
+        # para compensar o atraso da inserção de itens pelo Governo.
+        dt_start = datetime.strptime(args.start, '%Y-%m-%d').date() if args.start else date.today() - timedelta(days=6)
         dt_end = datetime.strptime(args.end, '%Y-%m-%d').date() if args.end else date.today()
         
         session = criar_sessao()
