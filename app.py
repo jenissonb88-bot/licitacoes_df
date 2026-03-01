@@ -319,9 +319,10 @@ if __name__ == '__main__':
         parser.add_argument('--start', type=str); parser.add_argument('--end', type=str)
         args = parser.parse_args()
         
-        # Estratégia A: Ampliada a janela de 2 para 6 dias na varredura automatizada 
-        # para compensar o atraso da inserção de itens pelo Governo.
-        dt_start = datetime.strptime(args.start, '%Y-%m-%d').date() if args.start else date.today() - timedelta(days=6)
+        # --- SOLUÇÃO: AMPLIAÇÃO DA JANELA TEMPORAL ---
+        # Alterado de 6 dias para 15 dias. Isso permite capturar editais que 
+        # foram publicados no PNCP bem antes do período de recepção de propostas.
+        dt_start = datetime.strptime(args.start, '%Y-%m-%d').date() if args.start else date.today() - timedelta(days=15)
         dt_end = datetime.strptime(args.end, '%Y-%m-%d').date() if args.end else date.today()
         
         session = criar_sessao()
