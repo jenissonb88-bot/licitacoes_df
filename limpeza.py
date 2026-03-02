@@ -30,7 +30,7 @@ TERMOS_NE_MMH_NUTRI = [
 ]
 
 TERMOS_SALVAMENTO = [
-    "MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOAL", "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA", "ANTIBIOTICO"
+    "MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOLA", "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA", "ANTIBIOTICO", "AQUISICAO DE MEDICAMENTO", "SORO"
 ] # Lista reduzida para fins de performance, os vetos principais já operam acima.
 
 def normalize(t):
