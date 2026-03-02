@@ -3,409 +3,91 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sniper Pharma - Painel de Licitações</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        :root { --blue-df: #004a99; --green-df: #198754; --red-df: #dc3545; --yellow-df: #ffc107; }
-        body { background-color: #f0f2f5; font-family: 'Segoe UI', system-ui, sans-serif; color: #333; font-size: 0.92rem; }
-        
-        .header-card { 
-            background: linear-gradient(90deg, #002d5a 0%, #004a99 100%); 
-            color: white; padding: 12px 20px; border-radius: 10px 10px 0 0; font-size: 1.05rem;
-            display: flex; justify-content: space-between; align-items: center;
-        }
-        .header-bold { font-weight: 700; }
-        .badge-uf-header { background-color: #000; color: #fff; font-weight: 800; padding: 2px 8px; border-radius: 4px; margin-right: 5px; }
-
-        .benef-sim { color: var(--red-df) !important; font-weight: bold !important; }
-        .benef-nao { color: var(--green-df) !important; font-weight: bold !important; }
-
-        .badge-tipo { font-weight: 800; padding: 5px 10px; border-radius: 4px; font-size: 0.75rem; letter-spacing: 0.5px; display: inline-flex; align-items: center; }
-        .badge-amplo { background-color: var(--green-df); color: white; }
-        .badge-exclusivo { background-color: var(--red-df); color: white; }
-        .badge-parcial { background-color: var(--yellow-df); color: #212529; }
-
-        .card-licitacao { border-radius: 10px; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; overflow: hidden; }
-        .filter-box { background: white; padding: 15px; border-radius: 10px; border: 1px solid #e0e6ed; margin-bottom: 20px; }
-        .filter-label { font-size: 0.65rem; font-weight: 800; color: var(--blue-df); margin-bottom: 2px; display: block; text-transform: uppercase; }
-        
-        .table-itens { font-size: 0.82em; }
-        .val-estimado { background-color: #fffdf2; }
-        .val-homologado { background-color: #f2f7ff; }
-        
-        .header-fornecedor { background-color: #f8f9fa; color: var(--blue-df); font-weight: bold; }
-        
-        .header-status-andamento { background-color: #fff9db; font-weight: bold; color: #856404; text-align: center; }
-        .header-status-deserto { background-color: #f8d7da; font-weight: bold; color: #721c24; text-align: center; }
-        .header-status-cancelado { background-color: #e2e3e5; font-weight: bold; color: #383d41; text-align: center; }
-        
-        .pagination-container { display: flex; align-items: center; justify-content: center; gap: 15px; margin-top: 20px; padding-bottom: 40px; }
-        
-        .btn-excluir { font-size: 0.7rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 2px 8px; border-radius: 4px; cursor: pointer; }
-        .btn-excluir:hover { background: var(--red-df); border-color: var(--red-df); }
-    </style>
+    <title>COLETA PNCP | Analista de Licitações</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
-<body>
+<body class="bg-gray-50 text-gray-800">
 
-<div class="container-fluid px-4 py-3">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <div>
-            <h3 class="fw-bold mb-0" style="color: #003366;">🔭 Sniper Pharma Monitor</h3>
-            <span class="badge bg-dark" style="font-size: 0.7rem;">ANALISTA DE LICITAÇÕES | PNCP & COMPRASGOV</span>
-        </div>
-        <button class="btn btn-success fw-bold" onclick="abrirInclusaoManual()">+ Inclusão Manual (PNCP)</button>
-    </div>
-    
-    <div class="filter-box shadow-sm">
-        <div class="row g-2">
-            <div class="col-md-2">
-                <label class="filter-label">DATA ENCERRAMENTO</label>
-                <input type="date" id="filterData" class="form-control form-control-sm" onchange="filtrar()">
+    <div class="container mx-auto p-6">
+        <header class="flex justify-between items-center mb-8 border-b pb-4">
+            <h1 class="text-2xl font-bold text-blue-900"><i class="fa-solid fa-microscope mr-2"></i>COLETA PNCP - Saúde</h1>
+            <button onclick="abrirManual()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                <i class="fa-solid fa-plus mr-2"></i>Inclusão Manual
+            </button>
+        </header>
+
+        <div class="bg-white p-6 rounded-lg shadow-sm mb-6 border border-gray-200">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <input type="text" id="uf" placeholder="UF (Ex: SP)" class="border p-2 rounded">
+                <input type="text" id="cidade" placeholder="Cidade" class="border p-2 rounded">
+                <input type="text" id="orgao" placeholder="Nome do Órgão" class="border p-2 rounded">
+                <input type="text" id="edital" placeholder="Nº do Edital" class="border p-2 rounded">
             </div>
-            <div class="col-md-1">
-                <label class="filter-label">UF</label>
-                <input type="text" id="filterUF" class="form-control form-control-sm" placeholder="Ex: PE" oninput="filtrar()">
-            </div>
-            <div class="col-md-2">
-                <label class="filter-label">CIDADE</label>
-                <input type="text" id="filterCidade" class="form-control form-control-sm" placeholder="Busque a cidade..." oninput="filtrar()">
-            </div>
-            <div class="col-md-3">
-                <label class="filter-label">ÓRGÃO / CÓDIGO</label>
-                <input type="text" id="filterOrgao" class="form-control form-control-sm" placeholder="Nome ou UASG" oninput="filtrar()">
-            </div>
-            <div class="col-md-2">
-                <label class="filter-label">Nº EDITAL</label>
-                <input type="text" id="filterEdital" class="form-control form-control-sm" placeholder="00000/2026" oninput="filtrar()">
-            </div>
-            <div class="col-md-2 d-flex align-items-end">
-                <button class="btn btn-sm btn-outline-secondary w-100 fw-bold" onclick="limparFiltros()">LIMPAR FILTROS</button>
+            <div class="mt-4 flex gap-2">
+                <button onclick="buscar()" class="bg-blue-800 text-white px-6 py-2 rounded hover:bg-blue-900">Buscar</button>
+                <button onclick="limpar()" class="bg-gray-200 text-gray-700 px-6 py-2 rounded hover:bg-gray-300">Limpar</button>
             </div>
         </div>
-    </div>
 
-    <div id="monitor-content"></div>
-
-    <div class="pagination-container">
-        <button class="btn btn-sm btn-outline-primary px-3" id="prevPage">Anterior</button>
-        <span id="pageInfo" class="fw-bold px-2 small">Página 1</span>
-        <button class="btn btn-sm btn-outline-primary px-3" id="nextPage">Próxima</button>
-    </div>
-</div>
-
-<div class="modal fade" id="modalDetalhes" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
-            <div class="modal-header header-card py-2">
-                <h6 class="modal-title fw-bold" id="modalTitle">Itens da Licitação</h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body p-3" id="modalBody"></div>
-            <div class="modal-footer bg-light border-0 py-2">
-                <a id="linkPncp" href="#" target="_blank" class="btn btn-sm btn-primary px-4 fw-bold">VER NO PNCP</a>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">FECHAR</button>
-            </div>
+        <div class="bg-white rounded-lg shadow-sm overflow-hidden border border-gray-200">
+            <table class="w-full text-left border-collapse">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="p-4 border-b">Data</th>
+                        <th class="p-4 border-b">Órgão</th>
+                        <th class="p-4 border-b">Objeto</th>
+                        <th class="p-4 border-b">Fonte / Ação</th>
+                        <th class="p-4 border-b text-center">Gestão</th>
+                    </tr>
+                </thead>
+                <tbody id="resultado-corpo">
+                    </tbody>
+            </table>
         </div>
+        
+        <div id="paginacao" class="mt-4 flex justify-center gap-2"></div>
     </div>
-</div>
 
-<div class="modal fade" id="modalInclusao" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content border-0 shadow-lg">
-            <div class="modal-header bg-dark text-white py-2">
-                <h6 class="modal-title fw-bold">➕ Incluir Novo Link no Repositório</h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body p-4">
-                <div class="mb-3">
-                    <label class="filter-label">URL DA LICITAÇÃO NO PNCP</label>
-                    <input type="text" id="inputLinkPncp" class="form-control shadow-sm" placeholder="https://pncp.gov.br/app/editais/...">
-                </div>
-                <div class="mb-3">
-                    <label class="filter-label">GITHUB PERSONAL ACCESS TOKEN (PAT)</label>
-                    <input type="password" id="inputGithubToken" class="form-control shadow-sm" placeholder="ghp_xxxxxxxxxxxx">
-                    <div class="mt-1" style="font-size: 0.65rem; color: #666;">
-                        Necessário permissão 'repo' para salvar no arquivo <b>links_manuais.txt</b>.
-                    </div>
-                </div>
-                <div id="statusInclusao" class="mt-3 text-center fw-bold" style="font-size: 0.8rem;"></div>
-            </div>
-            <div class="modal-footer bg-light">
-                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-sm btn-success fw-bold px-4" onclick="processarInclusaoManual()">SALVAR NO GITHUB</button>
-            </div>
-        </div>
-    </div>
-</div>
+    <script>
+        async function buscar(pagina = 1) {
+            const res = await fetch(`/buscar?uf=${document.getElementById('uf').value}&pagina=${pagina}`);
+            const data = await res.json();
+            const corpo = document.getElementById('resultado-corpo');
+            corpo.innerHTML = '';
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-let allData = [];
-let filteredData = [];
-let currentPage = 1;
-const itemsPerPage = 20;
-
-const GITHUB_OWNER = 'jenissonb88-bot';
-const GITHUB_REPO = 'licitacoes_df';
-const GITHUB_FILE_PATH = 'links_manuais.txt';
-
-const modalObj = new bootstrap.Modal(document.getElementById('modalDetalhes'));
-const modalInclusaoObj = new bootstrap.Modal(document.getElementById('modalInclusao'));
-
-async function loadData() {
-    try {
-        const response = await fetch('pregacoes_pharma_limpos.json.gz');
-        if(!response.ok) throw new Error();
-        const ds = new DecompressionStream('gzip');
-        const decompressedStream = response.body.pipeThrough(ds);
-        const text = await new Response(decompressedStream).text();
-        
-        allData = JSON.parse(text);
-        // CORREÇÃO: dt_enc em vez de data_enc
-        allData.sort((a, b) => new Date(b.dt_enc) - new Date(a.dt_enc));
-        filteredData = [...allData];
-        renderMonitor();
-    } catch (e) { 
-        document.getElementById('monitor-content').innerHTML = '<div class="alert alert-info">Aguardando novos dados processados pelo GitHub Actions...</div>';
-    }
-}
-
-function renderMonitor() {
-    const container = document.getElementById('monitor-content');
-    container.innerHTML = '';
-    
-    const start = (currentPage - 1) * itemsPerPage;
-    const end = start + itemsPerPage;
-    const pageItems = filteredData.slice(start, end);
-
-    if (pageItems.length === 0) {
-        container.innerHTML = '<div class="text-center py-5 text-muted">Nenhuma licitação encontrada para os filtros aplicados.</div>';
-    }
-
-    pageItems.forEach(lic => {
-        const div = document.createElement('div');
-        div.className = 'card card-licitacao';
-        // CORREÇÃO: val_tot em vez de valor_estimado
-        const valorTotal = lic.val_tot > 0 
-            ? `R$ ${lic.val_tot.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` 
-            : 'Sigiloso/Não inf.';
-
-        let tipoLic = "AMPLO";
-        let cssTipo = "badge-amplo";
-        
-        if (lic.itens && lic.itens.length > 0) {
-            const todosExclusivos = lic.itens.every(it => [1, 2, 3].includes(parseInt(it.benef)));
-            const algumExclusivo = lic.itens.some(it => [1, 2, 3].includes(parseInt(it.benef)));
-            if (todosExclusivos) { tipoLic = "EXCLUSIVO"; cssTipo = "badge-exclusivo"; } 
-            else if (algumExclusivo) { tipoLic = "PARCIAL"; cssTipo = "badge-parcial"; }
+            data.dados.forEach(item => {
+                corpo.innerHTML += `
+                    <tr class="hover:bg-gray-50 border-b">
+                        <td class="p-4 text-sm">${new Date(item.data).toLocaleDateString()}</td>
+                        <td class="p-4 font-semibold text-sm">${item.orgao}</td>
+                        <td class="p-4 text-sm truncate max-w-xs">${item.objeto}</td>
+                        <td class="p-4">
+                            <div class="flex items-center gap-2">
+                                <span class="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded font-bold">${item.fonte}</span>
+                                <button onclick="verItens('${item.cnpj}', '${item.ano}', '${item.sequencial}')" class="text-blue-600 hover:underline text-sm font-medium">
+                                    <i class="fa-solid fa-list-check"></i> Detalhar Itens
+                                </button>
+                            </div>
+                        </td>
+                        <td class="p-4 text-center">
+                            <button onclick="excluir('${item.numero}')" class="text-red-500 hover:text-red-700">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
         }
 
-        let alertaGlobalHtml = '';
-        if (["REVOGADA", "ANULADA", "SUSPENSA"].includes(lic.sit_global)) {
-            alertaGlobalHtml = `<div style="color: #dc3545; font-weight: 900; font-size: 0.85rem; margin-top: 5px; text-transform: uppercase; border: 1px solid #dc3545; border-radius: 4px; padding: 2px;">⚠️ PROCESSO ${lic.sit_global}</div>`;
+        function excluir(id) {
+            if(confirm('Deseja descartar esta licitação?')) {
+                // Lógica de exclusão lógica no BD ou Array
+                buscar();
+            }
         }
 
-        // CORREÇÕES de variáveis no HTML: org, edit, cid, unid_nome, obj, dt_enc
-        div.innerHTML = `
-            <div class="header-card">
-                <div>
-                    <span class="badge-uf-header">${lic.uf}</span>
-                    <span class="header-bold">${lic.org || '---'}</span>
-                    <span class="ms-2 opacity-75 small">| Edital: ${lic.edit}</span>
-                </div>
-                <button class="btn-excluir" onclick="excluirLicitacao('${lic.id}')">Excluir</button>
-            </div>
-            <div class="card-body py-3">
-                <div class="row align-items-center">
-                    <div class="col-md-8 border-end">
-                        <small class="text-muted d-block mb-1">${lic.cid || '---'} - ${lic.unid_nome || '---'}</small>
-                        <h6 class="fw-bold mb-2">${lic.obj || 'Sem descrição'}</h6>
-                        <div class="d-flex gap-2 mt-2">
-                            <span class="badge bg-secondary d-flex align-items-center">UASG/Código: ${lic.uasg}</span>
-                            <span class="badge bg-info text-dark d-flex align-items-center">Vencimento: ${new Date(lic.dt_enc).toLocaleString('pt-BR')}</span>
-                            <span class="badge-tipo ${cssTipo}">${tipoLic}</span>
-                        </div>
-                    </div>
-                    <div class="col-md-4 text-center">
-                        <small class="text-muted">VALOR ESTIMADO TOTAL</small>
-                        <h5 class="fw-bold text-primary mb-0">${valorTotal}</h5>
-                        ${alertaGlobalHtml}
-                        <div class="mt-3">
-                            <button class="btn btn-sm btn-primary px-4 fw-bold" onclick="abrirItens('${lic.id}')">DETALHAR ${lic.itens.length} ITENS</button>
-                        </div>
-                    </div>
-                </div>
-            </div>`;
-        container.appendChild(div);
-    });
-
-    const totalPages = Math.ceil(filteredData.length / itemsPerPage) || 1;
-    document.getElementById('pageInfo').innerText = `Página ${currentPage} de ${totalPages}`;
-}
-
-function filtrar() {
-    const dataEnc = document.getElementById('filterData').value;
-    const uf = document.getElementById('filterUF').value.toUpperCase();
-    const cid = document.getElementById('filterCidade').value.toUpperCase();
-    const org = document.getElementById('filterOrgao').value.toUpperCase();
-    const edt = document.getElementById('filterEdital').value.toUpperCase();
-
-    filteredData = allData.filter(lic => {
-        // CORREÇÕES de variáveis no filtro
-        const dataLic = lic.dt_enc.split('T')[0];
-        return (!dataEnc || dataLic === dataEnc) &&
-               (!uf || lic.uf.includes(uf)) &&
-               (!cid || (lic.cid || "").toUpperCase().includes(cid)) &&
-               (!org || (lic.org || "").toUpperCase().includes(org) || (lic.uasg||"").includes(org)) &&
-               (!edt || (lic.edit || "").includes(edt));
-    });
-    currentPage = 1;
-    renderMonitor();
-}
-
-function limparFiltros() {
-    document.querySelectorAll('.form-control').forEach(i => i.value = '');
-    filteredData = [...allData];
-    currentPage = 1;
-    renderMonitor();
-}
-
-function abrirItens(id) {
-    const lic = allData.find(x => x.id === id);
-    // CORREÇÃO: org e edit
-    document.getElementById('modalTitle').innerText = `Itens: ${lic.org} (Edital ${lic.edit})`;
-    document.getElementById('linkPncp').href = lic.link;
-
-    const grupos = {};
-    const andamento = [], desertos = [], cancelados = [];
-
-    lic.itens.forEach(it => {
-        // CORREÇÃO de itens: sit e res_forn
-        if (it.sit === "HOMOLOGADO" && it.res_forn) {
-            if (!grupos[it.res_forn]) grupos[it.res_forn] = [];
-            grupos[it.res_forn].push(it);
-        } else if (it.sit === "CANCELADO") { cancelados.push(it); } 
-        else if (it.sit === "DESERTO" || it.sit === "FRACASSADO") { desertos.push(it); } 
-        else { andamento.push(it); }
-    });
-
-    let html = `<div class="table-responsive"><table class="table table-sm table-bordered table-itens align-middle"><thead class="table-dark">
-        <tr><th class="text-center">#</th><th>Descrição</th><th class="text-center">ME/EPP</th><th class="text-center">Qtd/Un</th><th class="text-center">Est. Unit.</th><th class="text-center">Final Unit.</th><th class="text-center">Total</th></tr>
-        </thead><tbody>`;
-
-    if (andamento.length > 0) {
-        html += `<tr><td colspan="7" class="header-status-andamento py-1 small">ITENS EM ANDAMENTO</td></tr>`;
-        andamento.forEach(it => html += renderLinhaItem(it));
-    }
-    if (desertos.length > 0) {
-        html += `<tr><td colspan="7" class="header-status-deserto py-1 small">ITENS DESERTOS / FRACASSADOS</td></tr>`;
-        desertos.forEach(it => html += renderLinhaItem(it));
-    }
-    if (cancelados.length > 0) {
-        html += `<tr><td colspan="7" class="header-status-cancelado py-1 small">ITENS CANCELADOS</td></tr>`;
-        cancelados.forEach(it => html += renderLinhaItem(it));
-    }
-    for (const forn in grupos) {
-        html += `<tr class="header-fornecedor"><td colspan="7">Fornecedor: ${forn}</td></tr>`;
-        grupos[forn].forEach(it => html += renderLinhaItem(it));
-    }
-
-    html += `</tbody></table></div>`;
-    document.getElementById('modalBody').innerHTML = html;
-    modalObj.show();
-}
-
-function renderLinhaItem(it) {
-    const isMeEpp = [1, 2, 3].includes(parseInt(it.benef));
-    const meEppHtml = isMeEpp ? '<span class="benef-sim">SIM</span>' : '<span class="benef-nao">NÃO</span>';
-    // CORREÇÕES: res_val (valHomologado), v_est (valUnit), q (qtd), n (n), d (desc), u (un)
-    const valFinal = it.res_val || 0;
-    const valEstimado = it.v_est || 0;
-    const valorTotal = valFinal > 0 ? (valFinal * it.q) : (valEstimado * it.q);
-
-    return `<tr><td class="text-center fw-bold">${it.n}</td><td>${it.d}</td><td class="text-center">${meEppHtml}</td>
-            <td class="text-center">${it.q} ${it.u}</td><td class="text-center val-estimado">R$ ${valEstimado.toFixed(4)}</td>
-            <td class="text-center val-homologado">${valFinal > 0 ? 'R$ ' + valFinal.toFixed(4) : '---'}</td>
-            <td class="text-center fw-bold">R$ ${valorTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td></tr>`;
-}
-
-function excluirLicitacao(id) {
-    if(confirm("Deseja remover esta licitação da visualização temporária?")) {
-        allData = allData.filter(x => x.id !== id);
-        filtrar();
-    }
-}
-
-// Lógica de Inclusão Manual via API GitHub
-function abrirInclusaoManual() { 
-    document.getElementById('inputLinkPncp').value = '';
-    document.getElementById('statusInclusao').innerHTML = '';
-    modalInclusaoObj.show(); 
-}
-
-async function processarInclusaoManual() {
-    const link = document.getElementById('inputLinkPncp').value.trim();
-    const token = document.getElementById('inputGithubToken').value.trim();
-    const statusDiv = document.getElementById('statusInclusao');
-
-    if (!link || !token) {
-        statusDiv.innerHTML = '<span class="text-danger">Erro: Preencha o link e o seu Token.</span>';
-        return;
-    }
-
-    statusDiv.innerHTML = '<span class="text-primary">Conectando ao Repositório...</span>';
-
-    try {
-        const urlFile = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE_PATH}`;
-        
-        // 1. Tentar ler o arquivo atual para obter o SHA
-        const resGet = await fetch(urlFile, {
-            headers: { 'Authorization': `token ${token}` }
-        });
-
-        let currentContent = "";
-        let sha = "";
-
-        if (resGet.ok) {
-            const dataGet = await resGet.json();
-            sha = dataGet.sha;
-            currentContent = decodeURIComponent(escape(atob(dataGet.content))); 
-        }
-
-        // 2. Preparar novo conteúdo
-        const newContent = currentContent + (currentContent.endsWith('\n') || currentContent === "" ? "" : "\n") + link + "\n";
-        
-        // 3. Enviar atualização
-        const resPut = await fetch(urlFile, {
-            method: 'PUT',
-            headers: {
-                'Authorization': `token ${token}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                message: "Inclusão manual de link via Sniper Pharma Panel",
-                content: btoa(unescape(encodeURIComponent(newContent))),
-                sha: sha
-            })
-        });
-
-        if (resPut.ok) {
-            statusDiv.innerHTML = '<span class="text-success">✅ SUCESSO! O arquivo foi atualizado. O sistema levará alguns minutos para processar os novos dados via GitHub Actions.</span>';
-            setTimeout(() => modalInclusaoObj.hide(), 3000);
-        } else {
-            const err = await resPut.json();
-            statusDiv.innerHTML = `<span class="text-danger">Erro GitHub: ${err.message}</span>`;
-        }
-
-    } catch (e) {
-        statusDiv.innerHTML = `<span class="text-danger">Erro de Conexão: ${e.message}</span>`;
-    }
-}
-
-document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
-document.getElementById('nextPage').onclick = () => { if(currentPage * itemsPerPage < filteredData.length) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
-
-loadData();
-</script>
+        // Funções adicionais de modal e paginação seriam implementadas aqui
+    </script>
 </body>
 </html>
