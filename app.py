@@ -55,8 +55,10 @@ if os.path.exists(ARQ_CATALOGO):
 
 VETOS_ALIMENTACAO = [normalize(x) for x in ["ALIMENTACAO ESCOLAR", "GENEROS ALIMENTICIOS", "MERENDA", "PNAE", "PERECIVEIS", "HORTIFRUTI", "CARNES", "PANIFICACAO", "CESTAS BASICAS", "LANCHE", "REFEICOES", "COFFEE BREAK", "BUFFET", "COZINHA", "AÇOUGUE", "POLPA DE FRUTA", "ESTIAGEM"]]
 VETOS_EDUCACAO = [normalize(x) for x in ["MATERIAL ESCOLAR", "PEDAGOGICO", "DIDATICO", "BRINQUEDOS", "LIVROS", "TRANSPORTE ESCOLAR", "KIT ALUNO", "REDE MUNICIPAL DE ENSINO", "SECRETARIA DE EDUCACAO"]]
+# NOVOS VETOS INCLUÍDOS AQUI:
 VETOS_OPERACIONAL = [normalize(x) for x in ["OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "REFORMA", "MANUTENCAO PREDIAL", "MANUTENCAO DE EQUIPAMENTOS", "LIMPEZA URBANA", "RESIDUOS SOLIDOS", "LOCACAO DE VEICULOS", "TRANSPORTE", "COMBUSTIVEL", "DIESEL", "GASOLINA", "PNEUS", "PECAS AUTOMOTIVAS", 
-                                            "OFICINA", "VIGILANCIA", "SEGURANCA", "BOMBEIRO", "SALVAMENTO", "RESGATE", "VIATURA", "FARDAMENTO", "VESTUARIO", "INFORMATICA", "COMPUTADORES", "IMPRESSAO", "EVENTOS", "REPARO", "CORRETIVA", "VEICULO", "AMBULANCIA", "MOTOCICLETA"]]
+                                            "OFICINA", "VIGILANCIA", "SEGURANCA", "BOMBEIRO", "SALVAMENTO", "RESGATE", "VIATURA", "FARDAMENTO", "VESTUARIO", "INFORMATICA", "COMPUTADORES", "IMPRESSAO", "EVENTOS", "REPARO", "CORRETIVA", "VEICULO", "AMBULANCIA", "MOTOCICLETA",
+                                            "MECANICA", "FERRO FUNDIDO", "CONTRATACAO DE SERVICO"]]
 VETOS_ADM = [normalize(x) for x in ["ADESAO", "INTENCAO", "IRP", "CREDENCIAMENTO", "LEILAO", "ALIENACAO"]]
 TODOS_VETOS = VETOS_ALIMENTACAO + VETOS_EDUCACAO + VETOS_OPERACIONAL + VETOS_ADM
 
@@ -94,6 +96,12 @@ def criar_sessao():
 
 def veta_edital(obj_raw, uf):
     obj = normalize(obj_raw)
+    
+    # 🌟 SUPER PASSE: Se tiver as palavras mágicas, NUNCA veta!
+    palavras_magicas = ["MEDICAMENTO", "MEDICAMENTOS", "AQUISICAO DE MEDICAMENTOS"]
+    if any(p in obj for p in palavras_magicas):
+        return False
+        
     for v in TODOS_VETOS:
         if v in obj:
             if "NUTRICAO" in v or "ALIMENT" in v:
@@ -134,20 +142,23 @@ def processar_licitacao(lic, session, forcado=False):
             if dt_enc < DATA_CORTE_FIXA: return ('IGNORADO', None, 0, 0)
             if veta_edital(obj_raw, uf): return ('VETADO', None, 0, 0)
 
-            # 3. ROTEAMENTO DE INTERESSE POR CATEGORIA E GEOGRAFIA (Regra Soberana)
+            # 3. ROTEAMENTO DE INTERESSE POR CATEGORIA E GEOGRAFIA
+            palavras_magicas = ["MEDICAMENTO", "MEDICAMENTOS", "AQUISICAO DE MEDICAMENTOS"]
+            
+            tem_super_passe = any(p in obj_norm for p in palavras_magicas)
             tem_med = any(t in obj_norm for t in WL_MEDICAMENTOS)
             tem_mmh_nutri = any(t in obj_norm for t in WL_MATERIAIS_NE + WL_NUTRI_CLINICA)
             tem_termo_amplo = any(x in obj_norm for x in ["SAUDE", "HOSPITAL"])
 
             # REGRAS DE PASSAGEM:
-            if tem_med:
-                tem_interesse = True
+            if tem_super_passe or tem_med:
+                tem_interesse = True # 🟢 PASSAPORTE LIVRE
             elif tem_mmh_nutri and (uf in UFS_PERMITIDAS_MMH):
-                tem_interesse = True
+                tem_interesse = True # 🟡 PASSAPORTE RESTRITO (NE + DF)
             elif tem_termo_amplo and (uf in UFS_PERMITIDAS_MMH):
-                tem_interesse = True
+                tem_interesse = True # 🟡 PASSAPORTE RESTRITO (NE + DF)
             else:
-                tem_interesse = False
+                tem_interesse = False # 🔴 DESCARTA
 
             if not tem_interesse: return ('IGNORADO', None, 0, 0)
 
@@ -227,18 +238,15 @@ def processar_inclusoes_manuais(session, banco):
                 cnpj, ano, seq = match.groups()
                 print(f"   Buscando bypass para: {cnpj}/{ano}/{seq}")
                 
-                # ESTRATÉGIA BYPASS: Procuramos na API de pesquisa ao invés da raiz direta quebrada (Erro 301)
                 url_busca = 'https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao'
                 encontrado = False
                 
-                # Vamos buscar nos 30 dias passados para achar a data de publicação original da capa
                 for i in range(30):
                     dia_retro = (date.today() - timedelta(days=i)).strftime('%Y%m%d')
                     r_busca = session.get(url_busca, params={'dataInicial': dia_retro, 'dataFinal': dia_retro, 'cnpjOrgao': cnpj}, timeout=15)
                     
                     if r_busca.status_code == 200:
                         resultados = r_busca.json().get('data', [])
-                        # Filtra exatamente o edital desejado na lista
                         lic_alvo = next((l for l in resultados if str(l.get('sequencialCompra')) == str(seq) and str(l.get('anoCompra')) == str(ano)), None)
                         
                         if lic_alvo:
@@ -250,7 +258,7 @@ def processar_inclusoes_manuais(session, banco):
                             elif st == 'ERRO':
                                 print(f"   ❌ Falha Manual em {cnpj}/{ano}/{seq}: {d.get('msg')}")
                             encontrado = True
-                            break # Achou, para o loop de dias
+                            break 
                 if not encontrado:
                     print(f"   ⚠️ Edital {cnpj}/{ano}/{seq} não encontrado no histórico de busca do PNCP (Bug severo de integração governamental).")
                     
@@ -319,9 +327,7 @@ if __name__ == '__main__':
         parser.add_argument('--start', type=str); parser.add_argument('--end', type=str)
         args = parser.parse_args()
         
-        # --- SOLUÇÃO: AMPLIAÇÃO DA JANELA TEMPORAL ---
-        # Alterado de 6 dias para 15 dias. Isso permite capturar editais que 
-        # foram publicados no PNCP bem antes do período de recepção de propostas.
+        # A Janela de 15 dias garante captura retroativa
         dt_start = datetime.strptime(args.start, '%Y-%m-%d').date() if args.start else date.today() - timedelta(days=15)
         dt_end = datetime.strptime(args.end, '%Y-%m-%d').date() if args.end else date.today()
         
