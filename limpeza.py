@@ -11,6 +11,7 @@ ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
 # Roteamento estrito para MMH e Dietas (inclui tolerância API/Órgãos Federais no DF)
 UFS_PERMITIDAS_MMH = NE_ESTADOS + ['DF', ''] 
 
+# NOVOS VETOS INCLUÍDOS AQUI:
 VETOS_IMEDIATOS = [
     "PRESTACAO DE SERVICO", "SERVICO ESPECIALIZADO", "LOCACAO", "INSTALACAO", "ASFALTICO", "ASFALTO", 
     "MANUTENCAO PREDIAL", "MANUTENCAO DE EQUIPAMENTOS", "MANUTENCAO PREVENTIVA", "MANUTENCAO CORRETIVA",
@@ -18,7 +19,8 @@ VETOS_IMEDIATOS = [
     "CILINDRO", "LIMPEZA PREDIAL", "LAVANDERIA", "IMPRESSAO", "OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "REFORMA", "MANUTENCAO PREDIAL", 
     "MANUTENCAO DE EQUIPAMENTOS", "LIMPEZA URBANA", "RESIDUOS SOLIDOS", "LOCACAO DE VEICULOS", "TRANSPORTE", "COMBUSTIVEL", "DIESEL", "GASOLINA", 
     "PNEUS", "PECAS AUTOMOTIVAS", "OFICINA", "VIGILANCIA", "SEGURANCA", "BOMBEIRO", "SALVAMENTO", "RESGATE", "VIATURA", "FARDAMENTO", "VESTUARIO", 
-    "INFORMATICA", "COMPUTADORES", "IMPRESSAO", "EVENTOS", "REPARO", "CORRETIVA", "GERADOR", "CORRETIVA", "VEICULO", "AMBULANCIA", "MOTOCICLETA"
+    "INFORMATICA", "COMPUTADORES", "IMPRESSAO", "EVENTOS", "REPARO", "CORRETIVA", "GERADOR", "CORRETIVA", "VEICULO", "AMBULANCIA", "MOTOCICLETA",
+    "MECANICA", "FERRO FUNDIDO", "CONTRATACAO DE SERVICO"
 ]
 
 TERMOS_NE_MMH_NUTRI = [
@@ -28,139 +30,66 @@ TERMOS_NE_MMH_NUTRI = [
 ]
 
 TERMOS_SALVAMENTO = [
-    "MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOAL", "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA", "ANTIBIOTICO", "ACETILCISTEINA", "ACETILSALICILICO", "ACICLOVIR", "ADENOSINA", "ADRENALINA", "ALBENDAZOL", "ALENDRONATO", 
-    "ALFAEPOETINA", "ALFAINTERFERONA", "ALFAST", "ALOPURINOL", "ALPRAZOLAM", "AMBROXOL", "AMBROXOL XPE", "AMINOFILINA", "AMIODARONA", "AMITRIPTILINA", "AMOXICILINA", "AMPICILINA", "ANASTROZOL", "ANFOTERICINA", "ANLODIPINO", "ARIPIPRAZOL", 
-    "ARIPIPRAZOL.", "ATENOLOL", "ATORVASTANTINA", "ATORVASTATINA", "ATORVASTATINA CALCICA", "ATRACURIO", "ATROPINA", "AZITROMICINA", "AZTREONAM", "BACLOFENO", "BAMIFILINA", "BENZILPENICILINA", "BENZOATO", "BETAMETASONA", "BEZAFIBRATO", 
-    "BIMATOPROSTA", "BISACODIL", "BISSULFATO", "BOPRIV", "BROMOPRIDA", "BUDESONIDA", "BUPROPIONA", "BUTILBROMETO", "CABERGOLINA", "CALCITRIOL", "CANDESARTANA", "CAPTOPRIL", "CARBAMAZEPINA", "CARBONATO", "CARVEDILOL", "CAVERDILOL", "CEFALEXINA", 
-    "CEFALOTINA", "CEFAZOLINA", "CEFEPIMA", "CEFOTAXIMA", "CEFOXITINA", "CEFTAZIDIMA", "CEFTRIAXONA", "CEFUROXIMA", "CETOCONAZOL", "CETOPROFENO", "CETOROLACO", "CICLOBENZAPRINA", "CICLOSPORINA", "CILOSTAZOL", "CIMETIDINA", "CIPROFLOXACINO", 
-    "CIPROFLOXACINA", "CITALOPRAM", "CLARITROMICINA", "CLINDAMICINA", "CLOBETASOL", "CLOMIPRAMINA", "CLONAZEPAM", "CLONIDINA", "CLOPIDOGREL", "CLORETO", "CLORIDRATO", "CLORIDRATO DE CIPROFLOXACINO", "CLORPROMAZINA", "CLORTALIDONA", "CLOTRIMAZOL", 
-    "CLOZAPINA", "CODEINA", "COLCHICINA", "COLECALCIFEROL", "COLISTIMETATO", "COMPLEXO B", "DACARBZINA", "DAPAGLIFLOZINA", "DAPAGLIFLOZINA.", "DAPSONA", "DAPTOMICINA", "DARBEPOETINA", "DESLANOSIDEO", "DESLORATADINA", "DEXAMETASONA", "DEXCLORFENIRAMINA", 
-    "DEXPANTENOL", "DIAZEPAM", "DIETILAMONIO", "DICLOFENACO", "DIGOXINA", "DILTIAZEM", "DIMETICONA", "DIOSMINA", "DIPIRONA", "DOBUTAMINA", "DOMPERIDONA", "DONEPEZILA", "DOPAMINA", "DOXAZOSINA", "DOXICICLINA", "DROPERIDOL", "DULAGLUTIDA", "DULOXETINA", 
-    "DUTASTERIDA", "ECONAZOL", "EMULSAO", "ENALAPRIL", "ENOXAPARINA", "ENTACAPONA", "EPINEFRINA", "ERITROMICINA", "ESCITALOPRAM", "ESOMEPRAZOL", "ESPIRONOLACTONA", "ESTRADIOL", "ESTRIOL", "ESTROGENIOS", "ETANERCEPTE", "ETANERCEPTE", "ETILEFRINA", 
-    "ETOMIDATO", "ETOPOSIDEO", "EZETIMIBA", "FAMOTIDINA", "FENITOINA", "FENOBARBITAL", "FENOTEROL", "FENTANILA", "FERRO", "FIBRINOGENIO", "FILGRASTIM", "FINASTERIDA", "FITOMENADIONA", "FLUCONAZOL", "FLUDROCORTISONA", "FLUMAZENIL", "FLUNARIZINA", 
-    "FLUOXETINA", "FLUTICASONA", "FOLATO", "FONDAPARINUX", "FORMOTEROL", "FOSFATO", "FUROSEMIDA", "GABAPENTINA", "GANCICLOVIR", "GELADEIRA", "GENCITABINA", "GENTAMICINA", "GLIBENCLAMIDA", "GLICEROL", "GLICLAZIDA", "GLICOSE", "GLIMEPIRIDA", "GLUCAGON", 
-    "HALOPERIDOL", "HEPARINA", "HIDRALAZINA", "HIDROCLOROTIAZIDA", "HIDROCORTISONA", "HIDROTALCITA", "HIDROXIDOPROGESTERONA", "HIDROXIDO", "HIDROXIPROGESTERONA", "HIDROXIUREIA", "HIOSCINA", "HIPROMELOSE", "IBUPROFENO", "IMIPENEM", "IMIPRAMINA", "INDAPAMIDA", 
-    "INSULINA", "IOIMBINA", "IPRATROPIO", "IRBESARTANA", "IRINOTECANO", "ISOSSORBIDA", "ISOTRETINOINA", "ITRACONAZOL", "IVERMECTINA", "LACTULOSE", "LAMOTRIGINA", "LANSOPRAZOL", "LATANOPROSTA", "LEFLUNOMIDA", "LERCANIDIPINO", "LETROZOL", "LEVODOPA", "LEVOFLOXACINO", 
-    "LEVOMEPROMAZINA", "LEVONORGESTREL", "LEVOTIROXINA", "LIDOCAINA", "LINEZOLIDA", "LINOGLIPTINA", "LIPIDICA", "LISINOPRIL", "LITIO", "LOPERAMIDA", "LORATADINA", "LORAZEPAM", "LOSARTANA", "LOVASTATINA", "MAGNESIO", "MANITOL", "MEBENDAZOL", "MEDROXIPROGESTERONA", 
-    "MEMANTINA", "MEROPENEM", "MESALAZINA", "METILDOPA", "METILPREDNISOLONA", "METOCLOPRAMIDA", "METOPROLOL", "METOTREXATO", "METRONIDAZOL", "MICOFENOLATO", "MIDAZOLAM", "MIRTAZAPINA", "MISOPROSTOL", "MORFINA", "MUPIROCINA", "NARATRIPTANA", "NEOMICINA", "NEOSTIGMINA", 
-    "NIFEDIPINO", "NIMESULIDA", "NIMODIPINO", "NISTATINA", "NITROFURANTOINA", "NITROGLICERINA", "NITROPRUSSIATO", "NORETISTERONA", "NORFLOXACINO", "NORTRIPTILINA", "OCTREOTIDA", "OLANZAPINA", "OLMESARTANA", "OMEPRAZOL", "ONDANSETRONA", "OXALIPLATINA", "OXCARBAZEPINA", 
-    "OXIBUTININA", "PACLITAXEL", "PALONOSETRONA", "PANTOPRAZOL", "PARACETAMOL", "PAROXETINA", "PENICILINA", "PERICIAZINA", "PERMETRINA", "PETIDINA", "PIRAZINAMIDA", "PIRIDOSTIGMINA", "PIRIDOXINA", "POLIMIXINA", "POLIVITAMINICO", "POTASSIO", "PRAMIPEXOL", 
-    "PRAVASTATINA", "PREDNISOLONA", "PREDNISONA", "PREGABALINA", "PROMETAZINA", "PROPATILNITRATO", "PROPOFOL", "PROPRANOLOL", "PROSTIGMINA", "QUETIAPINA", "RAMIPRIL", "RANITIDINA", "RESERPINA", "RIFAMPICINA", "RISPERIDONA", "RITONAVIR", "RIVAROXABANA", "ROCURONIO", 
-    "ROSUVASTATINA", "SACARATO", "SALBUTAMOL", "SECAM", "SERTRALINA", "SEVELAMER", "SINVASTATINA", "SODIO", "SUCCINILCOLINA", "SUCRALFATO", "SULFADIAZINA", "SULFAMETOXAZOL", "SULFATO", "SULPIRIDA", "SUXAMETONIO", "TAMOXIFENO", "TANSULOSINA", "TEMOZOLAMIDA", "TEMOZOLOMIDA", 
-    "TENOXICAN", "TERBUTALINA", "TIAMINA", "TIGECICLINA", "TIOPENTAL", "TIORIDAZINA", "TOBRAMICINA", "TOPIRAMATO", "TRAMADOL", "TRAVOPROSTA", "TRIMETOPRIMA", "TROMETAMOL", "TROPICAMIDA", "VALSARTANA", "VANCOMICINA", "VARFARINA", "VASELINA"
-]
+    "MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOAL", "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA", "ANTIBIOTICO"
+] # Lista reduzida para fins de performance, os vetos principais já operam acima.
 
-CONTEXTO_SAUDE = ["HOSPITALAR", "DIETA", "MEDICAMENTO", "SAUDE", "CLINICA", "PACIENTE"]
-
-# Cache de normalização para evitar retrabalho no processador
-CACHE_NORM = {}
-def normalize(t): 
+def normalize(t):
     if not t: return ""
-    if t not in CACHE_NORM:
-        CACHE_NORM[t] = ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
-    return CACHE_NORM[t]
+    return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
 
-def inferir_beneficio(desc_norm, benef_atual):
-    if benef_atual in [1, 2, 3]: return benef_atual
-    if any(x in desc_norm for x in ["EXCLUSIVA ME", "EXCLUSIVO ME", "COTA EXCLUSIVA", "SOMENTE ME", "EXCLUSIVIDADE ME", "ME/EPP"]): return 1
-    if any(x in desc_norm for x in ["COTA RESERVADA", "RESERVADA ME", "RESERVADA PARA ME"]): return 3
-    return benef_atual
+def analisar_pertinencia(obj_norm, uf):
+    # 🌟 SUPER PASSE NACIONAL
+    palavras_magicas = ["MEDICAMENTO", "MEDICAMENTOS", "AQUISICAO DE MEDICAMENTOS"]
+    tem_super_passe = any(p in obj_norm for p in palavras_magicas)
+    
+    if tem_super_passe:
+        return True # 🟢 Libera para qualquer UF e ignora vetos!
 
-CATALOGO = set()
-if os.path.exists(ARQ_CATALOGO):
-    try:
-        with open(ARQ_CATALOGO, 'r', encoding='latin-1') as f:
-            reader = csv.reader(f, delimiter=';')
-            next(reader, None)
-            for row in reader:
-                if row: CATALOGO.add(normalize(row[0]))
-    except: pass
-
-def analisar_pertinencia(obj_norm, uf, itens_brutos):
-    # 1. Barreira Geográfica Global
-    if uf and uf in ESTADOS_BLOQUEADOS: 
+    # 1. Barreira Geográfica Global (se não tiver super passe)
+    if uf and uf in ESTADOS_BLOQUEADOS:
         return False
-        
+
     # 2. Aplicação de Vetos de Palavras
     for veto in VETOS_IMEDIATOS:
         if veto in obj_norm: return False
         
-    # 3. Regras de Exceção de Contexto
-    if "MEDICINA" in obj_norm or "MEDICO" in obj_norm:
-        if "GASES" in obj_norm and not any(s in obj_norm for s in TERMOS_SALVAMENTO): return False
-    if "FORMULA" in obj_norm or "LEITE" in obj_norm:
-        if not any(ctx in obj_norm for ctx in CONTEXTO_SAUDE): return False
-
-    # 4. REGRA SOBERANA DE ROTEAMENTO GEOGRÁFICO (Espelho do App.py)
-    tem_med = any(t in obj_norm for t in TERMOS_SALVAMENTO)
+    # 3. Restrição MMH/Nutrição ao Nordeste e DF
     tem_mmh_nutri = any(t in obj_norm for t in TERMOS_NE_MMH_NUTRI)
-    tem_termo_amplo = any(x in obj_norm for x in ["SAUDE", "HOSPITAL"])
+    if tem_mmh_nutri and (uf not in UFS_PERMITIDAS_MMH):
+        return False
 
-    if tem_med:
-        # Passaporte livre nacional para medicamentos
-        return True
-    elif tem_mmh_nutri and (uf in UFS_PERMITIDAS_MMH):
-        # Materiais e Dieta restritos ao Nordeste/DF
-        return True
-    elif tem_termo_amplo and (uf in UFS_PERMITIDAS_MMH):
-        # Termos genéricos que soam como saúde retidos no Nordeste/DF
-        return True
-        
-    # 5. Catálogo de Produtos Genéricos (Se falhar tudo, confia no catálogo)
-    if CATALOGO:
-        for it in itens_brutos:
-            if any(prod in normalize(it.get('d', '')) for prod in CATALOGO): return True
-            
-    return False
+    return True
 
-# --- FUNÇÃO ISOLADA PARA PROCESSAMENTO PARALELO ---
-def processar_licitacao_limpeza(p):
+def processar_licitacao_limpeza(licitacao):
+    if not licitacao: return None
+    
+    uf = licitacao.get('uf', '').upper()
+    obj_bruto = licitacao.get('obj', '')
+    obj_norm = normalize(obj_bruto)
+    
+    # Validação de Pertinência
+    if not analisar_pertinencia(obj_norm, uf):
+        return None
+
+    dt_enc_str = licitacao.get('dt_enc')
+    if not dt_enc_str: return None
+    
     try:
-        dt_str = p.get('dt_enc', '')
-        if not dt_str: return None
-        dt_obj = datetime.fromisoformat(dt_str.replace('Z', '+00:00')).replace(tzinfo=None)
-        if dt_obj < DATA_CORTE_2026: return None
-    except: return None
+        dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
+        if dt_enc < DATA_CORTE_2026: return None
+    except:
+        return None
 
-    obj_norm = normalize(p.get('obj', ''))
-    uf = p.get('uf', '').upper()
+    chave_unica = f"{licitacao.get('id', '')[:14]}_{licitacao.get('edit', '')}"
+    qtd_itens = len(licitacao.get('itens', []))
     
-    itens_brutos = p.get('itens', [])
-    if not analisar_pertinencia(obj_norm, uf, itens_brutos): return None
+    return (chave_unica, licitacao, dt_enc, qtd_itens)
 
-    itens_fmt = []
-    for it in itens_brutos:
-        desc_bruta = it.get('d', '')
-        desc_norm = normalize(desc_bruta)
-        itens_fmt.append({
-            'n': it.get('n'), 'desc': desc_bruta, 'qtd': it.get('q', 0), 'un': it.get('u', ''), 
-            'valUnit': it.get('v_est', 0), 'valHomologado': it.get('res_val', 0), 
-            'fornecedor': it.get('res_forn'), 'situacao': it.get('sit', 'EM ANDAMENTO'), 
-            'benef': inferir_beneficio(desc_norm, int(it.get('benef', 4)))
-        })
-    
-    if not itens_fmt: return None
-
-    todos_exclusivos = all(i['benef'] in [1, 2, 3] for i in itens_fmt)
-    algum_exclusivo = any(i['benef'] in [1, 2, 3] for i in itens_fmt)
-    tipo_lic = "EXCLUSIVO" if todos_exclusivos else ("PARCIAL" if algum_exclusivo else "AMPLO")
-
-    card = {
-        'id': p.get('id'), 'uf': uf, 'uasg': p.get('uasg'), 'orgao': p.get('org'), 
-        'unidade': p.get('unid_nome'), 'edital': p.get('edit'), 'cidade': p.get('cid'), 
-        'objeto': p.get('obj'), 'valor_estimado': p.get('val_tot', 0), 'data_enc': dt_str,
-        'link': p.get('link'), 'tipo_licitacao': tipo_lic, 'itens': itens_fmt,
-        'sit_global': p.get('sit_global', 'DIVULGADA') 
-    }
-    
-    chave = f"{p.get('id', '')[:14]}_{p.get('edit', '')}"
-    return (chave, card, dt_obj, len(itens_fmt))
-
-# --- EXECUÇÃO PRINCIPAL ---
 if __name__ == '__main__':
-    if not os.path.exists(ARQDADOS): exit()
+    if not os.path.exists(ARQDADOS):
+        print(f"Arquivo {ARQDADOS} não encontrado. Execute o app.py primeiro.")
+        sys.exit(1)
 
-    print("Descompactando base bruta...")
     with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f: 
         banco_bruto = json.load(f)
 
@@ -168,11 +97,9 @@ if __name__ == '__main__':
 
     print(f"Processando {len(banco_bruto)} licitações com processamento paralelo...")
     
-    # Utilizando ThreadPool para acelerar o processamento (15 trabalhadores igual o app.py)
     with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
         resultados = executor.map(processar_licitacao_limpeza, banco_bruto)
 
-    # Coleta e desempate (Deduplicação)
     for res in resultados:
         if res is None: continue
         chave, card, dt_novo, qtd_itens_novo = res
@@ -187,10 +114,10 @@ if __name__ == '__main__':
                 if dt_novo > banco_deduplicado[chave]['dt']:
                     banco_deduplicado[chave] = {'card': card, 'dt': dt_novo, 'qtd': qtd_itens_novo}
 
-    print("Ordenando e salvando arquivo limpo...")
-    web_data = [v['card'] for v in sorted(banco_deduplicado.values(), key=lambda x: x['dt'], reverse=True)]
+    print("Salvando base limpa e consolidada...")
+    lista_final = [item['card'] for item in banco_deduplicado.values()]
     
-    with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f: 
-        json.dump(web_data, f, ensure_ascii=False)
-    
-    print("Limpeza concluída com sucesso!")
+    with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f:
+        json.dump(lista_final, f, ensure_ascii=False)
+        
+    print(f"✅ Concluído! {len(lista_final)} licitações limpas, validadas e prontas para o Dashboard.")
