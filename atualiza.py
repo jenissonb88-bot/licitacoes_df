@@ -21,7 +21,8 @@ def criar_sessao():
     return s
 
 def precisa_atualizar(lic):
-    return any(not it.get('fornecedor') and it.get('situacao') in ["EM ANDAMENTO", "HOMOLOGADO"] for it in lic.get('itens', []))
+    # CORREÇÃO: Usando 'res_forn' e 'sit' conforme o app.py
+    return any(not it.get('res_forn') and it.get('sit') in ["EM ANDAMENTO", "HOMOLOGADO"] for it in lic.get('itens', []))
 
 def atualizar_licitacao(lid, dados_antigos, session):
     try:
@@ -37,8 +38,8 @@ def atualizar_licitacao(lid, dados_antigos, session):
         for it in dados_antigos.get('itens', []):
             item_novo = it.copy()
             
-            # Tenta atualizar apenas itens sem fornecedor que estão em andamento/homologados
-            if not it.get('fornecedor') and it.get('situacao') in ["EM ANDAMENTO", "HOMOLOGADO"]:
+            # CORREÇÃO: Usando 'res_forn' e 'sit'
+            if not it.get('res_forn') and it.get('sit') in ["EM ANDAMENTO", "HOMOLOGADO"]:
                 try:
                     num = it['n']
                     r = session.get(f"{url_base}/{num}/resultados", timeout=15)
@@ -53,20 +54,21 @@ def atualizar_licitacao(lid, dados_antigos, session):
                             
                             if nf:
                                 forn_completo = f"{nf} (CNPJ: {ni})" if ni else nf
-                                item_novo['fornecedor'] = forn_completo
-                                item_novo['situacao'] = "HOMOLOGADO"
-                                item_novo['valHomologado'] = val_homol
+                                # CORREÇÃO: Salvando com as chaves corretas para o HTML ler
+                                item_novo['res_forn'] = forn_completo
+                                item_novo['sit'] = "HOMOLOGADO"
+                                item_novo['res_val'] = val_homol
                                 houve_mudanca = True
                                 
-                                # Registra para o relatório
+                                # Registra para o relatório com os nomes de variáveis corretos do app.py
                                 mudancas_detalhadas.append({
                                     'data_atualizacao': datetime.now().strftime('%d/%m/%Y %H:%M'),
                                     'id_processo': lid,
-                                    'edital': dados_antigos.get('edital'),
-                                    'orgao': dados_antigos.get('orgao'),
+                                    'edital': dados_antigos.get('edit'),
+                                    'orgao': dados_antigos.get('org'),
                                     'item_num': num,
-                                    'descricao': it.get('desc'),
-                                    'valor_estimado': it.get('valUnit'),
+                                    'descricao': it.get('d'),
+                                    'valor_estimado': it.get('v_est'),
                                     'valor_homologado': val_homol,
                                     'fornecedor': forn_completo
                                 })
@@ -120,3 +122,5 @@ if __name__ == '__main__':
             print(f"📁 Relatório gerado: {ARQ_RELATORIO}")
         else:
             print("ℹ️ Nenhum item novo foi homologado no PNCP desde a última verificação.")
+    else:
+        print("ℹ️ Não há licitações pendentes de atualização no banco de dados.")
