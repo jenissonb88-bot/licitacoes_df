@@ -220,7 +220,8 @@ def processar_licitacao(lic, session, forcado=False):
             'link': f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}", 
             'val_tot': safe_float(lic.get('valorTotalEstimado')), 
             'itens': itens_brutos,
-            'sit_global': sit_global_nome
+            'sit_global': sit_global_nome,
+            'fonte': lic.get('nomeEntidadeIntegradora', 'PNCP Direto')  # <--- NOVA LINHA INCLUÍDA AQUI
         }
         return ('CAPTURADO', dados_finais, len(itens_brutos), 0)
     except Exception as e: 
