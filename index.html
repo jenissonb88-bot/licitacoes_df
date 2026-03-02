@@ -145,7 +145,6 @@ let filteredData = [];
 let currentPage = 1;
 const itemsPerPage = 20;
 
-// Configurações do seu repositório
 const GITHUB_OWNER = 'jenissonb88-bot';
 const GITHUB_REPO = 'licitacoes_df';
 const GITHUB_FILE_PATH = 'links_manuais.txt';
@@ -162,7 +161,8 @@ async function loadData() {
         const text = await new Response(decompressedStream).text();
         
         allData = JSON.parse(text);
-        allData.sort((a, b) => new Date(b.data_enc) - new Date(a.data_enc));
+        // CORREÇÃO: dt_enc em vez de data_enc
+        allData.sort((a, b) => new Date(b.dt_enc) - new Date(a.dt_enc));
         filteredData = [...allData];
         renderMonitor();
     } catch (e) { 
@@ -185,8 +185,9 @@ function renderMonitor() {
     pageItems.forEach(lic => {
         const div = document.createElement('div');
         div.className = 'card card-licitacao';
-        const valorTotal = lic.valor_estimado > 0 
-            ? `R$ ${lic.valor_estimado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` 
+        // CORREÇÃO: val_tot em vez de valor_estimado
+        const valorTotal = lic.val_tot > 0 
+            ? `R$ ${lic.val_tot.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` 
             : 'Sigiloso/Não inf.';
 
         let tipoLic = "AMPLO";
@@ -204,23 +205,24 @@ function renderMonitor() {
             alertaGlobalHtml = `<div style="color: #dc3545; font-weight: 900; font-size: 0.85rem; margin-top: 5px; text-transform: uppercase; border: 1px solid #dc3545; border-radius: 4px; padding: 2px;">⚠️ PROCESSO ${lic.sit_global}</div>`;
         }
 
+        // CORREÇÕES de variáveis no HTML: org, edit, cid, unid_nome, obj, dt_enc
         div.innerHTML = `
             <div class="header-card">
                 <div>
                     <span class="badge-uf-header">${lic.uf}</span>
-                    <span class="header-bold">${lic.orgao}</span>
-                    <span class="ms-2 opacity-75 small">| Edital: ${lic.edital}</span>
+                    <span class="header-bold">${lic.org || '---'}</span>
+                    <span class="ms-2 opacity-75 small">| Edital: ${lic.edit}</span>
                 </div>
                 <button class="btn-excluir" onclick="excluirLicitacao('${lic.id}')">Excluir</button>
             </div>
             <div class="card-body py-3">
                 <div class="row align-items-center">
                     <div class="col-md-8 border-end">
-                        <small class="text-muted d-block mb-1">${lic.cidade} - ${lic.unidade}</small>
-                        <h6 class="fw-bold mb-2">${lic.objeto}</h6>
+                        <small class="text-muted d-block mb-1">${lic.cid || '---'} - ${lic.unid_nome || '---'}</small>
+                        <h6 class="fw-bold mb-2">${lic.obj || 'Sem descrição'}</h6>
                         <div class="d-flex gap-2 mt-2">
                             <span class="badge bg-secondary d-flex align-items-center">UASG/Código: ${lic.uasg}</span>
-                            <span class="badge bg-info text-dark d-flex align-items-center">Vencimento: ${new Date(lic.data_enc).toLocaleString('pt-BR')}</span>
+                            <span class="badge bg-info text-dark d-flex align-items-center">Vencimento: ${new Date(lic.dt_enc).toLocaleString('pt-BR')}</span>
                             <span class="badge-tipo ${cssTipo}">${tipoLic}</span>
                         </div>
                     </div>
@@ -249,12 +251,13 @@ function filtrar() {
     const edt = document.getElementById('filterEdital').value.toUpperCase();
 
     filteredData = allData.filter(lic => {
-        const dataLic = lic.data_enc.split('T')[0];
+        // CORREÇÕES de variáveis no filtro
+        const dataLic = lic.dt_enc.split('T')[0];
         return (!dataEnc || dataLic === dataEnc) &&
                (!uf || lic.uf.includes(uf)) &&
-               (!cid || lic.cidade.toUpperCase().includes(cid)) &&
-               (!org || lic.orgao.toUpperCase().includes(org) || (lic.uasg||"").includes(org)) &&
-               (!edt || lic.edital.includes(edt));
+               (!cid || (lic.cid || "").toUpperCase().includes(cid)) &&
+               (!org || (lic.org || "").toUpperCase().includes(org) || (lic.uasg||"").includes(org)) &&
+               (!edt || (lic.edit || "").includes(edt));
     });
     currentPage = 1;
     renderMonitor();
@@ -269,18 +272,20 @@ function limparFiltros() {
 
 function abrirItens(id) {
     const lic = allData.find(x => x.id === id);
-    document.getElementById('modalTitle').innerText = `Itens: ${lic.orgao} (Edital ${lic.edital})`;
+    // CORREÇÃO: org e edit
+    document.getElementById('modalTitle').innerText = `Itens: ${lic.org} (Edital ${lic.edit})`;
     document.getElementById('linkPncp').href = lic.link;
 
     const grupos = {};
     const andamento = [], desertos = [], cancelados = [];
 
     lic.itens.forEach(it => {
-        if (it.situacao === "HOMOLOGADO" && it.fornecedor) {
-            if (!grupos[it.fornecedor]) grupos[it.fornecedor] = [];
-            grupos[it.fornecedor].push(it);
-        } else if (it.situacao === "CANCELADO") { cancelados.push(it); } 
-        else if (it.situacao === "DESERTO" || it.situacao === "FRACASSADO") { desertos.push(it); } 
+        // CORREÇÃO de itens: sit e res_forn
+        if (it.sit === "HOMOLOGADO" && it.res_forn) {
+            if (!grupos[it.res_forn]) grupos[it.res_forn] = [];
+            grupos[it.res_forn].push(it);
+        } else if (it.sit === "CANCELADO") { cancelados.push(it); } 
+        else if (it.sit === "DESERTO" || it.sit === "FRACASSADO") { desertos.push(it); } 
         else { andamento.push(it); }
     });
 
@@ -313,11 +318,14 @@ function abrirItens(id) {
 function renderLinhaItem(it) {
     const isMeEpp = [1, 2, 3].includes(parseInt(it.benef));
     const meEppHtml = isMeEpp ? '<span class="benef-sim">SIM</span>' : '<span class="benef-nao">NÃO</span>';
-    const valorTotal = it.valHomologado > 0 ? (it.valHomologado * it.qtd) : (it.valUnit * it.qtd);
+    // CORREÇÕES: res_val (valHomologado), v_est (valUnit), q (qtd), n (n), d (desc), u (un)
+    const valFinal = it.res_val || 0;
+    const valEstimado = it.v_est || 0;
+    const valorTotal = valFinal > 0 ? (valFinal * it.q) : (valEstimado * it.q);
 
-    return `<tr><td class="text-center fw-bold">${it.n}</td><td>${it.desc}</td><td class="text-center">${meEppHtml}</td>
-            <td class="text-center">${it.qtd} ${it.un}</td><td class="text-center val-estimado">R$ ${it.valUnit.toFixed(4)}</td>
-            <td class="text-center val-homologado">${it.valHomologado > 0 ? 'R$ ' + it.valHomologado.toFixed(4) : '---'}</td>
+    return `<tr><td class="text-center fw-bold">${it.n}</td><td>${it.d}</td><td class="text-center">${meEppHtml}</td>
+            <td class="text-center">${it.q} ${it.u}</td><td class="text-center val-estimado">R$ ${valEstimado.toFixed(4)}</td>
+            <td class="text-center val-homologado">${valFinal > 0 ? 'R$ ' + valFinal.toFixed(4) : '---'}</td>
             <td class="text-center fw-bold">R$ ${valorTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td></tr>`;
 }
 
