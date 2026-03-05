@@ -38,8 +38,8 @@ jobs:
     - name: Install deps
       run: pip install requests urllib3
 
-    - name: 🩺 Run Auditor (Atualiza_Completo.py)
-      run: python Atualiza_Completo.py
+    - name: 🩺 Run Auditor (atualiza.py)
+      run: python atualiza.py
 
     - name: 💾 Commit Auditoria, Relatório e Log
       run: |
