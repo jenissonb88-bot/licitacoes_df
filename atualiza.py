@@ -1,126 +1,221 @@
-import requests
-import json
+
+# Gerando o código corrigido do Limpeza.py
+limpeza_py_codigo = '''import json
 import gzip
 import os
+import unicodedata
 import csv
+import sys
 import concurrent.futures
 from datetime import datetime
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
-# --- CONFIGURAÇÕES ---
-ARQDADOS = 'pregacoes_pharma_limpos.json.gz'
-ARQ_RELATORIO = 'relatorio_atualizacoes.csv' # Nome do novo relatório
-MAXWORKERS = 10  
+ARQDADOS = 'dadosoportunidades.json.gz'
+ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'
+ARQ_CATALOGO = 'Exportar Dados.csv'
+DATA_CORTE_2026 = datetime(2026, 1, 1)
 
-def criar_sessao():
-    s = requests.Session()
-    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/22.1'})
-    retry = Retry(total=5, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
-    s.mount('https://', HTTPAdapter(max_retries=retry))
-    return s
+# --- GEOGRAFIA ---
+NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
+ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
+UFS_PERMITIDAS_MMH = NE_ESTADOS  # Apenas Nordeste
 
-def precisa_atualizar(lic):
-    # CORREÇÃO: Usando 'res_forn' e 'sit' conforme o app.py
-    return any(not it.get('res_forn') and it.get('sit') in ["EM ANDAMENTO", "HOMOLOGADO"] for it in lic.get('itens', []))
+# --- VETOS ABSOLUTOS ---
+VETOS_ABSOLUTOS = [normalize(x) for x in [
+    "INTENCAO DE REGISTRO DE PRECO",
+    "INTENCAO REGISTRO DE PRECO",
+    "CREDENCIAMENTO",
+    "ADESAO",
+    "IRP",
+    "LEILAO",
+    "ALIENACAO"
+]]
 
-def atualizar_licitacao(lid, dados_antigos, session):
+# --- VETOS OPERACIONAIS (com variações) ---
+VETOS_IMEDIATOS_BASE = [
+    "PRESTACAO DE SERVICO", "SERVICO ESPECIALIZADO", "LOCACAO", "INSTALACAO",
+    "ASFALTICO", "ASFALTO", "MANUTENCAO PREDIAL", "MANUTENCAO DE EQUIPAMENTOS",
+    "MANUTENCAO PREVENTIVA", "MANUTENCAO CORRETIVA", "UNIFORME", "TEXTIL",
+    "REFORMA", "GASES MEDICINAIS", "CILINDRO", "LIMPEZA PREDIAL", "LAVANDERIA",
+    "IMPRESSAO", "OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "LIMPEZA URBANA",
+    "RESIDUOS SOLIDOS", "LOCACAO DE VEICULOS", "TRANSPORTE", "COMBUSTIVEL",
+    "DIESEL", "GASOLINA", "PNEUS", "PECAS AUTOMOTIVAS", "OFICINA", "VIGILANCIA",
+    "SEGURANCA", "BOMBEIRO", "SALVAMENTO", "RESGATE", "VIATURA", "FARDAMENTO",
+    "VESTUARIO", "INFORMATICA", "COMPUTADORES", "EVENTOS", "REPARO",
+    "CORRETIVA", "GERADOR", "VEICULO", "AMBULANCIA", "MOTOCICLETA",
+    "MECANICA", "FERRO FUNDIDO", "CONTRATACAO DE SERVICO",
+    "EQUIPAMENTO E MATERIA PERMANENTE", "RECARGA", "CONFECCAO",
+    "EQUIPAMENTOS PERMANENTES", "MATERIAIS PERMANENTES"
+]
+
+# Gerar variações
+VETOS_IMEDIATOS = []
+for termo in VETOS_IMEDIATOS_BASE:
+    n = normalize(termo)
+    VETOS_IMEDIATOS.append(n)
+    if not n.endswith('S') and not n.endswith('ES'):
+        VETOS_IMEDIATOS.append(n + 'S')
+
+VETOS_IMEDIATOS = list(set(VETOS_IMEDIATOS))
+
+# --- TERMOS DE INTERESSE ---
+TERMOS_NE_MMH_NUTRI = [normalize(x) for x in [
+    "MATERIAL MEDIC", "INSUMO HOSPITALAR", "MMH", "SERINGA", "AGULHA",
+    "GAZE", "ATADURA", "SONDA", "CATETER", "EQUIPO", "LUVAS DE PROCEDIMENTO",
+    "MASCARA", "MASCARA CIRURGICA", "PENSO", "MATERIAL PENSO",
+    "MATERIAL-MEDICO", "MATERIAIS-MEDICO", "FRALDA", "ABSORVENTE",
+    "MEDICO-HOSPITALAR", "CURATIV", "CURATIVO", "CURATIVOS",
+    "LUVA DE PROCEDIMENTO", "COMPRESSA GAZE", "AVENTAL DESCARTAVEL",
+    "GESSADA", "CAMPO OPERATORIO", "CLOREXIDINA", "COLETOR PERFURO",
+    "ESPARADRAPO", "FITA MICROPORE", "GLUTARALDEIDO", "SONDA NASO",
+    "TOUCA DESCARTAVEL", "TUBO ASPIRACAO", "NUTRICAO ENTERAL",
+    "FORMULA INFANTIL", "SUPLEMENTO ALIMENTAR", "DIETA ENTERAL",
+    "DIETA PARENTERAL", "NUTRICAO CLINICA", "ENTERAL", "FORMULA ESPECIA",
+    "AGULHAS", "SERINGAS", "PARENTERA", "ENTERAL"
+]]
+
+TERMOS_SALVAMENTO = [normalize(x) for x in [
+    "MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOLA",
+    "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA", "ANTIBIOTICO",
+    "AQUISICAO DE MEDICAMENTO", "AQUISICAO DE MEDICAMENTOS"
+]]
+
+def normalize(t):
+    if not t:
+        return ""
+    return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
+
+def tem_medicamento_no_texto(texto):
+    """Verifica se há termos de medicamentos no texto"""
+    if not texto:
+        return False
+    texto_norm = normalize(texto)
+    return any(p in texto_norm for p in TERMOS_SALVAMENTO)
+
+def analisar_pertinencia(obj_norm, uf, itens=None):
+    """
+    Retorna True se deve manter, False se deve descartar
+    """
+    # 1. VETOS ABSOLUTOS (sempre vetam)
+    for veto in VETOS_ABSOLUTOS:
+        if veto in obj_norm:
+            return False
+    
+    # 2. SUPER PASSE (medicamentos)
+    tem_med_objeto = tem_medicamento_no_texto(obj_norm)
+    tem_med_itens = False
+    if not tem_med_objeto and itens:
+        for item in itens:
+            desc = item.get('d', '')
+            if tem_medicamento_no_texto(desc):
+                tem_med_itens = True
+                break
+    
+    if tem_med_objeto or tem_med_itens:
+        # Super passe libera, mas mantém bloqueio de estados bloqueados
+        if uf in ESTADOS_BLOQUEADOS:
+            return False
+        return True
+    
+    # 3. VETOS IMEDIATOS
+    for veto in VETOS_IMEDIATOS:
+        if veto in obj_norm:
+            return False
+    
+    # 4. MMH/NUTRIÇÃO - Apenas Nordeste
+    tem_mmh_nutri = any(t in obj_norm for t in TERMOS_NE_MMH_NUTRI)
+    if tem_mmh_nutri:
+        return uf in UFS_PERMITIDAS_MMH
+    
+    return False
+
+def processar_licitacao_limpeza(licitacao):
+    if not licitacao:
+        return None
+    
+    uf = licitacao.get('uf', '').upper()
+    obj_bruto = licitacao.get('obj', '')
+    obj_norm = normalize(obj_bruto)
+    itens = licitacao.get('itens', [])
+    
+    # Validação de Pertinência
+    if not analisar_pertinencia(obj_norm, uf, itens):
+        return None
+    
+    # Validação de Data
+    dt_enc_str = licitacao.get('dt_enc')
+    if not dt_enc_str:
+        return None
+    
     try:
-        cnpj = lid[:14]
-        ano = lid[14:18]
-        seq = lid[18:]
-        url_base = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
-        
-        itens_atualizados = []
-        mudancas_detalhadas = [] # Lista para o relatório
-        houve_mudanca = False
-        
-        for it in dados_antigos.get('itens', []):
-            item_novo = it.copy()
-            
-            # CORREÇÃO: Usando 'res_forn' e 'sit'
-            if not it.get('res_forn') and it.get('sit') in ["EM ANDAMENTO", "HOMOLOGADO"]:
-                try:
-                    num = it['n']
-                    r = session.get(f"{url_base}/{num}/resultados", timeout=15)
-                    if r.status_code == 200:
-                        rl = r.json()
-                        res = rl[0] if isinstance(rl, list) and len(rl) > 0 else (rl if isinstance(rl, dict) else None)
-                        
-                        if res:
-                            nf = res.get('nomeRazaoSocialFornecedor') or res.get('razaoSocial')
-                            ni = res.get('niFornecedor')
-                            val_homol = float(res.get('valorUnitarioHomologado') or 0.0)
-                            
-                            if nf:
-                                forn_completo = f"{nf} (CNPJ: {ni})" if ni else nf
-                                # CORREÇÃO: Salvando com as chaves corretas para o HTML ler
-                                item_novo['res_forn'] = forn_completo
-                                item_novo['sit'] = "HOMOLOGADO"
-                                item_novo['res_val'] = val_homol
-                                houve_mudanca = True
-                                
-                                # Registra para o relatório com os nomes de variáveis corretos do app.py
-                                mudancas_detalhadas.append({
-                                    'data_atualizacao': datetime.now().strftime('%d/%m/%Y %H:%M'),
-                                    'id_processo': lid,
-                                    'edital': dados_antigos.get('edit'),
-                                    'orgao': dados_antigos.get('org'),
-                                    'item_num': num,
-                                    'descricao': it.get('d'),
-                                    'valor_estimado': it.get('v_est'),
-                                    'valor_homologado': val_homol,
-                                    'fornecedor': forn_completo
-                                })
-                except: pass
-            
-            itens_atualizados.append(item_novo)
-            
-        if houve_mudanca:
-            dados_novos = dados_antigos.copy()
-            dados_novos['itens'] = itens_atualizados
-            return dados_novos, mudancas_detalhadas
-        return None, []
-    except Exception: return None, []
+        dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
+        if dt_enc < DATA_CORTE_2026:
+            return None
+    except:
+        return None
+    
+    # Chave única para deduplicação
+    chave_unica = f"{licitacao.get('id', '')[:14]}_{licitacao.get('edit', '')}"
+    qtd_itens = len(itens)
+    
+    return (chave_unica, licitacao, dt_enc, qtd_itens)
 
 if __name__ == '__main__':
-    if not os.path.exists(ARQDADOS): exit()
-
-    with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f: 
-        banco_raw = json.load(f)
-
-    banco_dict = {item['id']: item for item in banco_raw}
-    session = criar_sessao()
-    alvos = [lid for lid, d in banco_dict.items() if precisa_atualizar(d)]
-
-    relatorio_final = []
-
-    if alvos:
-        print(f"🔍 Analisando {len(alvos)} processos para possíveis atualizações...")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
-            futuros = {exe.submit(atualizar_licitacao, lid, banco_dict[lid], session): lid for lid in alvos}
-            for f in concurrent.futures.as_completed(futuros):
-                try:
-                    res_dados, res_mudancas = f.result()
-                    if res_dados:
-                        banco_dict[res_dados['id']] = res_dados
-                        relatorio_final.extend(res_mudancas)
-                except: pass
-
-        # Salva o Banco de Dados Atualizado
-        with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
-            json.dump(list(banco_dict.values()), f, ensure_ascii=False)
-
-        # Gera o Relatório CSV se houver atualizações
-        if relatorio_final:
-            print(f"📊 Sucesso: {len(relatorio_final)} itens foram atualizados com fornecedores!")
-            keys = relatorio_final[0].keys()
-            with open(ARQ_RELATORIO, 'w', newline='', encoding='utf-8-sig') as f:
-                dict_writer = csv.DictWriter(f, fieldnames=keys, delimiter=';')
-                dict_writer.writeheader()
-                dict_writer.writerows(relatorio_final)
-            print(f"📁 Relatório gerado: {ARQ_RELATORIO}")
+    if not os.path.exists(ARQDADOS):
+        print(f"Arquivo {ARQDADOS} não encontrado. Execute o app.py primeiro.")
+        sys.exit(1)
+    
+    print("🧹 Iniciando limpeza de dados...")
+    
+    with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
+        banco_bruto = json.load(f)
+    
+    print(f"📊 Total no banco bruto: {len(banco_bruto)} licitações")
+    
+    banco_deduplicado = {}
+    
+    # Processamento paralelo
+    with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
+        resultados = executor.map(processar_licitacao_limpeza, banco_bruto)
+    
+    for res in resultados:
+        if res is None:
+            continue
+        
+        chave, card, dt_novo, qtd_itens_novo = res
+        
+        if chave not in banco_deduplicado:
+            banco_deduplicado[chave] = {'card': card, 'dt': dt_novo, 'qtd': qtd_itens_novo}
         else:
-            print("ℹ️ Nenhum item novo foi homologado no PNCP desde a última verificação.")
-    else:
-        print("ℹ️ Não há licitações pendentes de atualização no banco de dados.")
+            # Mantém a versão com mais itens, ou data mais recente se igual
+            qtd_itens_antigo = banco_deduplicado[chave]['qtd']
+            if qtd_itens_novo > qtd_itens_antigo:
+                banco_deduplicado[chave] = {'card': card, 'dt': dt_novo, 'qtd': qtd_itens_novo}
+            elif qtd_itens_novo == qtd_itens_antigo:
+                if dt_novo > banco_deduplicado[chave]['dt']:
+                    banco_deduplicado[chave] = {'card': card, 'dt': dt_novo, 'qtd': qtd_itens_novo}
+    
+    # Gera lista final
+    lista_final = [item['card'] for item in banco_deduplicado.values()]
+    
+    print(f"💾 Salvando {len(lista_final)} licitações limpas...")
+    
+    with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f:
+        json.dump(lista_final, f, ensure_ascii=False)
+    
+    print(f"✅ Concluído! {len(lista_final)} licitações validadas e prontas para o Dashboard.")
+    print(f"   📉 Rejeitadas: {len(banco_bruto) - len(lista_final)} licitações")
+'''
+
+print("Código Limpeza.py gerado com sucesso!")
+print(f"Tamanho: {len(limpeza_py_codigo)} caracteres")
+
+# Salvar ambos os arquivos para download
+with open('/mnt/kimi/output/App.py', 'w', encoding='utf-8') as f:
+    f.write(app_py_codigo)
+
+with open('/mnt/kimi/output/Limpeza.py', 'w', encoding='utf-8') as f:
+    f.write(limpeza_py_codigo)
+
+print("\n✅ Arquivos salvos em /mnt/kimi/output/")
+print("📥 App.py: [App.py](sandbox:///mnt/kimi/output/App.py)")
+print("📥 Limpeza.py: [Limpeza.py](sandbox:///mnt/kimi/output/Limpeza.py)")
