@@ -1,4 +1,6 @@
-name: Sniper Pharma (Auditor de Resultados)
+
+# Gerando auditor.yml atualizado
+auditor_yml = '''name: Sniper Pharma (Auditor de Resultados)
 
 # TRAVA DE CONCORRÊNCIA: Mantém a integridade do banco de dados
 concurrency:
@@ -7,14 +9,24 @@ concurrency:
 
 on:
   schedule:
-    - cron: '0 15,21 * * *'  
-  workflow_dispatch: 
+    - cron: '0 15,21 * * *'  # 15:00 e 21:00 UTC (12:00 e 18:00 Brasília)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Modo de Execução'
+        required: true
+        default: 'completo'
+        type: choice
+        options:
+        - completo
+        - rapido
 
 jobs:
   auditoria:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     steps:
     - uses: actions/checkout@v4
       with:
@@ -26,25 +38,91 @@ jobs:
         python-version: '3.11'
         
     - name: Install deps
-      run: pip install requests
+      run: pip install requests urllib3
 
-    - name: 🩺 Run Auditor (atualiza.py)
-      run: python atualiza.py
+    - name: 🩺 Run Auditor (Atualiza_Completo.py)
+      run: python Atualiza_Completo.py
 
-    - name: 💾 Commit Auditoria e Relatório
+    - name: 💾 Commit Auditoria, Relatório e Log
       run: |
         git config user.name "Sniper Pharma Auditor"
         git config user.email "auditor@pharma.bot"
-        # Adiciona o banco de dados e o novo relatório CSV
-        git add pregacoes_pharma_limpos.json.gz relatorio_atualizacoes.csv || true
-        git diff --staged --quiet || git commit -m "Auditoria concluída: Banco atualizado e Relatório gerado"
-        git pull origin main --rebase -X theirs
-        git push origin main
+        
+        # Adiciona todos os arquivos gerados/atualizados
+        git add pregacoes_pharma_limpos.json.gz || true
+        git add relatorio_atualizacoes.csv || true
+        git add log_atualizacao.txt || true
+        
+        # Só commita se houver mudanças
+        if ! git diff --staged --quiet; then
+          DATA_HORA=$(date +'%d/%m/%Y %H:%M')
+          git commit -m "Auditoria $DATA_HORA: Banco atualizado com situações e homologações"
+          git pull origin main --rebase -X theirs
+          git push origin main
+          echo "✅ Mudanças commitadas e push realizados"
+        else
+          echo "ℹ️ Nenhuma mudança detectada para commitar"
+        fi
 
-    - name: 📁 Upload Relatório como Artefacto
+    - name: 📁 Upload Relatório como Artefato
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: relatorio-homologacoes
-        path: relatorio_atualizacoes.csv
-        retention-days: 7
+        name: relatorio-homologacoes-${{ github.run_number }}
+        path: |
+          relatorio_atualizacoes.csv
+          log_atualizacao.txt
+        retention-days: 30
+        if-no-files-found: warn
+
+    - name: 📊 Resumo da Execução
+      if: always()
+      run: |
+        echo "=========================================="
+        echo "📋 RESUMO DA AUDITORIA"
+        echo "=========================================="
+        if [ -f log_atualizacao.txt ]; then
+          echo "📝 Log de execução:"
+          tail -20 log_atualizacao.txt
+        else
+          echo "⚠️ Arquivo de log não encontrado"
+        fi
+        echo "=========================================="
+        if [ -f relatorio_atualizacoes.csv ]; then
+          LINHAS=$(wc -l < relatorio_atualizacoes.csv)
+          echo "📊 Registros no relatório: $((LINHAS - 1))"
+        else
+          echo "ℹ️ Nenhum relatório gerado (sem mudanças)"
+        fi
+        echo "=========================================="
+'''
+
+# Salvar
+with open('/mnt/kimi/output/auditor.yml', 'w', encoding='utf-8') as f:
+    f.write(auditor_yml)
+
+print("✅ auditor.yml atualizado")
+print(f"Tamanho: {len(auditor_yml)} caracteres")
+
+print("\n" + "="*60)
+print("📋 RESUMO DAS MUDANÇAS NOS WORKFLOWS")
+print("="*60)
+print("""
+🔄 SYNC-DATA.YML (Captura)
+   ✅ Instala urllib3 (dependência do retry)
+   ✅ Adiciona checkpoint.json ao commit
+   ✅ Mensagem de commit mais descritiva (período completo)
+   
+🩺 AUDITOR.YML (Atualização)
+   ✅ Usa Atualiza_Completo.py (modo completo)
+   ✅ Adiciona log_atualizacao.txt ao commit
+   ✅ Upload de ambos os arquivos (CSV + LOG) como artefatos
+   ✅ Retention aumentado para 30 dias
+   ✅ Step de resumo da execução no final
+   ✅ Nome do artefato com run_number (evita conflitos)
+   ✅ Só commita se houver mudanças reais
+""")
+
+print("📥 Downloads:")
+print("   sync-data.yml: [Download](sandbox:///mnt/kimi/output/sync-data.yml)")
+print("   auditor.yml: [Download](sandbox:///mnt/kimi/output/auditor.yml)")
