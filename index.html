@@ -8,7 +8,7 @@
     <style>
         :root { --blue-df: #004a99; --green-df: #198754; --red-df: #dc3545; --yellow-df: #ffc107; }
         body { background-color: #f0f2f5; font-family: 'Segoe UI', system-ui, sans-serif; color: #333; font-size: 0.92rem; }
-        
+
         .header-card { 
             background: linear-gradient(90deg, #002d5a 0%, #004a99 100%); 
             color: white; padding: 12px 20px; border-radius: 10px 10px 0 0; font-size: 1.05rem;
@@ -17,7 +17,7 @@
         .header-bold { font-weight: 700; }
         .badge-uf-header { background-color: #000; color: #fff; font-weight: 800; padding: 2px 8px; border-radius: 4px; margin-right: 5px; }
 
-        /* NOVO: Estilos para compatibilidade */
+        /* Badge de compatibilidade */
         .compat-badge {
             display: inline-flex;
             align-items: center;
@@ -33,6 +33,7 @@
             background: linear-gradient(135deg, #28a745 0%, #20c997 100%); 
             color: white; 
             box-shadow: 0 2px 8px rgba(40, 167, 69, 0.4);
+            animation: pulse-compat 2s infinite;
         }
         .compat-media { 
             background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%); 
@@ -43,35 +44,27 @@
             background: linear-gradient(135deg, #6c757d 0%, #adb5bd 100%); 
             color: white; 
         }
-        .compat-score {
-            font-size: 0.9rem;
-            font-weight: 800;
+        .compat-na { 
+            background: rgba(255,255,255,0.2); 
+            color: rgba(255,255,255,0.7); 
+            border: 1px solid rgba(255,255,255,0.3);
         }
-        
-        /* NOVO: Destaque para itens compatíveis */
-        .item-compativel {
-            background-color: #d4edda !important;
-            font-weight: 700 !important;
-            border-left: 4px solid #28a745 !important;
-        }
-        .item-compativel td {
-            color: #155724 !important;
-            font-weight: 700 !important;
-        }
-        .item-compativel .descricao-item {
-            color: #0b2e13 !important;
-            font-weight: 800 !important;
-        }
-        
-        /* Animação sutil para chamar atenção */
+        .compat-score { font-size: 0.9rem; font-weight: 800; }
+
         @keyframes pulse-compat {
             0% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.4); }
             70% { box-shadow: 0 0 0 6px rgba(40, 167, 69, 0); }
             100% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
         }
-        .compat-alta {
-            animation: pulse-compat 2s infinite;
+
+        /* Destaque para itens compatíveis */
+        .item-compativel {
+            background-color: #d4edda !important;
+            font-weight: 700 !important;
+            border-left: 4px solid #28a745 !important;
         }
+        .item-compativel td { color: #155724 !important; font-weight: 700 !important; }
+        .item-compativel .descricao-item { color: #0b2e13 !important; font-weight: 800 !important; }
 
         .benef-sim { color: var(--red-df) !important; font-weight: bold !important; }
         .benef-nao { color: var(--green-df) !important; font-weight: bold !important; }
@@ -82,44 +75,44 @@
         .badge-parcial { background-color: var(--yellow-df); color: #212529; }
 
         .card-licitacao { border-radius: 10px; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; overflow: hidden; }
+        .card-licitacao.compat-destaque-alta { 
+            border: 2px solid #28a745; 
+            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3); 
+        }
+        .card-licitacao.compat-destaque-media { 
+            border: 2px solid #ffc107; 
+            box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3); 
+        }
+
         .filter-box { background: white; padding: 15px; border-radius: 10px; border: 1px solid #e0e6ed; margin-bottom: 20px; }
         .filter-label { font-size: 0.65rem; font-weight: 800; color: var(--blue-df); margin-bottom: 2px; display: block; text-transform: uppercase; }
-        
+
         .table-itens { font-size: 0.82em; }
         .val-estimado { background-color: #fffdf2; }
         .val-homologado { background-color: #f2f7ff; }
-        
         .header-fornecedor { background-color: #f8f9fa; color: var(--blue-df); font-weight: bold; }
-        
         .header-status-andamento { background-color: #fff9db; font-weight: bold; color: #856404; text-align: center; }
         .header-status-deserto { background-color: #f8d7da; font-weight: bold; color: #721c24; text-align: center; }
         .header-status-cancelado { background-color: #e2e3e5; font-weight: bold; color: #383d41; text-align: center; }
-        
+
         .pagination-container { display: flex; align-items: center; justify-content: center; gap: 15px; margin-top: 20px; padding-bottom: 40px; }
-        
         .btn-excluir { font-size: 0.7rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 2px 8px; border-radius: 4px; cursor: pointer; }
         .btn-excluir:hover { background: var(--red-df); border-color: var(--red-df); }
-        
-        /* Tooltip para compatibilidade */
-        .compat-tooltip {
-            position: relative;
-            cursor: help;
+
+        /* Debug panel */
+        .debug-panel { 
+            background: #f8f9fa; 
+            border: 1px solid #dee2e6; 
+            border-radius: 8px; 
+            padding: 10px; 
+            margin-bottom: 15px; 
+            font-size: 0.8rem;
+            display: none;
         }
-        .compat-tooltip:hover::after {
-            content: attr(data-tooltip);
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0,0,0,0.9);
-            color: white;
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 0.7rem;
-            white-space: nowrap;
-            z-index: 1000;
-        }
+        .debug-panel.show { display: block; }
+        .debug-panel h6 { color: #004a99; margin-bottom: 8px; }
     </style>
+<base target="_blank">
 </head>
 <body>
 
@@ -130,13 +123,18 @@
             <span class="badge bg-dark" style="font-size: 0.7rem;">ANALISTA DE LICITAÇÕES | PNCP & COMPRASGOV</span>
         </div>
         <div class="d-flex gap-2">
-            <button class="btn btn-outline-primary btn-sm" onclick="toggleCompatView()" id="btnToggleCompat">
-                🎯 Ver Compatíveis
-            </button>
+            <button class="btn btn-outline-secondary btn-sm" onclick="toggleDebug()">🐛 Debug</button>
+            <button class="btn btn-outline-primary btn-sm" onclick="toggleCompatView()" id="btnToggleCompat">🎯 Ver Compatíveis</button>
             <button class="btn btn-success fw-bold" onclick="abrirInclusaoManual()">+ Inclusão Manual (PNCP)</button>
         </div>
     </div>
-    
+
+    <!-- Painel de Debug -->
+    <div id="debugPanel" class="debug-panel">
+        <h6>🐛 Informações de Debug</h6>
+        <div id="debugContent">Carregando...</div>
+    </div>
+
     <div class="filter-box shadow-sm">
         <div class="row g-2">
             <div class="col-md-2">
@@ -233,10 +231,11 @@
 <script>
 let allData = [];
 let filteredData = [];
-let compatData = {}; // NOVO: Dados de compatibilidade
+let compatData = {};
 let currentPage = 1;
 const itemsPerPage = 20;
-let viewCompatOnly = false; // NOVO: Filtro de visualização
+let viewCompatOnly = false;
+let debugMode = false;
 
 const GITHUB_OWNER = 'jenissonb88-bot';
 const GITHUB_REPO = 'licitacoes_df';
@@ -245,92 +244,210 @@ const GITHUB_FILE_PATH = 'links_manuais.txt';
 const modalObj = new bootstrap.Modal(document.getElementById('modalDetalhes'));
 const modalInclusaoObj = new bootstrap.Modal(document.getElementById('modalInclusao'));
 
-// NOVO: Carrega dados de compatibilidade
-async function loadCompatData() {
-    try {
-        const response = await fetch('relatorio_compatibilidade.csv');
-        if (!response.ok) return;
-        
-        const csvText = await response.text();
-        const lines = csvText.split('\\n').filter(l => l.trim());
-        const headers = lines[0].split(';');
-        
-        // Mapeia índices das colunas importantes
-        const idxId = headers.indexOf('id');
-        const idxScore = headers.indexOf('score_final');
-        const idxConfianca = headers.indexOf('confianca');
-        const idxMatches = headers.indexOf('principais_matches');
-        
-        for (let i = 1; i < lines.length; i++) {
-            const cols = lines[i].split(';');
-            if (cols.length > idxId && cols[idxId]) {
-                compatData[cols[idxId]] = {
-                    score: parseFloat(cols[idxScore]) || 0,
-                    confianca: cols[idxConfianca] || 'INCOMPATIVEL',
-                    matches: cols[idxMatches] || ''
-                };
+// DEBUG: Mostra informações de debug
+function toggleDebug() {
+    debugMode = !debugMode;
+    document.getElementById('debugPanel').classList.toggle('show');
+    updateDebugInfo();
+}
+
+function updateDebugInfo() {
+    const debugDiv = document.getElementById('debugContent');
+    const totalLic = allData.length;
+    const withCompat = allData.filter(l => l.compatScore > 0).length;
+    const compatKeys = Object.keys(compatData).length;
+
+    debugDiv.innerHTML = `
+        <strong>Total licitações:</strong> ${totalLic}<br>
+        <strong>Com compatibilidade:</strong> ${withCompat}<br>
+        <strong>Registros no CSV:</strong> ${compatKeys}<br>
+        <strong>Exemplo ID:</strong> ${allData[0]?.id || 'N/A'}<br>
+        <strong>Exemplo compat:</strong> ${compatData[allData[0]?.id]?.confianca || 'N/A'}<br>
+        <button class="btn btn-sm btn-primary mt-2" onclick="forceReloadCompat()">🔄 Recarregar Compatibilidade</button>
+    `;
+}
+
+async function forceReloadCompat() {
+    compatData = {};
+    await loadCompatData();
+    // Reprocessa dados
+    allData.forEach(lic => {
+        const compat = compatData[lic.id];
+        if (compat) {
+            lic.compatScore = compat.score;
+            lic.compatConfianca = compat.confianca;
+            lic.compatMatches = compat.matches;
+        }
+    });
+    filtrar();
+    updateDebugInfo();
+}
+
+// CORREÇÃO: Função de parse CSV mais robusta
+function parseCSV(csvText) {
+    const lines = csvText.trim().split('\n');
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split(';').map(h => h.trim().replace(/^\uFEFF/, ''));
+    console.log('Headers encontrados:', headers);
+
+    const result = [];
+    for (let i = 1; i < lines.length; i++) {
+        if (!lines[i].trim()) continue;
+
+        // Handle quoted fields with semicolons inside
+        const cols = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let char of lines[i]) {
+            if (char === '"') {
+                inQuotes = !inQuotes;
+            } else if (char === ';' && !inQuotes) {
+                cols.push(current.trim());
+                current = '';
+            } else {
+                current += char;
             }
         }
-        console.log(`Compatibilidade carregada: ${Object.keys(compatData).length} licitações`);
+        cols.push(current.trim());
+
+        const obj = {};
+        headers.forEach((h, idx) => {
+            obj[h] = cols[idx] || '';
+        });
+        result.push(obj);
+    }
+    return result;
+}
+
+async function loadCompatData() {
+    try {
+        console.log('🔄 Carregando compatibilidade...');
+
+        // Tenta múltiplos caminhos possíveis
+        const urls = [
+            'relatorio_compatibilidade.csv',
+            './relatorio_compatibilidade.csv',
+            '/relatorio_compatibilidade.csv'
+        ];
+
+        let response = null;
+        for (const url of urls) {
+            try {
+                const r = await fetch(url, { cache: 'no-store' });
+                if (r.ok) {
+                    response = r;
+                    console.log('✅ CSV encontrado em:', url);
+                    break;
+                }
+            } catch (e) {
+                console.log('❌ Falhou:', url);
+            }
+        }
+
+        if (!response) {
+            console.warn('⚠️ relatorio_compatibilidade.csv não encontrado');
+            return;
+        }
+
+        const csvText = await response.text();
+        console.log('📄 Tamanho CSV:', csvText.length, 'caracteres');
+
+        const parsed = parseCSV(csvText);
+        console.log('📊 Linhas parseadas:', parsed.length);
+
+        if (parsed.length > 0) {
+            console.log('🔍 Primeira linha:', parsed[0]);
+            console.log('🔍 Colunas disponíveis:', Object.keys(parsed[0]));
+        }
+
+        // Mapeia por ID - tenta diferentes nomes de coluna
+        parsed.forEach(row => {
+            const id = row.id || row.ID || row.Id || row['id'];
+            const score = parseFloat(row.score_final || row.SCORE_FINAL || row.Score || 0);
+            const confianca = row.confianca || row.CONFIANCA || row.Confianca || 'INCOMPATIVEL';
+            const matches = row.principais_matches || row.PRINCIPAIS_MATCHES || row.Matches || '';
+
+            if (id) {
+                compatData[id] = {
+                    score: score,
+                    confianca: confianca.toUpperCase(),
+                    matches: matches
+                };
+            }
+        });
+
+        console.log('✅ Compatibilidade carregada:', Object.keys(compatData).length, 'registros');
+
     } catch (e) {
-        console.log('Sem dados de compatibilidade:', e);
+        console.error('❌ Erro ao carregar compatibilidade:', e);
     }
 }
 
 async function loadData() {
     try {
-        // NOVO: Carrega compatibilidade primeiro
+        // Carrega compatibilidade primeiro
         await loadCompatData();
-        
+
         const response = await fetch('pregacoes_pharma_limpos.json.gz');
-        if(!response.ok) throw new Error();
+        if(!response.ok) throw new Error('JSON não encontrado');
+
         const ds = new DecompressionStream('gzip');
         const decompressedStream = response.body.pipeThrough(ds);
         const text = await new Response(decompressedStream).text();
-        
+
         allData = JSON.parse(text);
-        
-        // NOVO: Enriquece dados com compatibilidade
+        console.log('📦 Licitações carregadas:', allData.length);
+
+        // Enriquece dados com compatibilidade
+        let compatCount = 0;
         allData.forEach(lic => {
             const compat = compatData[lic.id];
             if (compat) {
                 lic.compatScore = compat.score;
                 lic.compatConfianca = compat.confianca;
                 lic.compatMatches = compat.matches;
+                compatCount++;
             } else {
                 lic.compatScore = 0;
                 lic.compatConfianca = 'INCOMPATIVEL';
                 lic.compatMatches = '';
             }
         });
-        
-        // Ordena por score de compatibilidade (maiores primeiro) se disponível
+
+        console.log('✅ Licitações com compatibilidade:', compatCount);
+
+        // Ordena: primeiro por compatibilidade, depois por data
         allData.sort((a, b) => {
             const scoreDiff = (b.compatScore || 0) - (a.compatScore || 0);
             if (scoreDiff !== 0) return scoreDiff;
             return new Date(b.dt_enc) - new Date(a.dt_enc);
         });
-        
+
         filteredData = [...allData];
         renderMonitor();
+
+        if (debugMode) updateDebugInfo();
+
     } catch (e) { 
-        document.getElementById('monitor-content').innerHTML = '<div class="alert alert-info">Aguardando novos dados processados pelo GitHub Actions...</div>';
+        console.error('Erro:', e);
+        document.getElementById('monitor-content').innerHTML = 
+            `<div class="alert alert-danger">Erro ao carregar dados: ${e.message}</div>`;
     }
 }
 
-// NOVO: Gera HTML do badge de compatibilidade
 function getCompatBadgeHTML(lic) {
     if (!lic.compatScore || lic.compatScore < 15) {
-        return '<span class="compat-badge compat-baixa" title="Sem compatibilidade com portfólio">⚪ N/A</span>';
+        return '<span class="compat-badge compat-na">⚪ N/A</span>';
     }
-    
+
     const confianca = lic.compatConfianca || 'INCOMPATIVEL';
     const score = lic.compatScore || 0;
-    const matches = lic.compatMatches ? lic.compatMatches.split('|').slice(0, 3).join(', ') : '';
-    
+
     let cssClass = 'compat-baixa';
     let icon = '🟠';
-    
+
     if (confianca === 'ALTA') {
         cssClass = 'compat-alta';
         icon = '🟢';
@@ -338,43 +455,43 @@ function getCompatBadgeHTML(lic) {
         cssClass = 'compat-media';
         icon = '🟡';
     }
-    
-    return `<span class="compat-badge ${cssClass} compat-tooltip" data-tooltip="${matches}">
-        ${icon} <span class="compat-score">${score.toFixed(0)}</span> ${confianca}
+
+    return `<span class="compat-badge ${cssClass}" title="${lic.compatMatches || ''}">
+        ${icon} <span class="compat-score">${Math.round(score)}</span> ${confianca}
     </span>`;
 }
 
 function renderMonitor() {
     const container = document.getElementById('monitor-content');
     container.innerHTML = '';
-    
+
     const start = (currentPage - 1) * itemsPerPage;
     const end = start + itemsPerPage;
     const pageItems = filteredData.slice(start, end);
 
     if (pageItems.length === 0) {
-        container.innerHTML = '<div class="text-center py-5 text-muted">Nenhuma licitação encontrada para os filtros aplicados.</div>';
+        container.innerHTML = '<div class="text-center py-5 text-muted">Nenhuma licitação encontrada.</div>';
+        return;
     }
 
     pageItems.forEach(lic => {
         const div = document.createElement('div');
         div.className = 'card card-licitacao';
-        
-        // NOVO: Adiciona classe de destaque se compatibilidade alta
+
+        // Adiciona classe de destaque baseada na compatibilidade
         if (lic.compatConfianca === 'ALTA') {
-            div.style.boxShadow = '0 4px 15px rgba(40, 167, 69, 0.3)';
-            div.style.border = '2px solid #28a745';
+            div.classList.add('compat-destaque-alta');
         } else if (lic.compatConfianca === 'MEDIA') {
-            div.style.boxShadow = '0 4px 12px rgba(255, 193, 7, 0.3)';
+            div.classList.add('compat-destaque-media');
         }
-        
+
         const valorTotal = lic.val_tot > 0 
             ? `R$ ${lic.val_tot.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` 
             : 'Sigiloso/Não inf.';
 
         let tipoLic = "AMPLO";
         let cssTipo = "badge-amplo";
-        
+
         if (lic.itens && lic.itens.length > 0) {
             const todosExclusivos = lic.itens.every(it => [1, 2, 3].includes(parseInt(it.benef)));
             const algumExclusivo = lic.itens.some(it => [1, 2, 3].includes(parseInt(it.benef)));
@@ -387,7 +504,6 @@ function renderMonitor() {
             alertaGlobalHtml = `<div style="color: #dc3545; font-weight: 900; font-size: 0.85rem; margin-top: 5px; text-transform: uppercase; border: 1px solid #dc3545; border-radius: 4px; padding: 2px;">⚠️ PROCESSO ${lic.sit_global}</div>`;
         }
 
-        // NOVO: Badge de compatibilidade no header
         const compatBadge = getCompatBadgeHTML(lic);
 
         div.innerHTML = `
@@ -396,7 +512,6 @@ function renderMonitor() {
                     <span class="badge-uf-header">${lic.uf}</span>
                     <span class="header-bold">${lic.org || '---'}</span>
                     <span class="ms-2 opacity-75 small">| Edital: ${lic.edit}</span>
-                    <!-- NOVO: Badge de compatibilidade -->
                     ${compatBadge}
                 </div>
                 <button class="btn-excluir" onclick="excluirLicitacao('${lic.id}')">Excluir</button>
@@ -406,13 +521,12 @@ function renderMonitor() {
                     <div class="col-md-8 border-end">
                         <small class="text-muted d-block mb-1">${lic.cid || '---'} - ${lic.unid_nome || '---'}</small>
                         <h6 class="fw-bold mb-2">${lic.obj || 'Sem descrição'}</h6>
-                        <!-- NOVO: Mostra matches se houver compatibilidade -->
                         ${lic.compatMatches ? `<small class="text-success d-block mb-2" style="font-size: 0.75rem;">
                             <strong>Matches:</strong> ${lic.compatMatches.split('|').slice(0, 5).join(', ')}
                         </small>` : ''}
                         <div class="d-flex gap-2 mt-2">
-                            <span class="badge bg-secondary d-flex align-items-center">UASG/Código: ${lic.uasg}</span>
-                            <span class="badge bg-info text-dark d-flex align-items-center">Vencimento: ${new Date(lic.dt_enc).toLocaleString('pt-BR')}</span>
+                            <span class="badge bg-secondary d-flex align-items-center">UASG: ${lic.uasg}</span>
+                            <span class="badge bg-info text-dark d-flex align-items-center">Venc: ${new Date(lic.dt_enc).toLocaleDateString('pt-BR')}</span>
                             <span class="badge-tipo ${cssTipo}">${tipoLic}</span>
                         </div>
                     </div>
@@ -421,7 +535,7 @@ function renderMonitor() {
                         <h5 class="fw-bold text-primary mb-0">${valorTotal}</h5>
                         ${alertaGlobalHtml}
                         <div class="mt-3 d-flex justify-content-center align-items-center gap-2">
-                            <span class="badge bg-dark" style="font-size: 0.7rem;" title="Fonte da Licitação">${lic.fonte || 'PNCP Direto'}</span>
+                            <span class="badge bg-dark" style="font-size: 0.7rem;">${lic.fonte || 'PNCP'}</span>
                             <button class="btn btn-sm btn-primary px-4 fw-bold" onclick="abrirItens('${lic.id}')">DETALHAR ${lic.itens.length} ITENS</button>
                         </div>
                     </div>
@@ -431,19 +545,17 @@ function renderMonitor() {
     });
 
     const totalPages = Math.ceil(filteredData.length / itemsPerPage) || 1;
-    document.getElementById('pageInfo').innerText = `Página ${currentPage} de ${totalPages}`;
+    document.getElementById('pageInfo').innerText = `Página ${currentPage} de ${totalPages} (${filteredData.length} total)`;
 }
 
-// NOVO: Toggle para ver apenas compatíveis
 function toggleCompatView() {
     viewCompatOnly = !viewCompatOnly;
     const btn = document.getElementById('btnToggleCompat');
-    
+
     if (viewCompatOnly) {
         btn.innerHTML = '🎯 Ver Todas';
         btn.classList.remove('btn-outline-primary');
         btn.classList.add('btn-primary');
-        // Filtra apenas com compatibilidade média ou alta
         filteredData = allData.filter(lic => 
             lic.compatConfianca === 'ALTA' || lic.compatConfianca === 'MEDIA'
         );
@@ -451,7 +563,7 @@ function toggleCompatView() {
         btn.innerHTML = '🎯 Ver Compatíveis';
         btn.classList.remove('btn-primary');
         btn.classList.add('btn-outline-primary');
-        filtrar(); // Volta ao filtro normal
+        filtrar();
     }
     currentPage = 1;
     renderMonitor();
@@ -466,11 +578,10 @@ function filtrar() {
     const compat = document.getElementById('filterCompat').value;
 
     filteredData = allData.filter(lic => {
-        const dataLic = lic.dt_enc.split('T')[0];
-        
-        // NOVO: Filtro de compatibilidade
+        const dataLic = lic.dt_enc ? lic.dt_enc.split('T')[0] : '';
+
         const matchCompat = !compat || lic.compatConfianca === compat;
-        
+
         return (!dataEnc || dataLic === dataEnc) &&
                (!uf || lic.uf.includes(uf)) &&
                (!cid || (lic.cid || "").toUpperCase().includes(cid)) &&
@@ -478,15 +589,16 @@ function filtrar() {
                (!edt || (lic.edit || "").includes(edt)) &&
                matchCompat;
     });
+
     currentPage = 1;
     renderMonitor();
+    if (debugMode) updateDebugInfo();
 }
 
 function limparFiltros() {
-    document.querySelectorAll('.form-control').forEach(i => {
-        if (i.id !== 'filterCompat') i.value = '';
+    document.querySelectorAll('input, select').forEach(i => {
+        if (i.id.startsWith('filter')) i.value = '';
     });
-    document.getElementById('filterCompat').value = '';
     viewCompatOnly = false;
     document.getElementById('btnToggleCompat').innerHTML = '🎯 Ver Compatíveis';
     document.getElementById('btnToggleCompat').classList.remove('btn-primary');
@@ -498,6 +610,8 @@ function limparFiltros() {
 
 function abrirItens(id) {
     const lic = allData.find(x => x.id === id);
+    if (!lic) return;
+
     document.getElementById('modalTitle').innerText = `Itens: ${lic.org} (Edital ${lic.edit})`;
     document.getElementById('linkPncp').href = lic.link;
 
@@ -539,7 +653,6 @@ function abrirItens(id) {
     modalObj.show();
 }
 
-// NOVO: Parâmetro lic adicionado para verificar compatibilidade dos itens
 function renderLinhaItem(it, lic) {
     const isMeEpp = [1, 2, 3].includes(parseInt(it.benef));
     const meEppHtml = isMeEpp ? '<span class="benef-sim">SIM</span>' : '<span class="benef-nao">NÃO</span>';
@@ -547,21 +660,20 @@ function renderLinhaItem(it, lic) {
     const valEstimado = it.v_est || 0;
     const valorTotal = valFinal > 0 ? (valFinal * it.q) : (valEstimado * it.q);
 
-    // NOVO: Verifica se item é compatível com portfólio
+    // Verifica se item é compatível
     let compatClass = '';
     let descClass = '';
-    
+
     if (lic && lic.compatMatches) {
-        const matches = lic.compatMatches.split('|');
-        const descNorm = (it.d || '').toUpperCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
-        
-        // Verifica se algum termo do match está na descrição do item
+        const matches = lic.compatMatches.split('|').filter(m => m);
+        const descNorm = normalizeText(it.d || '');
+
         const isCompat = matches.some(match => {
             if (!match) return false;
-            const matchNorm = match.toUpperCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
-            return descNorm.includes(matchNorm) || matchNorm.includes(descNorm.substring(0, 10));
+            const matchNorm = normalizeText(match);
+            return descNorm.includes(matchNorm) || matchNorm.includes(descNorm.substring(0, 15));
         });
-        
+
         if (isCompat) {
             compatClass = 'item-compativel';
             descClass = 'descricao-item';
@@ -575,6 +687,13 @@ function renderLinhaItem(it, lic) {
             <td class="text-center val-estimado">R$ ${valEstimado.toFixed(4)}</td>
             <td class="text-center val-homologado">${valFinal > 0 ? 'R$ ' + valFinal.toFixed(4) : '---'}</td>
             <td class="text-center fw-bold">R$ ${valorTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td></tr>`;
+}
+
+function normalizeText(text) {
+    if (!text) return '';
+    return text.toUpperCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^A-Z0-9\s]/g, '');
 }
 
 function excluirLicitacao(id) {
@@ -604,7 +723,7 @@ async function processarInclusaoManual() {
 
     try {
         const urlFile = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE_PATH}`;
-        
+
         const resGet = await fetch(urlFile, {
             headers: { 'Authorization': `token ${token}` }
         });
@@ -618,8 +737,8 @@ async function processarInclusaoManual() {
             currentContent = decodeURIComponent(escape(atob(dataGet.content))); 
         }
 
-        const newContent = currentContent + (currentContent.endsWith('\\n') || currentContent === "" ? "" : "\\n") + link + "\\n";
-        
+        const newContent = currentContent + (currentContent.endsWith('\n') || currentContent === "" ? "" : "\n") + link + "\n";
+
         const resPut = await fetch(urlFile, {
             method: 'PUT',
             headers: {
@@ -634,7 +753,7 @@ async function processarInclusaoManual() {
         });
 
         if (resPut.ok) {
-            statusDiv.innerHTML = '<span class="text-success">✅ SUCESSO! O arquivo foi atualizado. O sistema levará alguns minutos para processar os novos dados via GitHub Actions.</span>';
+            statusDiv.innerHTML = '<span class="text-success">✅ SUCESSO! O arquivo foi atualizado.</span>';
             setTimeout(() => modalInclusaoObj.hide(), 3000);
         } else {
             const err = await resPut.json();
@@ -642,12 +761,16 @@ async function processarInclusaoManual() {
         }
 
     } catch (e) {
-        statusDiv.innerHTML = `<span class="text-danger">Erro de Conexão: ${e.message}</span>`;
+        statusDiv.innerHTML = `<span class="text-danger">Erro: ${e.message}</span>`;
     }
 }
 
-document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
-document.getElementById('nextPage').onclick = () => { if(currentPage * itemsPerPage < filteredData.length) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
+document.getElementById('prevPage').onclick = () => { 
+    if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } 
+};
+document.getElementById('nextPage').onclick = () => { 
+    if(currentPage * itemsPerPage < filteredData.length) { currentPage++; renderMonitor(); window.scrollTo(0,0); } 
+};
 
 loadData();
 </script>
