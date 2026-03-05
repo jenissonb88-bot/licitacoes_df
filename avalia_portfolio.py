@@ -1,382 +1,429 @@
+import pandas as pd
 import json
 import gzip
-import csv
-import os
-import unicodedata
 import re
+import os
 import sys
+from collections import defaultdict
 from datetime import datetime
-import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# --- CONFIGURAÇÕES ---
-ARQDADOS = 'pregacoes_pharma_limpos.json.gz'
-ARQ_PORTFOLIO = 'Exportar Dados.csv'
-ARQ_RELATORIO = 'relatorio_compatibilidade.csv'
-ARQ_LOG = 'log_avaliacao.txt'
-MAXWORKERS = 10
+# ============================================================================
+# CONFIGURAÇÕES - AJUSTE AQUI PARA MAIOR OU MENOR RIGOR
+# ============================================================================
 
-# Thresholds de confiança
-THRESHOLD_ALTA = 70
-THRESHOLD_MEDIA = 40
-THRESHOLD_BAIXA = 15
+# Thresholds de percentual para classificação
+THRESHOLD_ALTA = 30.0       # % mínima para ALTA (era 70 de score)
+THRESHOLD_MEDIA = 15.0      # % mínima para MÉDIA (era 40 de score)
+THRESHOLD_BAIXA = 5.0       # % mínima para BAIXA (era 15 de score)
 
-def normalize(t):
+# Blacklist de termos genéricos que NÃO devem gerar match
+TERMOS_GENERICOS = {
+    # Unidades e medidas
+    'MG', 'ML', 'G', 'KG', 'MCG', 'UI', 'UN', 'UNIDADE', 'UNIDADES',
+    # Formas farmacêuticas
+    'COMPRIMIDO', 'COMPRIMIDOS', 'CAPSULA', 'CAPSULAS', 'DRAGEA', 'DRAGEAS',
+    'SOLUCAO', 'SOLUÇÃO', 'SOLUCOES', 'SOLUÇÕES', 'SUSPENSAO', 'SUSPENSÃO',
+    'XAROPE', 'XAROPES', 'INJETAVEL', 'INJETÁVEL', 'INJETAVEIS', 'INJETÁVEIS',
+    'AMPOLA', 'AMPOLAS', 'FRASCO', 'FRASCOS', 'BISNAGA', 'BISNAGAS',
+    'TUBO', 'TUBOS', 'POTE', 'POTES', 'CAIXA', 'CAIXAS', 'EMBALAGEM', 'EMBALAGENS',
+    # Vias de administração
+    'ORAL', 'INTRAVENOSO', 'IV', 'IM', 'INTRAMUSCULAR', 'TOPICO', 'TÓPICO',
+    'RETAL', 'VAGINAL', 'NASAL', 'OFTALMICO', 'OFTÁLMICO', 'OTICO', 'ÓTICO',
+    # Quantidades genéricas
+    'UND', 'CP', 'CAP', 'AMP', 'FR', 'CX', 'TB', 'COMPR', 'CAPS',
+    # Outros termos genéricos
+    'GENERICO', 'GENÉRICO', 'SIMILAR', 'REFERENCIA', 'REFERÊNCIA', 'ETICO', 'ÉTICO',
+    'APRESENTACAO', 'APRESENTAÇÃO', 'CONCENTRACAO', 'CONCENTRAÇÃO', 'DOSAGEM',
+    'QUANTIDADE', 'QTD', 'TOTAL', 'PARCIAL', 'ITEM', 'ITENS',
+    'MEDICAMENTO', 'MEDICAMENTOS', 'FARMACO', 'FÁRMACO', 'PRODUTO', 'PRODUTOS',
+    'MATERIAL', 'MATERIAIS', 'INSUMO', 'INSUMOS', 'HOSPITALAR', 'HOSPITALARES'
+}
+
+# Peso por especificidade do termo
+PESO_MINIMO_CARACTERES = 4  # Termos com menos caracteres são ignorados
+
+# Número de workers para paralelização
+MAX_WORKERS = 10
+
+# ============================================================================
+# FUNÇÕES UTILITÁRIAS
+# ============================================================================
+
+def log(msg, nivel="INFO"):
+    """Log com timestamp"""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{timestamp}] [{nivel}] {msg}")
+
+def normalizar_texto(texto):
     """Normaliza texto para comparação"""
-    if not t:
+    if not isinstance(texto, str):
         return ""
-    text = ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() 
-                   if unicodedata.category(c) != 'Mn')
-    text = ' '.join(text.split())
-    return text
+    # Remove acentos e converte para maiúsculo
+    texto = texto.upper()
+    texto = re.sub(r'[ÁÀÂÃÄ]', 'A', texto)
+    texto = re.sub(r'[ÉÈÊË]', 'E', texto)
+    texto = re.sub(r'[ÍÌÎÏ]', 'I', texto)
+    texto = re.sub(r'[ÓÒÔÕÖ]', 'O', texto)
+    texto = re.sub(r'[ÚÙÛÜ]', 'U', texto)
+    texto = re.sub(r'[Ç]', 'C', texto)
+    # Remove caracteres especiais, mantém apenas letras, números e espaços
+    texto = re.sub(r'[^A-Z0-9\\s]', ' ', texto)
+    # Remove espaços múltiplos
+    texto = re.sub(r'\\s+', ' ', texto).strip()
+    return texto
 
-def extrair_termos_produto(descricao_produto):
-    """Extrai termos relevantes de uma descrição de produto"""
-    desc_norm = normalize(descricao_produto)
+def extrair_tokens_rigorosos(texto):
+    """
+    Extrai tokens de forma rigorosa, excluindo termos genéricos e curtos.
+    Retorna apenas tokens significativos (nomes de medicamentos/produtos).
+    """
+    if not texto:
+        return set()
+    
+    texto_normalizado = normalizar_texto(texto)
+    tokens = set()
+    
+    # Divide em tokens
+    palavras = texto_normalizado.split()
+    
+    # Adiciona tokens individuais (se não forem genéricos e tiverem tamanho mínimo)
+    for palavra in palavras:
+        if len(palavra) >= PESO_MINIMO_CARACTERES and palavra not in TERMOS_GENERICOS:
+            tokens.add(palavra)
+    
+    # Adiciona bigramas (2 palavras consecutivas) para maior especificidade
+    for i in range(len(palavras) - 1):
+        bigrama = f"{palavras[i]} {palavras[i+1]}"
+        # Só adiciona se nenhuma das palavras for genérica
+        if palavras[i] not in TERMOS_GENERICOS and palavras[i+1] not in TERMOS_GENERICOS:
+            if len(bigrama) >= PESO_MINIMO_CARACTERES * 2:
+                tokens.add(bigrama)
+    
+    # Adiciona trigramas (3 palavras) para máxima especificidade
+    for i in range(len(palavras) - 2):
+        trigrama = f"{palavras[i]} {palavras[i+1]} {palavras[i+2]}"
+        if (palavras[i] not in TERMOS_GENERICOS and 
+            palavras[i+1] not in TERMOS_GENERICOS and 
+            palavras[i+2] not in TERMOS_GENERICOS):
+            if len(trigrama) >= PESO_MINIMO_CARACTERES * 3:
+                tokens.add(trigrama)
+    
+    return tokens
 
-    palavras_stop = ['COM', 'DE', 'DA', 'DO', 'DAS', 'DOS', 'PARA', 'POR', 'EM', 'NO', 'NA', 
-                     'MG', 'ML', 'G', 'KG', 'UNIDADE', 'UND', 'CAPSULA', 'COMPRIMIDO',
-                     'INJETAVEL', 'SOLUCAO', 'SUSPENSAO', 'XAROPE', 'CREME', 'POMADA',
-                     'GENERICO', 'REFERENCIA', 'SIMILAR', 'APRESENTACAO', 'FRASCO',
-                     'CAIXA', 'BLISTER', 'CARTELA', 'CP', 'CAP', 'AMPOLA', 'AMP',
-                     'FA', 'CPR', 'COMPR', 'COMP', 'TAB', 'TABLETE']
+def calcular_compatibilidade_percentual(tokens_licitacao, tokens_portfolio):
+    """
+    Calcula compatibilidade como percentual de itens da licitação presentes no portfólio.
+    
+    Fórmula: (tokens_licitacao ∩ tokens_portfolio) / tokens_licitacao × 100
+    
+    Retorna: (percentual, matches_encontrados)
+    """
+    if not tokens_licitacao:
+        return 0.0, []
+    
+    # Interseção: tokens que existem em ambos
+    matches = tokens_licitacao.intersection(tokens_portfolio)
+    
+    # Cálculo de percentual
+    percentual = (len(matches) / len(tokens_licitacao)) * 100
+    
+    # Ordena matches por tamanho (mais específicos primeiro)
+    matches_ordenados = sorted(matches, key=lambda x: len(x), reverse=True)
+    
+    return percentual, matches_ordenados
 
-    palavras = [p for p in desc_norm.split() if len(p) > 3 and p not in palavras_stop]
-
-    termos_principais = []
-    for palavra in palavras[:3]:
-        if len(palavra) > 4:
-            termos_principais.append(palavra)
-
-    return {
-        'termos_principais': termos_principais,
-        'todas_palavras': palavras,
-        'descricao_original': descricao_produto,
-        'descricao_normalizada': desc_norm
-    }
-
-def carregar_portfolio():
-    """Carrega e processa o portfólio de produtos"""
-    portfolio = {
-        'medicamentos': {},
-        'materiais': {},
-        'todos_termos': set(),
-        'total_produtos': 0
-    }
-
-    if not os.path.exists(ARQ_PORTFOLIO):
-        print(f"⚠️ Arquivo {ARQ_PORTFOLIO} não encontrado!")
-        return portfolio
-
-    print(f"📚 Carregando portfólio de {ARQ_PORTFOLIO}...")
-
-    try:
-        with open(ARQ_PORTFOLIO, 'r', encoding='utf-8') as f:
-            reader = csv.reader(f, delimiter=';')
-            header = next(reader, None)
-            if not header:
-                with open(ARQ_PORTFOLIO, 'r', encoding='latin-1') as f2:
-                    reader = csv.reader(f2, delimiter=';')
-                    header = next(reader, None)
-
-            col_descricao = None
-            col_categoria = None
-            col_codigo = None
-
-            for i, col in enumerate(header):
-                col_upper = col.upper()
-                if any(x in col_upper for x in ['PRODUTO', 'DESCRI', 'MEDICAMENT', 'ITEM']):
-                    col_descricao = i
-                if any(x in col_upper for x in ['CATEGORIA', 'FAMILIA', 'GRUPO', 'CLASSE']):
-                    col_categoria = i
-                if any(x in col_upper for x in ['CODIGO', 'SKU', 'EAN', 'REFERENCIA']):
-                    col_codigo = i
-
-            if col_descricao is None:
-                col_descricao = 0
-            if col_categoria is None:
-                col_categoria = 1 if len(header) > 1 else 0
-
-            for row in reader:
-                if len(row) <= max(col_descricao, col_categoria):
-                    continue
-
-                descricao = row[col_descricao].strip()
-                categoria = row[col_categoria].strip() if col_categoria < len(row) else "GERAL"
-                codigo = row[col_codigo].strip() if col_codigo and col_codigo < len(row) else ""
-
-                if not descricao:
-                    continue
-
-                portfolio['total_produtos'] += 1
-
-                termos_produto = extrair_termos_produto(descricao)
-
-                portfolio['todos_termos'].update(termos_produto['todas_palavras'])
-
-                cat_norm = normalize(categoria)
-                if 'MATERIAL' in cat_norm or 'INSUMO' in cat_norm or 'MMH' in cat_norm:
-                    categoria_tipo = 'materiais'
-                else:
-                    categoria_tipo = 'medicamentos'
-
-                if categoria not in portfolio[categoria_tipo]:
-                    portfolio[categoria_tipo][categoria] = []
-
-                portfolio[categoria_tipo][categoria].append({
-                    'descricao': descricao,
-                    'codigo': codigo,
-                    'termos': termos_produto
-                })
-
-        print(f"✅ Portfólio carregado: {portfolio['total_produtos']} produtos")
-        print(f"   💊 Medicamentos: {sum(len(v) for v in portfolio['medicamentos'].values())}")
-        print(f"   🏥 Materiais: {sum(len(v) for v in portfolio['materiais'].values())}")
-        print(f"   📖 Termos únicos: {len(portfolio['todos_termos'])}")
-
-    except Exception as e:
-        print(f"❌ Erro ao carregar portfólio: {e}")
-
-    return portfolio
-
-def calcular_score_compatibilidade(texto_licitacao, itens_licitacao, portfolio):
-    """Calcula score de compatibilidade entre licitação e portfólio"""
-
-    texto_norm = normalize(texto_licitacao)
-
-    scores = {
-        'objeto': 0,
-        'itens': [],
-        'categorias_match': set(),
-        'produtos_match': [],
-        'termos_encontrados': set()
-    }
-
-    # AVALIAÇÃO DO OBJETO
-    matches_objeto = []
-    for termo in portfolio['todos_termos']:
-        if len(termo) > 4 and termo in texto_norm:
-            pattern = r'\b' + re.escape(termo) + r'\b'
-            if re.search(pattern, texto_norm):
-                matches_objeto.append(termo)
-                scores['termos_encontrados'].add(termo)
-
-    if matches_objeto:
-        matches_unicos = []
-        for match in sorted(matches_objeto, key=len, reverse=True):
-            if not any(match in m and match != m for m in matches_unicos):
-                matches_unicos.append(match)
-
-        score_obj = sum(min(len(m), 15) for m in matches_unicos[:10])
-        scores['objeto'] = min(score_obj * 2, 100)
-
-    # AVALIAÇÃO DOS ITENS
-    melhor_score_item = 0
-
-    for item in itens_licitacao:
-        desc_item = normalize(item.get('d', ''))
-        if not desc_item:
-            continue
-
-        score_item = 0
-        matches_item = []
-
-        for termo in portfolio['todos_termos']:
-            if len(termo) > 4 and termo in desc_item:
-                pattern = r'\b' + re.escape(termo) + r'\b'
-                if re.search(pattern, desc_item):
-                    matches_item.append(termo)
-                    scores['termos_encontrados'].add(termo)
-
-        if matches_item:
-            matches_unicos_item = []
-            for match in sorted(matches_item, key=len, reverse=True):
-                if not any(match in m and match != m for m in matches_unicos_item):
-                    matches_unicos_item.append(match)
-
-            score_item = sum(min(len(m), 12) for m in matches_unicos_item[:5])
-            score_item = min(score_item * 2.5, 100)
-
-            if score_item > melhor_score_item:
-                melhor_score_item = score_item
-
-            scores['itens'].append({
-                'numero': item.get('n'),
-                'descricao': item.get('d', '')[:60],
-                'score': round(score_item, 1),
-                'matches': matches_unicos_item[:5]
-            })
-
-    # SCORE FINAL
-    score_final = (scores['objeto'] * 0.3) + (melhor_score_item * 0.7)
-
-    # Bônus para múltiplos itens compatíveis
-    itens_altos = [i for i in scores['itens'] if i['score'] > THRESHOLD_MEDIA]
-    if len(itens_altos) > 1:
-        bonus = min(len(itens_altos) * 3, 15)
-        score_final = min(score_final + bonus, 100)
-
-    scores['final'] = round(score_final, 1)
-
-    # Determina confiança
-    if scores['final'] >= THRESHOLD_ALTA:
-        scores['confianca'] = 'ALTA'
-    elif scores['final'] >= THRESHOLD_MEDIA:
-        scores['confianca'] = 'MEDIA'
-    elif scores['final'] >= THRESHOLD_BAIXA:
-        scores['confianca'] = 'BAIXA'
+def classificar_compatibilidade(percentual):
+    """Classifica o nível de compatibilidade baseado no percentual"""
+    if percentual >= THRESHOLD_ALTA:
+        return "ALTA"
+    elif percentual >= THRESHOLD_MEDIA:
+        return "MEDIA"
+    elif percentual >= THRESHOLD_BAIXA:
+        return "BAIXA"
     else:
-        scores['confianca'] = 'INCOMPATIVEL'
+        return "INCOMPATIVEL"
 
-    return scores
+# ============================================================================
+# CARREGAMENTO DE DADOS
+# ============================================================================
 
-def processar_licitacao_avaliacao(lic, portfolio):
-    """Processa uma licitação e retorna avaliação de compatibilidade"""
+def carregar_portfolio(csv_path="Exportar Dados.csv"):
+    """Carrega portfólio de produtos do CSV"""
+    log(f"Carregando portfólio de {csv_path}...")
+    
+    if not os.path.exists(csv_path):
+        log(f"ERRO: Arquivo {csv_path} não encontrado!", "ERRO")
+        return None, None
+    
     try:
-        id_lic = lic.get('id', 'N/A')
-        edital = lic.get('edit', 'N/A')
-        orgao = lic.get('org', 'N/A')
-        uf = lic.get('uf', '')
-        cidade = lic.get('cid', '')
-        objeto = lic.get('obj', '')
-        itens = lic.get('itens', [])
-        link = lic.get('link', '')
-        val_tot = lic.get('val_tot', 0)
-        dt_enc = lic.get('dt_enc', '')
+        # Tenta diferentes encodings
+        for encoding in ['utf-8', 'latin1', 'iso-8859-1', 'cp1252']:
+            try:
+                df = pd.read_csv(csv_path, sep=None, engine='python', encoding=encoding)
+                break
+            except:
+                continue
+        
+        # Detecta colunas
+        col_descricao = None
+        for col in df.columns:
+            col_upper = col.upper()
+            if any(term in col_upper for term in ['PRODUTO', 'DESCRICAO', 'DESCRIÇÃO', 'MEDICAMENTO', 'ITEM', 'NOME']):
+                col_descricao = col
+                break
+        
+        if not col_descricao:
+            col_descricao = df.columns[0]
+            log(f"Coluna de descrição não identificada, usando primeira coluna: {col_descricao}", "AVISO")
+        
+        # Extrai tokens de cada produto do portfólio
+        tokens_portfolio = set()
+        produtos_processados = []
+        
+        for _, row in df.iterrows():
+            descricao = str(row[col_descricao]) if pd.notna(row[col_descricao]) else ""
+            if descricao and descricao.lower() != 'nan':
+                tokens_produto = extrair_tokens_rigorosos(descricao)
+                tokens_portfolio.update(tokens_produto)
+                produtos_processados.append({
+                    'descricao_original': descricao,
+                    'tokens': tokens_produto
+                })
+        
+        log(f"✅ Portfólio carregado: {len(df)} produtos")
+        log(f"📊 Tokens únicos no portfólio: {len(tokens_portfolio)}")
+        
+        # Mostra alguns exemplos de tokens extraídos
+        exemplos = sorted(list(tokens_portfolio), key=len, reverse=True)[:10]
+        log(f"🔍 Exemplos de tokens: {exemplos}")
+        
+        return tokens_portfolio, produtos_processados
+        
+    except Exception as e:
+        log(f"ERRO ao carregar portfólio: {e}", "ERRO")
+        return None, None
 
-        scores = calcular_score_compatibilidade(objeto, itens, portfolio)
+def carregar_licitacoes(json_path="pregacoes_pharma_limpos.json.gz"):
+    """Carrega licitações do arquivo JSON comprimido MANTENDO ORDENAÇÃO ORIGINAL"""
+    log(f"Carregando licitações de {json_path}...")
+    
+    if not os.path.exists(json_path):
+        log(f"ERRO: Arquivo {json_path} não encontrado!", "ERRO")
+        return None
+    
+    try:
+        with gzip.open(json_path, 'rt', encoding='utf-8') as f:
+            dados = json.load(f)
+        
+        # Converte para lista se for dicionário MANTENDO A ORDEM ORIGINAL
+        licitacoes = []
+        if isinstance(dados, dict):
+            for orgao, editais in dados.items():
+                for edital, info in editais.items():
+                    info['orgao'] = orgao
+                    info['edital'] = edital
+                    # Preserva índice original para manter ordenação
+                    info['_index_original'] = len(licitacoes)
+                    licitacoes.append(info)
+        else:
+            for idx, item in enumerate(dados):
+                item['_index_original'] = idx
+                licitacoes.append(item)
+        
+        log(f"✅ {len(licitacoes)} licitações carregadas (ordem original preservada)")
+        return licitacoes
+        
+    except Exception as e:
+        log(f"ERRO ao carregar licitações: {e}", "ERRO")
+        return None
 
-        if scores['confianca'] == 'INCOMPATIVEL':
-            return None
+# ============================================================================
+# AVALIAÇÃO DE LICITAÇÕES
+# ============================================================================
 
-        resultado = {
-            'data_avaliacao': datetime.now().strftime('%Y-%m-%d %H:%M'),
-            'id': id_lic,
-            'edital': edital,
-            'orgao': orgao[:60],
-            'uf': uf,
-            'cidade': cidade[:30],
-            'score_final': scores['final'],
-            'confianca': scores['confianca'],
-            'score_objeto': scores['objeto'],
-            'melhor_score_item': max([i['score'] for i in scores['itens']]) if scores['itens'] else 0,
-            'qtd_itens_analisados': len(itens),
-            'qtd_itens_compativeis': len([i for i in scores['itens'] if i['score'] > THRESHOLD_MEDIA]),
-            'valor_total_estimado': val_tot,
-            'data_encerramento': dt_enc[:10] if dt_enc else '',
-            'objeto_resumo': objeto[:100],
-            'principais_matches': '|'.join(list(scores['termos_encontrados'])[:8]),
-            'link': link
+def avaliar_licitacao(licitacao, tokens_portfolio):
+    """Avalia uma única licitação contra o portfólio"""
+    try:
+        # Extrai texto do objeto da licitação
+        objeto = str(licitacao.get('objeto', ''))
+        
+        # Extrai itens se existirem
+        itens_texto = []
+        itens = licitacao.get('itens', [])
+        if isinstance(itens, list):
+            for item in itens:
+                if isinstance(item, dict):
+                    desc_item = item.get('descricao', '') or item.get('nome', '') or str(item)
+                    itens_texto.append(desc_item)
+                else:
+                    itens_texto.append(str(item))
+        
+        # Combina objeto + itens
+        texto_completo = objeto + " " + " ".join(itens_texto)
+        
+        # Extrai tokens da licitação
+        tokens_licitacao = extrair_tokens_rigorosos(texto_completo)
+        
+        if not tokens_licitacao:
+            return {
+                'id': licitacao.get('edital', 'unknown'),
+                'percentual': 0.0,
+                'confianca': 'INCOMPATIVEL',
+                'matches': [],
+                'total_tokens_licitacao': 0,
+                'total_matches': 0,
+                '_index_original': licitacao.get('_index_original', 0)
+            }
+        
+        # Calcula compatibilidade percentual
+        percentual, matches = calcular_compatibilidade_percentual(tokens_licitacao, tokens_portfolio)
+        
+        # Classifica
+        confianca = classificar_compatibilidade(percentual)
+        
+        return {
+            'id': licitacao.get('edital', licitacao.get('id', 'unknown')),
+            'orgao': licitacao.get('orgao', 'N/A'),
+            'objeto': objeto[:200],
+            'percentual': round(percentual, 2),
+            'confianca': confianca,
+            'matches': matches[:10],
+            'total_tokens_licitacao': len(tokens_licitacao),
+            'total_matches': len(matches),
+            '_index_original': licitacao.get('_index_original', 0)  # PRESERVA ÍNDICE
+        }
+        
+    except Exception as e:
+        return {
+            'id': licitacao.get('edital', 'unknown'),
+            'percentual': 0.0,
+            'confianca': 'ERRO',
+            'matches': [],
+            'erro': str(e),
+            '_index_original': licitacao.get('_index_original', 0)
         }
 
-        return resultado
+def avaliar_todas_licitacoes(licitacoes, tokens_portfolio):
+    """Avalia todas as licitações em paralelo MANTENDO ORDENAÇÃO"""
+    log(f"🔍 Avaliando compatibilidade de {len(licitacoes)} licitações...")
+    
+    resultados = []
+    processadas = 0
+    
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {
+            executor.submit(avaliar_licitacao, lic, tokens_portfolio): lic 
+            for lic in licitacoes
+        }
+        
+        for future in as_completed(futures):
+            resultado = future.result()
+            resultados.append(resultado)
+            processadas += 1
+            
+            if processadas % 100 == 0:
+                log(f"Processadas {processadas}/{len(licitacoes)}...")
+    
+    # ORDENA PELO ÍNDICE ORIGINAL (mantém ordem das licitações)
+    resultados.sort(key=lambda x: x['_index_original'])
+    
+    return resultados
 
-    except Exception as e:
-        return {'erro': str(e), 'id': lic.get('id', 'N/A')}
+# ============================================================================
+# GERAÇÃO DE RELATÓRIO
+# ============================================================================
 
-def gerar_relatorio(resultados, origem='SYNC'):
-    """Gera relatório CSV ordenado por score"""
-    if not resultados:
-        print("ℹ️ Nenhuma licitação compatível encontrada.")
-        return False
+def gerar_relatorio(resultados, origem="MANUAL"):
+    """Gera relatório CSV com resultados MANTENDO ORDEM ORIGINAL"""
+    arquivo_saida = "relatorio_compatibilidade.csv"
+    
+    # Prepara dados para CSV (mantém ordem original dos pregões)
+    dados_csv = []
+    for r in resultados:
+        dados_csv.append({
+            'id': r['id'],
+            'orgao': r.get('orgao', ''),
+            'objeto_licitacao': r.get('objeto', ''),
+            'percentual': r['percentual'],
+            'confianca': r['confianca'],
+            'total_tokens': r.get('total_tokens_licitacao', 0),
+            'total_matches': r.get('total_matches', 0),
+            'principais_matches': '|'.join(r.get('matches', []))[:500]
+        })
+    
+    df = pd.DataFrame(dados_csv)
+    
+    # NÃO ORDENA POR PERCENTUAL - mantém ordem original dos pregões
+    # df = df.sort_values('percentual', ascending=False)  # REMOVIDO
+    
+    # Salva com encoding UTF-8 e delimitador ;
+    df.to_csv(arquivo_saida, index=False, sep=';', encoding='utf-8-sig')
+    
+    # Estatísticas
+    total = len(resultados)
+    alta = len([r for r in resultados if r['confianca'] == 'ALTA'])
+    media = len([r for r in resultados if r['confianca'] == 'MEDIA'])
+    baixa = len([r for r in resultados if r['confianca'] == 'BAIXA'])
+    incomp = len([r for r in resultados if r['confianca'] == 'INCOMPATIVEL'])
+    
+    log("="*60)
+    log("📊 RELATÓRIO GERADO (ORDEM ORIGINAL MANTIDA)")
+    log("="*60)
+    log(f"Arquivo: {arquivo_saida}")
+    log(f"Origem: {origem}")
+    log(f"Total: {total} | 🟢 ALTA: {alta} | 🟡 MÉDIA: {media} | 🟠 BAIXA: {baixa} | ⚪ INCOMPATÍVEL: {incomp}")
+    
+    return arquivo_saida
 
-    resultados_ordenados = sorted(resultados, key=lambda x: x.get('score_final', 0), reverse=True)
+def salvar_cache(dados, origem):
+    """Salva cache para evitar reprocessamento"""
+    cache_data = {
+        'timestamp': datetime.now().isoformat(),
+        'origem': origem,
+        'total_licitacoes': len(dados)
+    }
+    with open('cache_avaliacao.json', 'w', encoding='utf-8') as f:
+        json.dump(cache_data, f)
 
-    # Verifica se arquivo já existe (append ou overwrite)
-    arquivo_existe = os.path.exists(ARQ_RELATORIO)
-
-    with open(ARQ_RELATORIO, 'w', newline='', encoding='utf-8-sig') as f:
-        if resultados_ordenados:
-            writer = csv.DictWriter(f, fieldnames=resultados_ordenados[0].keys(), delimiter=';')
-            writer.writeheader()
-            writer.writerows(resultados_ordenados)
-
-    alta = sum(1 for r in resultados if r.get('confianca') == 'ALTA')
-    media = sum(1 for r in resultados if r.get('confianca') == 'MEDIA')
-    baixa = sum(1 for r in resultados if r.get('confianca') == 'BAIXA')
-
-    print(f"\n📊 RELATÓRIO GERADO: {ARQ_RELATORIO}")
-    print(f"   Origem: {origem}")
-    print(f"   Total: {len(resultados)} | 🟢 ALTA: {alta} | 🟡 MÉDIA: {media} | 🟠 BAIXA: {baixa}")
-
-    # Log detalhado
-    with open(ARQ_LOG, 'a', encoding='utf-8') as log:
-        log.write(f"\n{'='*60}\n")
-        log.write(f"[{origem}] {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
-        log.write(f"Total: {len(resultados)} | Alta: {alta} | Média: {media} | Baixa: {baixa}\n")
-        log.write(f"Top 5:\n")
-        for r in resultados_ordenados[:5]:
-            log.write(f"  {r['score_final']:5.1f} | {r['confianca']:6} | {r['edital']} | {r['orgao'][:40]}\n")
-
-    return True
+# ============================================================================
+# FUNÇÃO PRINCIPAL
+# ============================================================================
 
 def main():
-    # Detecta origem da execução (SYNC ou AUDITOR)
-    origem = 'SYNC'
+    """Função principal"""
+    # Detecta origem (SYNC ou AUDITOR)
+    origem = "MANUAL"
     if len(sys.argv) > 1:
-        if sys.argv[1].upper() == 'AUDITOR':
-            origem = 'AUDITOR'
+        origem = sys.argv[1].upper()
+    
+    log("="*60)
+    log(f"🔍 AVALIAÇÃO DE PORTFÓLIO v3.0 [RIGOROSA - ORDEM PRESERVADA] [{origem}]")
+    log("="*60)
+    
+    # Carrega portfólio
+    tokens_portfolio, produtos = carregar_portfolio()
+    if not tokens_portfolio:
+        log("❌ Falha ao carregar portfólio. Abortando.", "ERRO")
+        return 1
+    
+    # Carrega licitações
+    licitacoes = carregar_licitacoes()
+    if not licitacoes:
+        log("❌ Falha ao carregar licitações. Abortando.", "ERRO")
+        return 1
+    
+    # Avalia
+    resultados = avaliar_todas_licitacoes(licitacoes, tokens_portfolio)
+    
+    # Gera relatório
+    gerar_relatorio(resultados, origem)
+    
+    # Salva cache
+    salvar_cache(licitacoes, origem)
+    
+    log(f"✅ Avaliação [{origem}] concluída! Ordem original dos pregões mantida.")
+    return 0
 
-    print("="*60)
-    print(f"🔍 AVALIAÇÃO DE PORTFÓLIO [{origem}]")
-    print("="*60)
-
-    if not os.path.exists(ARQDADOS):
-        print(f"❌ Arquivo {ARQDADOS} não encontrado!")
-        sys.exit(1)
-
-    portfolio = carregar_portfolio()
-    if portfolio['total_produtos'] == 0:
-        print("❌ Portfólio vazio.")
-        sys.exit(1)
-
-    print(f"\n📂 Carregando licitações...")
-    with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
-        licitacoes = json.load(f)
-    print(f"✅ {len(licitacoes)} licitações carregadas")
-
-    # Verifica se houve mudança significativa desde última execução
-    hash_atual = str(len(licitacoes)) + str(os.path.getmtime(ARQDADOS))
-    cache_file = '.cache_avaliacao_hash'
-
-    if os.path.exists(cache_file):
-        with open(cache_file, 'r') as f:
-            hash_anterior = f.read().strip()
-        if hash_atual == hash_anterior and origem == 'SYNC':
-            print("\n⚡ Dados iguais à última execução. Pulando avaliação [SYNC].")
-            # Mas continua se for AUDITOR (pode ter atualizações de fornecedores)
-            if origem != 'AUDITOR':
-                print("   (Use AUDITOR como argumento para forçar reavaliação)")
-                return
-
-    print(f"\n🔄 Avaliando compatibilidade...")
-    resultados = []
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as executor:
-        futures = {executor.submit(processar_licitacao_avaliacao, lic, portfolio): lic 
-                   for lic in licitacoes}
-
-        for i, future in enumerate(concurrent.futures.as_completed(futures)):
-            if i % 50 == 0:
-                print(f"   Processadas {i}/{len(licitacoes)}...")
-
-            try:
-                resultado = future.result()
-                if resultado and 'erro' not in resultado:
-                    resultados.append(resultado)
-            except Exception as e:
-                print(f"   ⚠️ Erro: {e}")
-
-    sucesso = gerar_relatorio(resultados, origem)
-
-    # Salva hash para próxima execução
-    if sucesso:
-        with open(cache_file, 'w') as f:
-            f.write(hash_atual)
-
-    print(f"\n✅ Avaliação [{origem}] concluída!")
-
-    # Retorna código de sucesso para CI/CD
-    sys.exit(0 if sucesso else 1)
-
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    exit(main())
