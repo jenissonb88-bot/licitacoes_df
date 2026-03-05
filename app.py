@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, date
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-# --- CONFIGURAÇÕES ---
+# --- CONFIGURAÇOES ---
 ARQDADOS = 'dadosoportunidades.json.gz'
 ARQ_TEMP = ARQDADOS + '.tmp'
 ARQ_CHECKPOINT = 'checkpoint.json'
@@ -55,7 +55,7 @@ PALAVRAS_MEDICAMENTOS = [normalize(x) for x in [
     "FORNECIMENTO DE MEDICAMENTO", "FORNECIMENTO DE MEDICAMENTOS"
 ]]
 
-# --- VETOS OPERACIONAIS (Com variações SING/PLURAL) ---
+# --- VETOS OPERACIONAIS (Com variaoes SING/PLURAL) ---
 VETOS_OPERACIONAIS_BASE = [
     "OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "REFORMA", "MANUTENCAO",
     "LIMPEZA URBANA", "RESIDUOS SOLIDOS", "LOCACAO", "TRANSPORTE",
@@ -87,7 +87,7 @@ VETOS_EDUCACAO = [normalize(x) for x in [
     "SECRETARIA DE EDUCACAO"
 ]]
 
-# Gerar variações sing/plural para vetos operacionais
+# Gerar variaoes sing/plural para vetos operacionais
 VETOS_OPERACIONAL = []
 for termo in VETOS_OPERACIONAIS_BASE:
     n = normalize(termo)
@@ -127,7 +127,7 @@ WL_MATERIAIS_NE = [normalize(x) for x in [
 
 WL_TERMOS_AMPLos = [normalize(x) for x in ["SAUDE", "HOSPITAL", "HOSPITALAR"]]
 
-# --- CARREGAMENTO DO CATÁLOGO ---
+# --- CARREGAMENTO DO CATALOGO ---
 CATALOGO_TERMOS = set()
 if os.path.exists(ARQ_CATALOGO):
     try:
@@ -165,7 +165,7 @@ def tem_medicamento_no_texto(texto):
     return any(p in texto_norm for p in PALAVRAS_MEDICAMENTOS)
 
 def tem_medicamento_nos_itens(itens):
-    """Fallback: verifica se algum item contém medicamentos"""
+    """Fallback: verifica se algum item contem medicamentos"""
     if not itens:
         return False
     for item in itens:
@@ -198,26 +198,26 @@ def veta_edital(obj_raw, uf, itens=None):
             return ('IGNORAR', 'Medicamento em estado bloqueado')
         return ('CAPTURAR', 'Super passe: medicamentos')
 
-    # 3. VETOS OPERACIONAIS/ALIMENTAÇÃO/EDUCAÇÃO
+    # 3. VETOS OPERACIONAIS/ALIMENTACAO/EDUCACAO
     for v in TODOS_VETOS:
         if v in obj_norm:
             if "NUTRICAO" in v or "ALIMENT" in v:
                 if any(bom in obj_norm for bom in WL_NUTRI_CLINICA) and "ESCOLAR" not in obj_norm:
                     pass
                 else:
-                    return ('VETAR', f'Veto alimentação: {v}')
+                    return ('VETAR', f'Veto alimentacao: {v}')
             else:
                 return ('VETAR', f'Veto operacional: {v}')
 
-    # 4. MMH/NUTRIÇÃO - Apenas Nordeste
+    # 4. MMH/NUTRICAO - Apenas Nordeste
     tem_mmh = any(t in obj_norm for t in WL_MATERIAIS_NE)
     tem_nutri = any(t in obj_norm for t in WL_NUTRI_CLINICA)
 
     if tem_mmh or tem_nutri:
         if uf in UFS_PERMITIDAS_MMH:
-            return ('CAPTURAR', 'MMH/Nutrição no NE')
+            return ('CAPTURAR', 'MMH/Nutricao no NE')
         else:
-            return ('IGNORAR', 'MMH/Nutrição fora do NE')
+            return ('IGNORAR', 'MMH/Nutricao fora do NE')
 
     # 5. TERMOS AMPLOS (SAUDE/HOSPITAL) - Apenas Nordeste
     tem_termo_amplo = any(t in obj_norm for t in WL_TERMOS_AMPLos)
@@ -227,7 +227,7 @@ def veta_edital(obj_raw, uf, itens=None):
         else:
             return ('IGNORAR', 'Termo amplo fora do NE')
 
-    return ('IGNORAR', 'Não atende critérios')
+    return ('IGNORAR', 'Nao atende criterios')
 
 def safe_float(val):
     try:
@@ -258,7 +258,7 @@ def processar_licitacao(lic, session, forcado=False):
     id_ref = "DESCONHECIDO"
     try:
         if not isinstance(lic, dict):
-            return ('ERRO', {'msg': 'Formato JSON inválido da API principal'}, 0, 0)
+            return ('ERRO', {'msg': 'Formato JSON invalido da API principal'}, 0, 0)
 
         cnpj = lic.get('orgaoEntidade', {}).get('cnpj', '0000')
         ano = lic.get('anoCompra', '0000')
@@ -328,7 +328,7 @@ def processar_licitacao(lic, session, forcado=False):
                     break
                 pagina_atual += 1
             except Exception as e:
-                print(f"   ⚠️ Erro ao buscar itens página {pagina_atual}: {e}")
+                print(f"   ⚠️ Erro ao buscar itens pagina {pagina_atual}: {e}")
                 break
 
         if not itens_brutos and not forcado:
@@ -379,19 +379,18 @@ def processar_links_manuais(session, banco):
     if not links:
         return stats
 
-    print(f"
-📎 Processando {len(links)} links manuais...")
+    print(f"\n📎 Processando {len(links)} links manuais...")
 
     for url in links:
         cnpj, ano, seq = extrair_dados_url_pncp(url)
         if not cnpj:
-            print(f"   ❌ URL inválida: {url}")
+            print(f"   ❌ URL invalida: {url}")
             stats['erros'] += 1
             continue
 
         chave = f"{cnpj}{ano}_{str(seq).zfill(5)}/{ano}"
         if chave in banco:
-            print(f"   ℹ️ Já existe: {chave}")
+            print(f"   ℹ️ Ja existe: {chave}")
             continue
 
         url_api = f'https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}'
@@ -408,7 +407,8 @@ def processar_links_manuais(session, banco):
             if st == 'CAPTURADO' and d:
                 banco[f"{d['id'][:14]}_{d['edit']}"] = d
                 stats['adicionados'] += 1
-                print(f"   ✅ Adicionado: {d['edit']} - {d['obj'][:50]}...")
+                obj_resumo = d['obj'][:50] if len(d['obj']) > 50 else d['obj']
+                print(f"   ✅ Adicionado: {d['edit']} - {obj_resumo}...")
             elif st == 'VETADO':
                 print(f"   🚫 Vetado: {url} - {d.get('motivo', '')}")
             elif st == 'IGNORAR':
@@ -418,7 +418,7 @@ def processar_links_manuais(session, banco):
                 stats['erros'] += 1
 
         except Exception as e:
-            print(f"   ❌ Exceção ao processar {url}: {e}")
+            print(f"   ❌ Excecao ao processar {url}: {e}")
             stats['erros'] += 1
 
     print(f"   📊 Links manuais: {stats['adicionados']} adicionados, {stats['erros']} erros")
@@ -436,8 +436,7 @@ def buscar_periodo(session, banco, d_ini, d_fim):
         if checkpoint and dia < checkpoint['dia']:
             continue
 
-        print(f"
-📅 DATA: {dia}")
+        print(f"\n📅 DATA: {dia}")
         url = 'https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao'
 
         pag = checkpoint['pagina'] if checkpoint and dia == checkpoint['dia'] else 1
@@ -453,7 +452,7 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                 }, timeout=30)
 
                 if r.status_code != 200:
-                    print(f"   ⚠️ Erro crítico HTTP {r.status_code}. Salvando checkpoint.")
+                    print(f"   ⚠️ Erro critico HTTP {r.status_code}. Salvando checkpoint.")
                     salvar_checkpoint(dia, pag)
                     break
 
@@ -483,7 +482,7 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                 for k in stats:
                     stats[k] += s_pag[k]
 
-                print(f"   📄 Pág {pag}/{tot_pag}: 🎯 {s_pag['capturados']} Caps | 🚫 {s_pag['vetados']} Vets | ⚪ {s_pag['ignorados']} Ign | 🔥 {s_pag['erros']} Erros")
+                print(f"   📄 Pag {pag}/{tot_pag}: 🎯 {s_pag['capturados']} Caps | 🚫 {s_pag['vetados']} Vets | ⚪ {s_pag['ignorados']} Ign | 🔥 {s_pag['erros']} Erros")
 
                 salvar_checkpoint(dia, pag + 1)
 
@@ -493,7 +492,7 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                 pag += 1
 
             except Exception as e:
-                print(f"   ⚠️ Falha na página {pag}: {e}. Salvando checkpoint.")
+                print(f"   ⚠️ Falha na pagina {pag}: {e}. Salvando checkpoint.")
                 salvar_checkpoint(dia, pag)
                 break
 
@@ -501,7 +500,7 @@ def buscar_periodo(session, banco, d_ini, d_fim):
 
 if __name__ == '__main__':
     if os.path.exists(ARQ_LOCK):
-        print("🔒 Execução já em andamento. Saindo.")
+        print("🔒 Execucao ja em andamento. Saindo.")
         sys.exit(0)
 
     with open(ARQ_LOCK, 'w') as f:
@@ -516,7 +515,7 @@ if __name__ == '__main__':
         dt_start = datetime.strptime(args.start, '%Y-%m-%d').date() if args.start else date.today() - timedelta(days=15)
         dt_end = datetime.strptime(args.end, '%Y-%m-%d').date() if args.end else date.today()
 
-        print(f"🚀 Sniper Pharma v22.2 - Período: {dt_start} a {dt_end}")
+        print(f"🚀 Sniper Pharma v22.2 - Periodo: {dt_start} a {dt_end}")
 
         session = criar_sessao()
         banco = {}
@@ -528,18 +527,16 @@ if __name__ == '__main__':
                     for x in dados_existentes:
                         chave = f"{x.get('id', '')[:14]}_{x.get('edit', '')}"
                         banco[chave] = x
-                print(f"📦 Banco carregado: {len(banco)} licitações")
+                print(f"📦 Banco carregado: {len(banco)} licitacoes")
             except Exception as e:
                 print(f"⚠️ Erro ao carregar banco: {e}")
 
         stats = buscar_periodo(session, banco, dt_start, dt_end)
-        print(f"
-📊 Resumo busca: 🎯 {stats['capturados']} | 🚫 {stats['vetados']} | ⚪ {stats['ignorados']} | 🔥 {stats['erros']}")
+        print(f"\n📊 Resumo busca: 🎯 {stats['capturados']} | 🚫 {stats['vetados']} | ⚪ {stats['ignorados']} | 🔥 {stats['erros']}")
 
         stats_manual = processar_links_manuais(session, banco)
 
-        print("
-💾 Salvando banco de dados...")
+        print("\n💾 Salvando banco de dados...")
         with gzip.open(ARQ_TEMP, 'wt', encoding='utf-8') as f:
             json.dump(list(banco.values()), f, ensure_ascii=False)
 
@@ -547,7 +544,7 @@ if __name__ == '__main__':
             os.replace(ARQ_TEMP, ARQDADOS)
             if os.path.exists(ARQ_CHECKPOINT):
                 os.remove(ARQ_CHECKPOINT)
-            print(f"✅ Banco atualizado: {len(banco)} licitações totais")
+            print(f"✅ Banco atualizado: {len(banco)} licitacoes totais")
 
     finally:
         if os.path.exists(ARQ_LOCK):
