@@ -1,1137 +1,536 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sniper Pharma - Dashboard de Licitações</title>
+    <title>Sniper Pharma - Painel de Licitações</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        /* ============================================
-           VARIÁVEIS E ESTILOS GLOBAIS
-           ============================================ */
-        :root {
-            --primary: #1e3a8a;
-            --primary-light: #3b82f6;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --gray-100: #f3f4f6;
-            --gray-200: #e5e7eb;
-            --gray-300: #d1d5db;
-            --gray-600: #4b5563;
-            --gray-800: #1f2937;
-            --white: #ffffff;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        :root { --blue-df: #004a99; --green-df: #198754; --red-df: #dc3545; --yellow-df: #ffc107; }
+        body { background-color: #f0f2f5; font-family: 'Segoe UI', system-ui, sans-serif; color: #333; font-size: 0.92rem; }
+        
+        .header-card { 
+            background: linear-gradient(90deg, #002d5a 0%, #004a99 100%); 
+            color: white; padding: 12px 20px; border-radius: 10px 10px 0 0; font-size: 1.05rem;
+            display: flex; justify-content: space-between; align-items: center;
         }
+        .header-bold { font-weight: 700; }
+        .badge-uf-header { background-color: #000; color: #fff; font-weight: 800; padding: 2px 8px; border-radius: 4px; margin-right: 5px; }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--gray-100);
-            color: var(--gray-800);
-            line-height: 1.6;
-        }
-
-        /* ============================================
-           HEADER E CONTROLES
-           ============================================ */
-        .header {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
-            color: var(--white);
-            padding: 1rem 2rem;
-            box-shadow: var(--shadow-lg);
-            position: sticky;
-            top: 0;
-            z-index: 1000;
-        }
-
-        .header-content {
-            max-width: 1400px;
-            margin: 0 auto;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-
-        .header h1 {
-            font-size: 1.5rem;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .header-stats {
-            display: flex;
-            gap: 2rem;
-            align-items: center;
-        }
-
-        .stat-item {
-            text-align: center;
-        }
-
-        .stat-value {
-            font-size: 1.5rem;
-            font-weight: 700;
-        }
-
-        .stat-label {
-            font-size: 0.75rem;
-            opacity: 0.9;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        /* ============================================
-           BARRA DE PROGRESSO DE COMPATIBILIDADE
-           ============================================ */
-        .compat-indicator {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            background: rgba(255, 255, 255, 0.15);
-            padding: 0.5rem 1rem;
-            border-radius: 8px;
-            backdrop-filter: blur(10px);
-        }
-
-        .compat-bar-container {
-            width: 150px;
-            height: 8px;
-            background: rgba(255, 255, 255, 0.3);
-            border-radius: 4px;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .compat-bar-fill {
-            height: 100%;
-            border-radius: 4px;
-            transition: width 0.5s ease, background-color 0.3s ease;
-            position: relative;
-        }
-
-        .compat-bar-fill::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-            animation: shimmer 2s infinite;
-        }
-
-        @keyframes shimmer {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
-        }
-
-        .compat-text {
-            font-size: 0.875rem;
-            font-weight: 600;
-            min-width: 45px;
-            text-align: right;
-        }
-
-        .compat-alta { background-color: var(--success); }
-        .compat-media { background-color: var(--warning); }
-        .compat-baixa { background-color: var(--danger); }
-        .compat-incompativel { background-color: var(--gray-300); }
-
-        /* ============================================
-           FILTROS E CONTROLES
-           ============================================ */
-        .controls {
-            background: var(--white);
-            padding: 1rem 2rem;
-            border-bottom: 1px solid var(--gray-200);
-            position: sticky;
-            top: 70px;
-            z-index: 999;
-        }
-
-        .controls-content {
-            max-width: 1400px;
-            margin: 0 auto;
-            display: flex;
-            gap: 1rem;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-
-        .filter-group {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .filter-label {
-            font-size: 0.875rem;
-            font-weight: 500;
-            color: var(--gray-600);
-        }
-
-        select, input[type="text"], input[type="date"] {
-            padding: 0.5rem 0.75rem;
-            border: 1px solid var(--gray-300);
-            border-radius: 6px;
-            font-size: 0.875rem;
-            background: var(--white);
-            cursor: pointer;
-            transition: border-color 0.2s;
-        }
-
-        select:focus, input:focus {
-            outline: none;
-            border-color: var(--primary-light);
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-
-        .btn {
-            padding: 0.5rem 1rem;
-            border: none;
-            border-radius: 6px;
-            font-size: 0.875rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
+        /* Badge de compatibilidade - NOVOS THRESHOLDS E CORES */
+        .compat-badge {
             display: inline-flex;
             align-items: center;
-            gap: 0.5rem;
-        }
-
-        .btn-primary {
-            background: var(--primary);
-            color: var(--white);
-        }
-
-        .btn-primary:hover {
-            background: #1e40af;
-            transform: translateY(-1px);
-            box-shadow: var(--shadow);
-        }
-
-        .btn-secondary {
-            background: var(--gray-200);
-            color: var(--gray-800);
-        }
-
-        .btn-secondary:hover {
-            background: var(--gray-300);
-        }
-
-        .btn-success {
-            background: var(--success);
-            color: var(--white);
-        }
-
-        .btn-success:hover {
-            background: #059669;
-        }
-
-        /* ============================================
-           GRID DE LICITAÇÕES
-           ============================================ */
-        .container {
-            max-width: 1400px;
-            margin: 2rem auto;
-            padding: 0 2rem;
-        }
-
-        .licitacoes-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-            gap: 1.5rem;
-        }
-
-        /* ============================================
-           CARD DE LICITAÇÃO
-           ============================================ */
-        .licitacao-card {
-            background: var(--white);
+            gap: 4px;
+            padding: 3px 8px;
             border-radius: 12px;
-            box-shadow: var(--shadow);
-            overflow: hidden;
-            transition: transform 0.2s, box-shadow 0.2s;
-            border: 2px solid transparent;
-            position: relative;
-        }
-
-        .licitacao-card:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-lg);
-        }
-
-        /* Destaque por nível de compatibilidade */
-        .licitacao-card.compat-alta {
-            border-color: var(--success);
-            box-shadow: 0 0 0 1px var(--success), var(--shadow);
-        }
-
-        .licitacao-card.compat-media {
-            border-color: var(--warning);
-            box-shadow: 0 0 0 1px var(--warning), var(--shadow);
-        }
-
-        .licitacao-card.compat-baixa {
-            border-color: var(--danger);
-        }
-
-        .card-header {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
-            color: var(--white);
-            padding: 1rem;
-            position: relative;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 1rem;
-        }
-
-        .card-header-info {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .card-title {
-            font-size: 1.125rem;
+            font-size: 0.7rem;
             font-weight: 700;
-            margin-bottom: 0.25rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            margin-right: 8px;
+            border: 1px solid rgba(255,255,255,0.4);
         }
-
-        .card-subtitle {
-            font-size: 0.875rem;
-            opacity: 0.9;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
+        /* 🟢 Verde: ≥60% */
+        .compat-alta { 
+            background: #28a745; 
+            color: white; 
+            box-shadow: 0 2px 4px rgba(40, 167, 69, 0.4);
         }
-
-        /* Badge de compatibilidade no header */
-        .compat-badge {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: rgba(255, 255, 255, 0.2);
-            padding: 0.25rem 0.75rem;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            backdrop-filter: blur(10px);
-            white-space: nowrap;
+        /* 🟡 Amarelo: 20-59% */
+        .compat-media { 
+            background: #ffc107; 
+            color: #212529; 
+            box-shadow: 0 2px 4px rgba(255, 193, 7, 0.4);
         }
-
-        .compat-badge::before {
-            content: '';
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: currentColor;
+        /* 🔴 Vermelho: 5-19% */
+        .compat-baixa { 
+            background: #dc3545; 
+            color: white; 
+            box-shadow: 0 2px 4px rgba(220, 53, 69, 0.4);
         }
-
-        .badge-alta { color: #6ee7b7; }
-        .badge-media { color: #fcd34d; }
-        .badge-baixa { color: #fca5a5; }
-        .badge-incompativel { color: #d1d5db; }
-
-        .card-actions {
-            display: flex;
-            gap: 0.5rem;
-        }
-
-        .btn-icon {
-            width: 32px;
-            height: 32px;
-            border: none;
-            border-radius: 6px;
-            background: rgba(255, 255, 255, 0.2);
-            color: var(--white);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s;
-            font-size: 1rem;
-        }
-
-        .btn-icon:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: scale(1.05);
-        }
-
-        .btn-icon.delete:hover {
-            background: var(--danger);
-        }
-
-        /* Barra de percentual no card */
-        .card-percent-bar {
-            height: 4px;
-            background: rgba(255, 255, 255, 0.3);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .card-percent-fill {
-            height: 100%;
-            transition: width 0.5s ease;
-        }
-
-        .card-body {
-            padding: 1rem;
-        }
-
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.5rem 0;
-            border-bottom: 1px solid var(--gray-100);
-        }
-
-        .info-row:last-child {
-            border-bottom: none;
-        }
-
-        .info-label {
-            font-size: 0.875rem;
-            color: var(--gray-600);
-            font-weight: 500;
-        }
-
-        .info-value {
-            font-size: 0.875rem;
-            color: var(--gray-800);
-            font-weight: 600;
-            text-align: right;
-        }
-
-        .objeto-text {
-            font-size: 0.875rem;
-            color: var(--gray-600);
-            line-height: 1.5;
-            margin-top: 0.5rem;
-            display: -webkit-box;
-            -webkit-line-clamp: 3;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-
-        /* Itens compatíveis destacados */
-        .itens-list {
-            margin-top: 1rem;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
-        .item-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.5rem;
-            margin: 0.25rem 0;
-            background: var(--gray-100);
-            border-radius: 6px;
-            font-size: 0.875rem;
-            border-left: 3px solid transparent;
-            transition: all 0.2s;
-        }
-
-        .item-row:hover {
-            background: var(--gray-200);
+        /* ⚪ Transparente: <5% */
+        .compat-na { 
+            background: rgba(255,255,255,0.15); 
+            color: rgba(255,255,255,0.6); 
+            border: 1px solid rgba(255,255,255,0.3);
         }
 
         /* Destaque para itens compatíveis */
-        .item-row.compativel {
-            background: #d1fae5 !important;
-            border-left-color: var(--success) !important;
-            font-weight: 600 !important;
+        .item-compativel {
+            background-color: #d4edda !important;
+            font-weight: 700 !important;
+            border-left: 3px solid #28a745 !important;
+        }
+        .item-compativel td { 
+            color: #155724 !important; 
+            font-weight: 700 !important; 
         }
 
-        .item-row.compativel .item-name {
-            color: #065f46 !important;
-        }
+        .benef-sim { color: var(--red-df) !important; font-weight: bold !important; }
+        .benef-nao { color: var(--green-df) !important; font-weight: bold !important; }
 
-        .item-compat-indicator {
-            font-size: 0.75rem;
-            color: var(--success);
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 0.25rem;
-        }
+        .badge-tipo { font-weight: 800; padding: 5px 10px; border-radius: 4px; font-size: 0.75rem; letter-spacing: 0.5px; display: inline-flex; align-items: center; }
+        .badge-amplo { background-color: var(--green-df); color: white; }
+        .badge-exclusivo { background-color: var(--red-df); color: white; }
+        .badge-parcial { background-color: var(--yellow-df); color: #212529; }
 
-        /* Tooltip de matches */
-        .matches-tooltip {
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--gray-800);
-            color: var(--white);
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            font-size: 0.75rem;
-            white-space: nowrap;
-            opacity: 0;
-            visibility: hidden;
-            transition: all 0.2s;
-            z-index: 100;
-            margin-bottom: 0.5rem;
-        }
-
-        .matches-tooltip::after {
-            content: '';
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            border: 6px solid transparent;
-            border-top-color: var(--gray-800);
-        }
-
-        .compat-badge:hover .matches-tooltip {
-            opacity: 1;
-            visibility: visible;
-        }
-
-        /* ============================================
-           ESTADOS ESPECIAIS
-           ============================================ */
-        .loading {
-            text-align: center;
-            padding: 3rem;
-            color: var(--gray-600);
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 4rem 2rem;
-            color: var(--gray-600);
-        }
-
-        .empty-state-icon {
-            font-size: 4rem;
-            margin-bottom: 1rem;
-            opacity: 0.5;
-        }
-
-        /* Debug panel */
-        .debug-panel {
-            position: fixed;
-            bottom: 1rem;
-            right: 1rem;
-            background: var(--white);
-            border: 1px solid var(--gray-300);
-            border-radius: 8px;
-            padding: 1rem;
-            box-shadow: var(--shadow-lg);
-            max-width: 300px;
-            display: none;
-        }
-
-        .debug-panel.active {
-            display: block;
-        }
-
-        /* ============================================
-           RESPONSIVIDADE
-           ============================================ */
-        @media (max-width: 768px) {
-            .header-content {
-                flex-direction: column;
-                text-align: center;
-            }
-
-            .header-stats {
-                width: 100%;
-                justify-content: center;
-            }
-
-            .licitacoes-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .controls-content {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .filter-group {
-                width: 100%;
-            }
-
-            select, input[type="text"], input[type="date"] {
-                width: 100%;
-            }
-        }
-
-        /* ============================================
-           ANIMAÇÕES
-           ============================================ */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .licitacao-card {
-            animation: fadeIn 0.3s ease-out;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
-
-        .loading {
-            animation: pulse 1.5s infinite;
-        }
+        .card-licitacao { border-radius: 10px; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; overflow: hidden; }
+        .filter-box { background: white; padding: 15px; border-radius: 10px; border: 1px solid #e0e6ed; margin-bottom: 20px; }
+        .filter-label { font-size: 0.65rem; font-weight: 800; color: var(--blue-df); margin-bottom: 2px; display: block; text-transform: uppercase; }
+        
+        .table-itens { font-size: 0.82em; }
+        .val-estimado { background-color: #fffdf2; }
+        .val-homologado { background-color: #f2f7ff; }
+        
+        .header-fornecedor { background-color: #f8f9fa; color: var(--blue-df); font-weight: bold; }
+        
+        .header-status-andamento { background-color: #fff9db; font-weight: bold; color: #856404; text-align: center; }
+        .header-status-deserto { background-color: #f8d7da; font-weight: bold; color: #721c24; text-align: center; }
+        .header-status-cancelado { background-color: #e2e3e5; font-weight: bold; color: #383d41; text-align: center; }
+        
+        .pagination-container { display: flex; align-items: center; justify-content: center; gap: 15px; margin-top: 20px; padding-bottom: 40px; }
+        
+        .btn-excluir { font-size: 0.7rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 2px 8px; border-radius: 4px; cursor: pointer; }
+        .btn-excluir:hover { background: var(--red-df); border-color: var(--red-df); }
     </style>
 </head>
 <body>
-    <!-- Header -->
-    <header class="header">
-        <div class="header-content">
-            <h1>
-                💊 Sniper Pharma
-                <span style="font-size: 0.875rem; font-weight: 400; opacity: 0.9;">| Dashboard de Licitações</span>
-            </h1>
-            
-            <div class="header-stats">
-                <div class="stat-item">
-                    <div class="stat-value" id="total-licitacoes">0</div>
-                    <div class="stat-label">Licitações</div>
+
+<div class="container-fluid px-4 py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h3 class="fw-bold mb-0" style="color: #003366;">🔭 Sniper Pharma Monitor</h3>
+            <span class="badge bg-dark" style="font-size: 0.7rem;">ANALISTA DE LICITAÇÕES | PNCP & COMPRASGOV</span>
+        </div>
+        <button class="btn btn-success fw-bold" onclick="abrirInclusaoManual()">+ Inclusão Manual (PNCP)</button>
+    </div>
+    
+    <div class="filter-box shadow-sm">
+        <div class="row g-2">
+            <div class="col-md-2">
+                <label class="filter-label">DATA ENCERRAMENTO</label>
+                <input type="date" id="filterData" class="form-control form-control-sm" onchange="filtrar()">
+            </div>
+            <div class="col-md-1">
+                <label class="filter-label">UF</label>
+                <input type="text" id="filterUF" class="form-control form-control-sm" placeholder="Ex: PE" oninput="filtrar()">
+            </div>
+            <div class="col-md-2">
+                <label class="filter-label">CIDADE</label>
+                <input type="text" id="filterCidade" class="form-control form-control-sm" placeholder="Busque a cidade..." oninput="filtrar()">
+            </div>
+            <div class="col-md-3">
+                <label class="filter-label">ÓRGÃO / CÓDIGO</label>
+                <input type="text" id="filterOrgao" class="form-control form-control-sm" placeholder="Nome ou UASG" oninput="filtrar()">
+            </div>
+            <div class="col-md-2">
+                <label class="filter-label">Nº EDITAL</label>
+                <input type="text" id="filterEdital" class="form-control form-control-sm" placeholder="00000/2026" oninput="filtrar()">
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-sm btn-outline-secondary w-100 fw-bold" onclick="limparFiltros()">LIMPAR FILTROS</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="monitor-content"></div>
+
+    <div class="pagination-container">
+        <button class="btn btn-sm btn-outline-primary px-3" id="prevPage">Anterior</button>
+        <span id="pageInfo" class="fw-bold px-2 small">Página 1</span>
+        <button class="btn btn-sm btn-outline-primary px-3" id="nextPage">Próxima</button>
+    </div>
+</div>
+
+<div class="modal fade" id="modalDetalhes" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
+            <div class="modal-header header-card py-2">
+                <h6 class="modal-title fw-bold" id="modalTitle">Itens da Licitação</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3" id="modalBody"></div>
+            <div class="modal-footer bg-light border-0 py-2">
+                <a id="linkPncp" href="#" target="_blank" class="btn btn-sm btn-primary px-4 fw-bold">VER NO PNCP</a>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">FECHAR</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalInclusao" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-dark text-white py-2">
+                <h6 class="modal-title fw-bold">➕ Incluir Novo Link no Repositório</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="filter-label">URL DA LICITAÇÃO NO PNCP</label>
+                    <input type="text" id="inputLinkPncp" class="form-control shadow-sm" placeholder="https://pncp.gov.br/app/editais/...">
                 </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="total-alta">0</div>
-                    <div class="stat-label">Alta Compat.</div>
-                </div>
-                
-                <!-- Indicador de compatibilidade média -->
-                <div class="compat-indicator" id="header-compat-indicator" style="display: none;">
-                    <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px;">Compat. Média</span>
-                    <div class="compat-bar-container">
-                        <div class="compat-bar-fill" id="header-compat-bar" style="width: 0%"></div>
+                <div class="mb-3">
+                    <label class="filter-label">GITHUB PERSONAL ACCESS TOKEN (PAT)</label>
+                    <input type="password" id="inputGithubToken" class="form-control shadow-sm" placeholder="ghp_xxxxxxxxxxxx">
+                    <div class="mt-1" style="font-size: 0.65rem; color: #666;">
+                        Necessário permissão 'repo' para salvar no arquivo <b>links_manuais.txt</b>.
                     </div>
-                    <span class="compat-text" id="header-compat-text">0%</span>
                 </div>
+                <div id="statusInclusao" class="mt-3 text-center fw-bold" style="font-size: 0.8rem;"></div>
             </div>
-
-            <button class="btn btn-secondary" onclick="toggleDebug()" title="Debug">
-                🐛
-            </button>
-        </div>
-    </header>
-
-    <!-- Controles -->
-    <div class="controls">
-        <div class="controls-content">
-            <div class="filter-group">
-                <span class="filter-label">🔍 Buscar:</span>
-                <input type="text" id="search-input" placeholder="Órgão, objeto, edital..." oninput="filtrarLicitacoes()">
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-success fw-bold px-4" onclick="processarInclusaoManual()">SALVAR NO GITHUB</button>
             </div>
-
-            <div class="filter-group">
-                <span class="filter-label">📅 Data:</span>
-                <input type="date" id="data-inicio" onchange="filtrarLicitacoes()">
-                <span>até</span>
-                <input type="date" id="data-fim" onchange="filtrarLicitacoes()">
-            </div>
-
-            <div class="filter-group">
-                <span class="filter-label">🎯 Compatibilidade:</span>
-                <select id="filtro-compat" onchange="filtrarLicitacoes()">
-                    <option value="todas">Todas</option>
-                    <option value="ALTA">🟢 Alta (≥30%)</option>
-                    <option value="MEDIA">🟡 Média (15-29%)</option>
-                    <option value="BAIXA">🟠 Baixa (5-14%)</option>
-                    <option value="INCOMPATIVEL">⚪ Incompatível (<5%)</option>
-                </select>
-            </div>
-
-            <button class="btn btn-success" onclick="mostrarApenasCompativeis()">
-                🎯 Ver Compatíveis
-            </button>
-
-            <button class="btn btn-secondary" onclick="limparFiltros()">
-                🔄 Limpar
-            </button>
         </div>
     </div>
+</div>
 
-    <!-- Container principal -->
-    <div class="container">
-        <div id="loading" class="loading">
-            <div style="font-size: 3rem; margin-bottom: 1rem;">⏳</div>
-            <div>Carregando licitações...</div>
-        </div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+let allData = [];
+let filteredData = [];
+let compatData = {};
+let currentPage = 1;
+const itemsPerPage = 20;
 
-        <div id="empty-state" class="empty-state" style="display: none;">
-            <div class="empty-state-icon">📭</div>
-            <h3>Nenhuma licitação encontrada</h3>
-            <p>Tente ajustar os filtros ou aguarde novas atualizações.</p>
-        </div>
+const GITHUB_OWNER = 'jenissonb88-bot';
+const GITHUB_REPO = 'licitacoes_df';
+const GITHUB_FILE_PATH = 'links_manuais.txt';
 
-        <div id="licitacoes-container" class="licitacoes-grid" style="display: none;">
-            <!-- Cards serão inseridos aqui via JavaScript -->
-        </div>
-    </div>
+const modalObj = new bootstrap.Modal(document.getElementById('modalDetalhes'));
+const modalInclusaoObj = new bootstrap.Modal(document.getElementById('modalInclusao'));
 
-    <!-- Debug Panel -->
-    <div id="debug-panel" class="debug-panel">
-        <h4 style="margin-bottom: 0.5rem; font-size: 0.875rem;">Debug Info</h4>
-        <div id="debug-content" style="font-size: 0.75rem; font-family: monospace;"></div>
-    </div>
+// Carrega dados de compatibilidade
+async function loadCompatData() {
+    try {
+        const response = await fetch('relatorio_compatibilidade.csv');
+        if (!response.ok) return;
+        
+        const csvText = await response.text();
+        const lines = csvText.trim().split('\\n');
+        if (lines.length < 2) return;
+        
+        const headers = lines[0].split(';').map(h => h.trim().replace(/^\\ufeff/, ''));
+        const colId = headers.indexOf('id');
+        const colPercentual = headers.indexOf('percentual');
+        const colConfianca = headers.indexOf('confianca');
+        const colMatches = headers.indexOf('principais_matches');
+        
+        for (let i = 1; i < lines.length; i++) {
+            const cols = lines[i].split(';');
+            if (cols.length >= 4) {
+                const id = cols[colId] || cols[0];
+                const percentual = parseFloat(cols[colPercentual]) || 0;
+                const confianca = cols[colConfianca] || 'INCOMPATIVEL';
+                const matches = (cols[colMatches] || '').split('|').filter(m => m);
+                
+                compatData[id] = { percentual, confianca, matches };
+            }
+        }
+    } catch (e) {
+        console.log('Compatibilidade não carregada:', e);
+    }
+}
 
-    <script>
-        // ============================================
-        // VARIÁVEIS GLOBAIS
-        // ============================================
-        let todasLicitacoes = [];
-        let compatibilidadeData = new Map();
-        let portfolioTokens = new Set();
+// NOVOS THRESHOLDS: Retorna HTML do badge de compatibilidade
+function getCompatBadgeHTML(licId) {
+    const compat = compatData[licId];
+    if (!compat || compat.percentual < 5) {
+        return '<span class="compat-badge compat-na">⚪ N/A</span>';
+    }
+    
+    const pct = compat.percentual.toFixed(1);
+    
+    // 🟢 Verde: ≥60%
+    if (compat.percentual >= 60) {
+        return `<span class="compat-badge compat-alta" title="${compat.matches.slice(0,3).join(', ')}">🟢 ${pct}%</span>`;
+    }
+    // 🟡 Amarelo: 20-59%
+    else if (compat.percentual >= 20) {
+        return `<span class="compat-badge compat-media" title="${compat.matches.slice(0,3).join(', ')}">🟡 ${pct}%</span>`;
+    }
+    // 🔴 Vermelho: 5-19%
+    else {
+        return `<span class="compat-badge compat-baixa" title="${compat.matches.slice(0,3).join(', ')}">🔴 ${pct}%</span>`;
+    }
+}
 
-        // ============================================
-        // INICIALIZAÇÃO
-        // ============================================
-        document.addEventListener('DOMContentLoaded', async () => {
-            await carregarDados();
+async function loadData() {
+    try {
+        await loadCompatData();
+        
+        const response = await fetch('pregacoes_pharma_limpos.json.gz');
+        if(!response.ok) throw new Error();
+        const ds = new DecompressionStream('gzip');
+        const decompressedStream = response.body.pipeThrough(ds);
+        const text = await new Response(decompressedStream).text();
+        
+        allData = JSON.parse(text);
+        
+        // MANTÉM ORDENAÇÃO ORIGINAL POR DATA (futuro -> passado)
+        allData.sort((a, b) => new Date(b.dt_enc) - new Date(a.dt_enc));
+        
+        filteredData = [...allData];
+        renderMonitor();
+    } catch (e) { 
+        document.getElementById('monitor-content').innerHTML = '<div class="alert alert-info">Aguardando novos dados processados pelo GitHub Actions...</div>';
+    }
+}
+
+function renderMonitor() {
+    const container = document.getElementById('monitor-content');
+    container.innerHTML = '';
+    
+    const start = (currentPage - 1) * itemsPerPage;
+    const end = start + itemsPerPage;
+    const pageItems = filteredData.slice(start, end);
+
+    if (pageItems.length === 0) {
+        container.innerHTML = '<div class="text-center py-5 text-muted">Nenhuma licitação encontrada para os filtros aplicados.</div>';
+    }
+
+    pageItems.forEach(lic => {
+        const div = document.createElement('div');
+        div.className = 'card card-licitacao';
+        
+        const valorTotal = lic.val_tot > 0 
+            ? `R$ ${lic.val_tot.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` 
+            : 'Sigiloso/Não inf.';
+
+        let tipoLic = "AMPLO";
+        let cssTipo = "badge-amplo";
+        
+        if (lic.itens && lic.itens.length > 0) {
+            const todosExclusivos = lic.itens.every(it => [1, 2, 3].includes(parseInt(it.benef)));
+            const algumExclusivo = lic.itens.some(it => [1, 2, 3].includes(parseInt(it.benef)));
+            if (todosExclusivos) { tipoLic = "EXCLUSIVO"; cssTipo = "badge-exclusivo"; } 
+            else if (algumExclusivo) { tipoLic = "PARCIAL"; cssTipo = "badge-parcial"; }
+        }
+
+        let alertaGlobalHtml = '';
+        if (["REVOGADA", "ANULADA", "SUSPENSA"].includes(lic.sit_global)) {
+            alertaGlobalHtml = `<div style="color: #dc3545; font-weight: 900; font-size: 0.85rem; margin-top: 5px; text-transform: uppercase; border: 1px solid #dc3545; border-radius: 4px; padding: 2px;">⚠️ PROCESSO ${lic.sit_global}</div>`;
+        }
+
+        const compatBadge = getCompatBadgeHTML(lic.id);
+
+        div.innerHTML = `
+            <div class="header-card">
+                <div>
+                    <span class="badge-uf-header">${lic.uf}</span>
+                    <span class="header-bold">${lic.org || '---'}</span>
+                    <span class="ms-2 opacity-75 small">| Edital: ${lic.edit}</span>
+                    ${compatBadge}
+                </div>
+                <button class="btn-excluir" onclick="excluirLicitacao('${lic.id}')">Excluir</button>
+            </div>
+            <div class="card-body py-3">
+                <div class="row align-items-center">
+                    <div class="col-md-8 border-end">
+                        <small class="text-muted d-block mb-1">${lic.cid || '---'} - ${lic.unid_nome || '---'}</small>
+                        <h6 class="fw-bold mb-2">${lic.obj || 'Sem descrição'}</h6>
+                        <div class="d-flex gap-2 mt-2">
+                            <span class="badge bg-secondary d-flex align-items-center">UASG/Código: ${lic.uasg}</span>
+                            <span class="badge bg-info text-dark d-flex align-items-center">Vencimento: ${new Date(lic.dt_enc).toLocaleString('pt-BR')}</span>
+                            <span class="badge-tipo ${cssTipo}">${tipoLic}</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <small class="text-muted">VALOR ESTIMADO TOTAL</small>
+                        <h5 class="fw-bold text-primary mb-0">${valorTotal}</h5>
+                        ${alertaGlobalHtml}
+                        <div class="mt-3 d-flex justify-content-center align-items-center gap-2">
+                            <span class="badge bg-dark" style="font-size: 0.7rem;" title="Fonte da Licitação">${lic.fonte || 'PNCP Direto'}</span>
+                            <button class="btn btn-sm btn-primary px-4 fw-bold" onclick="abrirItens('${lic.id}')">DETALHAR ${lic.itens.length} ITENS</button>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        container.appendChild(div);
+    });
+
+    const totalPages = Math.ceil(filteredData.length / itemsPerPage) || 1;
+    document.getElementById('pageInfo').innerText = `Página ${currentPage}`;
+}
+
+function filtrar() {
+    const dataEnc = document.getElementById('filterData').value;
+    const uf = document.getElementById('filterUF').value.toUpperCase();
+    const cid = document.getElementById('filterCidade').value.toUpperCase();
+    const org = document.getElementById('filterOrgao').value.toUpperCase();
+    const edt = document.getElementById('filterEdital').value.toUpperCase();
+
+    filteredData = allData.filter(lic => {
+        const dataLic = lic.dt_enc.split('T')[0];
+        return (!dataEnc || dataLic === dataEnc) &&
+               (!uf || lic.uf.includes(uf)) &&
+               (!cid || (lic.cid || "").toUpperCase().includes(cid)) &&
+               (!org || (lic.org || "").toUpperCase().includes(org) || (lic.uasg||"").includes(org)) &&
+               (!edt || (lic.edit || "").includes(edt));
+    });
+    currentPage = 1;
+    renderMonitor();
+}
+
+function limparFiltros() {
+    document.querySelectorAll('.form-control').forEach(i => i.value = '');
+    filteredData = [...allData];
+    currentPage = 1;
+    renderMonitor();
+}
+
+function abrirItens(id) {
+    const lic = allData.find(x => x.id === id);
+    document.getElementById('modalTitle').innerText = `Itens: ${lic.org} (Edital ${lic.edit})`;
+    document.getElementById('linkPncp').href = lic.link;
+
+    const grupos = {};
+    const andamento = [], desertos = [], cancelados = [];
+
+    lic.itens.forEach(it => {
+        if (it.sit === "HOMOLOGADO" && it.res_forn) {
+            if (!grupos[it.res_forn]) grupos[it.res_forn] = [];
+            grupos[it.res_forn].push(it);
+        } else if (it.sit === "CANCELADO") { cancelados.push(it); } 
+        else if (it.sit === "DESERTO" || it.sit === "FRACASSADO") { desertos.push(it); } 
+        else { andamento.push(it); }
+    });
+
+    let html = `<div class="table-responsive"><table class="table table-sm table-bordered table-itens align-middle"><thead class="table-dark">
+        <tr><th class="text-center">#</th><th>Descrição</th><th class="text-center">ME/EPP</th><th class="text-center">Qtd/Un</th><th class="text-center">Est. Unit.</th><th class="text-center">Final Unit.</th><th class="text-center">Total</th></tr>
+        </thead><tbody>`;
+
+    if (andamento.length > 0) {
+        html += `<tr><td colspan="7" class="header-status-andamento py-1 small">ITENS EM ANDAMENTO</td></tr>`;
+        andamento.forEach(it => html += renderLinhaItem(it, lic.id));
+    }
+    if (desertos.length > 0) {
+        html += `<tr><td colspan="7" class="header-status-deserto py-1 small">ITENS DESERTOS / FRACASSADOS</td></tr>`;
+        desertos.forEach(it => html += renderLinhaItem(it, lic.id));
+    }
+    if (cancelados.length > 0) {
+        html += `<tr><td colspan="7" class="header-status-cancelado py-1 small">ITENS CANCELADOS</td></tr>`;
+        cancelados.forEach(it => html += renderLinhaItem(it, lic.id));
+    }
+    for (const forn in grupos) {
+        html += `<tr class="header-fornecedor"><td colspan="7">Fornecedor: ${forn}</td></tr>`;
+        grupos[forn].forEach(it => html += renderLinhaItem(it, lic.id));
+    }
+
+    html += `</tbody></table></div>`;
+    document.getElementById('modalBody').innerHTML = html;
+    modalObj.show();
+}
+
+function renderLinhaItem(it, licId) {
+    const isMeEpp = [1, 2, 3].includes(parseInt(it.benef));
+    const meEppHtml = isMeEpp ? '<span class="benef-sim">SIM</span>' : '<span class="benef-nao">NÃO</span>';
+    const valFinal = it.res_val || 0;
+    const valEstimado = it.v_est || 0;
+    const valorTotal = valFinal > 0 ? (valFinal * it.q) : (valEstimado * it.q);
+
+    // Verifica se item é compatível
+    let compatClass = '';
+    const compat = compatData[licId];
+    if (compat && compat.matches.length > 0) {
+        const descNorm = normalizeText(it.d || '');
+        const isCompat = compat.matches.some(match => {
+            if (!match) return false;
+            return descNorm.includes(normalizeText(match));
+        });
+        if (isCompat) compatClass = 'item-compativel';
+    }
+
+    return `<tr class="${compatClass}"><td class="text-center fw-bold">${it.n}</td><td>${it.d}</td><td class="text-center">${meEppHtml}</td>
+            <td class="text-center">${it.q} ${it.u}</td><td class="text-center val-estimado">R$ ${valEstimado.toFixed(4)}</td>
+            <td class="text-center val-homologado">${valFinal > 0 ? 'R$ ' + valFinal.toFixed(4) : '---'}</td>
+            <td class="text-center fw-bold">R$ ${valorTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td></tr>`;
+}
+
+function normalizeText(text) {
+    if (!text) return '';
+    return text.toUpperCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^A-Z0-9\\s]/g, ' ')
+        .replace(/\\s+/g, ' ')
+        .trim();
+}
+
+function excluirLicitacao(id) {
+    if(confirm("Deseja remover esta licitação da visualização temporária?")) {
+        allData = allData.filter(x => x.id !== id);
+        filtrar();
+    }
+}
+
+function abrirInclusaoManual() { 
+    document.getElementById('inputLinkPncp').value = '';
+    document.getElementById('inputGithubToken').value = '';
+    document.getElementById('statusInclusao').innerHTML = '';
+    modalInclusaoObj.show(); 
+}
+
+async function processarInclusaoManual() {
+    const link = document.getElementById('inputLinkPncp').value.trim();
+    const token = document.getElementById('inputGithubToken').value.trim();
+    const statusDiv = document.getElementById('statusInclusao');
+
+    if (!link || !token) {
+        statusDiv.innerHTML = '<span class="text-danger">Erro: Preencha o link e o seu Token.</span>';
+        return;
+    }
+
+    statusDiv.innerHTML = '<span class="text-primary">Conectando ao Repositório...</span>';
+
+    try {
+        const urlFile = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE_PATH}`;
+        
+        const resGet = await fetch(urlFile, {
+            headers: { 'Authorization': `token ${token}` }
         });
 
-        // ============================================
-        // CARREGAMENTO DE DADOS
-        // ============================================
-        async function carregarDados() {
-            try {
-                showLoading(true);
-                
-                // Carrega licitações
-                const response = await fetch('pregacoes_pharma_limpos.json.gz');
-                if (!response.ok) throw new Error('Falha ao carregar licitações');
-                
-                const blob = await response.blob();
-                const decompressed = await decompressGzip(blob);
-                const data = JSON.parse(decompressed);
-                
-                // Converte para array mantendo ordenação original
-                todasLicitacoes = normalizarDados(data);
-                
-                // Carrega dados de compatibilidade
-                await carregarCompatibilidade();
-                
-                // Atualiza UI
-                atualizarEstatisticas();
-                renderizarLicitacoes(todasLicitacoes);
-                
-                showLoading(false);
-                
-            } catch (error) {
-                console.error('Erro ao carregar dados:', error);
-                showError('Erro ao carregar dados. Verifique o console.');
-            }
+        let currentContent = "";
+        let sha = "";
+
+        if (resGet.ok) {
+            const dataGet = await resGet.json();
+            sha = dataGet.sha;
+            currentContent = decodeURIComponent(escape(atob(dataGet.content))); 
         }
 
-        async function carregarCompatibilidade() {
-            try {
-                const response = await fetch('relatorio_compatibilidade.csv');
-                if (!response.ok) {
-                    console.log('Relatório de compatibilidade não encontrado');
-                    return;
-                }
-                
-                const csvText = await response.text();
-                const linhas = csvText.split('\\n').filter(l => l.trim());
-                
-                if (linhas.length < 2) return;
-                
-                // Parse CSV com delimitador ;
-                const headers = linhas[0].split(';').map(h => h.trim().replace(/^\\ufeff/, ''));
-                const colId = headers.indexOf('id');
-                const colPercentual = headers.indexOf('percentual');
-                const colConfianca = headers.indexOf('confianca');
-                const colMatches = headers.indexOf('principais_matches');
-                
-                for (let i = 1; i < linhas.length; i++) {
-                    const cols = linhas[i].split(';');
-                    if (cols.length >= 4) {
-                        const id = cols[colId] || cols[0];
-                        const percentual = parseFloat(cols[colPercentual]) || 0;
-                        const confianca = cols[colConfianca] || 'INCOMPATIVEL';
-                        const matches = (cols[colMatches] || '').split('|').filter(m => m);
-                        
-                        compatibilidadeData.set(id, {
-                            percentual,
-                            confianca,
-                            matches
-                        });
-                    }
-                }
-                
-                console.log(`Compatibilidade carregada: ${compatibilidadeData.size} registros`);
-                
-            } catch (error) {
-                console.error('Erro ao carregar compatibilidade:', error);
-            }
+        const newContent = currentContent + (currentContent.endsWith('\\n') || currentContent === "" ? "" : "\\n") + link + "\\n";
+        
+        const resPut = await fetch(urlFile, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `token ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                message: "Inclusão manual de link via Sniper Pharma Panel",
+                content: btoa(unescape(encodeURIComponent(newContent))),
+                sha: sha
+            })
+        });
+
+        if (resPut.ok) {
+            statusDiv.innerHTML = '<span class="text-success">✅ SUCESSO! O arquivo foi atualizado. O sistema levará alguns minutos para processar os novos dados via GitHub Actions.</span>';
+            setTimeout(() => modalInclusaoObj.hide(), 3000);
+        } else {
+            const err = await resPut.json();
+            statusDiv.innerHTML = `<span class="text-danger">Erro GitHub: ${err.message}</span>`;
         }
 
-        // ============================================
-        // FUNÇÕES UTILITÁRIAS
-        // ============================================
-        async function decompressGzip(blob) {
-            const ds = new DecompressionStream('gzip');
-            const decompressedStream = blob.stream().pipeThrough(ds);
-            const reader = decompressedStream.getReader();
-            let result = '';
-            
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                result += new TextDecoder().decode(value);
-            }
-            
-            return result;
-        }
+    } catch (e) {
+        statusDiv.innerHTML = `<span class="text-danger">Erro de Conexão: ${e.message}</span>`;
+    }
+}
 
-        function normalizarDados(data) {
-            const licitacoes = [];
-            
-            if (Array.isArray(data)) {
-                data.forEach((item, index) => {
-                    item._index_original = index;
-                    licitacoes.push(item);
-                });
-            } else if (typeof data === 'object') {
-                let index = 0;
-                for (const [orgao, editais] of Object.entries(data)) {
-                    for (const [edital, info] of Object.entries(editais)) {
-                        info.orgao = orgao;
-                        info.edital = edital;
-                        info._index_original = index++;
-                        licitacoes.push(info);
-                    }
-                }
-            }
-            
-            // Mantém ordenação original (presumivelmente por data de abertura)
-            return licitacoes;
-        }
+document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
+document.getElementById('nextPage').onclick = () => { if(currentPage * itemsPerPage < filteredData.length) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
 
-        function getCompatibilidade(licitacao) {
-            const id = licitacao.edital || licitacao.id;
-            return compatibilidadeData.get(id) || {
-                percentual: 0,
-                confianca: 'INCOMPATIVEL',
-                matches: []
-            };
-        }
-
-        // ============================================
-        // RENDERIZAÇÃO
-        // ============================================
-        function renderizarLicitacoes(licitacoes) {
-            const container = document.getElementById('licitacoes-container');
-            
-            if (licitacoes.length === 0) {
-                container.style.display = 'none';
-                document.getElementById('empty-state').style.display = 'block';
-                return;
-            }
-            
-            container.style.display = 'grid';
-            document.getElementById('empty-state').style.display = 'none';
-            
-            container.innerHTML = licitacoes.map(lic => criarCard(lic)).join('');
-        }
-
-        function criarCard(licitacao) {
-            const compat = getCompatibilidade(licitacao);
-            const percentual = compat.percentual;
-            const confianca = compat.confianca;
-            const matches = compat.matches;
-            
-            // Define classes baseado na compatibilidade
-            const cardClass = `licitacao-card compat-${confianca.toLowerCase()}`;
-            const badgeClass = `badge-${confianca.toLowerCase()}`;
-            const barColor = confianca === 'ALTA' ? 'var(--success)' : 
-                             confianca === 'MEDIA' ? 'var(--warning)' : 
-                             confianca === 'BAIXA' ? 'var(--danger)' : 'var(--gray-300)';
-            
-            // Formata percentual
-            const percentualStr = percentual.toFixed(1) + '%';
-            
-            // Data de abertura
-            const dataAbertura = formatarData(licitacao.data_abertura || licitacao.data);
-            
-            // Itens da licitação
-            const itensHtml = renderizarItens(licitacao.itens || [], matches);
-            
-            return `
-                <div class="${cardClass}" data-id="${licitacao.edital || licitacao.id}">
-                    <div class="card-header">
-                        <div class="card-header-info">
-                            <div class="card-title" title="${licitacao.edital || licitacao.id}">
-                                ${licitacao.edital || licitacao.id}
-                            </div>
-                            <div class="card-subtitle">
-                                <span>🏛️ ${licitacao.orgao || 'N/A'}</span>
-                                <span>📅 ${dataAbertura}</span>
-                            </div>
-                        </div>
-                        
-                        <!-- Badge de compatibilidade com tooltip -->
-                        <div class="compat-badge ${badgeClass}">
-                            ${percentualStr} ${confianca}
-                            ${matches.length > 0 ? `
-                                <div class="matches-tooltip">
-                                    Matches: ${matches.slice(0, 5).join(', ')}
-                                    ${matches.length > 5 ? `+${matches.length - 5} mais` : ''}
-                                </div>
-                            ` : ''}
-                        </div>
-                        
-                        <div class="card-actions">
-                            <button class="btn-icon" onclick="toggleDetalhes('${licitacao.edital || licitacao.id}')" title="Ver detalhes">
-                                👁️
-                            </button>
-                            <button class="btn-icon delete" onclick="excluirLicitacao('${licitacao.edital || licitacao.id}')" title="Excluir">
-                                🗑️
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Barra de percentual -->
-                    <div class="card-percent-bar">
-                        <div class="card-percent-fill" style="width: ${Math.min(percentual, 100)}%; background-color: ${barColor};"></div>
-                    </div>
-                    
-                    <div class="card-body">
-                        <div class="info-row">
-                            <span class="info-label">📋 Objeto:</span>
-                        </div>
-                        <div class="objeto-text" title="${licitacao.objeto || 'N/A'}">
-                            ${licitacao.objeto || 'N/A'}
-                        </div>
-                        
-                        <div class="info-row" style="margin-top: 1rem;">
-                            <span class="info-label">📊 Compatibilidade:</span>
-                            <span class="info-value" style="color: ${barColor}; font-weight: 700;">
-                                ${percentualStr} (${confianca})
-                            </span>
-                        </div>
-                        
-                        ${matches.length > 0 ? `
-                            <div class="info-row">
-                                <span class="info-label">✅ Matches:</span>
-                                <span class="info-value">${matches.length} itens</span>
-                            </div>
-                        ` : ''}
-                        
-                        ${itensHtml}
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderizarItens(itens, matches) {
-            if (!itens || itens.length === 0) return '';
-            
-            const matchesLower = matches.map(m => m.toLowerCase());
-            
-            const itensComCompat = itens.map(item => {
-                const descricao = typeof item === 'object' ? (item.descricao || item.nome || JSON.stringify(item)) : String(item);
-                const descNormalizada = descricao.toLowerCase();
-                
-                // Verifica se item é compatível (match parcial)
-                const isCompativel = matchesLower.some(match => 
-                    descNormalizada.includes(match.toLowerCase()) ||
-                    match.toLowerCase().includes(descNormalizada)
-                );
-                
-                return { descricao, isCompativel };
-            });
-            
-            // Ordena: compatíveis primeiro
-            itensComCompat.sort((a, b) => (b.isCompativel ? 1 : 0) - (a.isCompativel ? 1 : 0));
-            
-            const itensHtml = itensComCompat.slice(0, 5).map(item => `
-                <div class="item-row ${item.isCompativel ? 'compativel' : ''}">
-                    <span class="item-name">${item.descricao}</span>
-                    ${item.isCompativel ? '<span class="item-compat-indicator">✅ Compatível</span>' : ''}
-                </div>
-            `).join('');
-            
-            const maisItens = itens.length > 5 ? `
-                <div style="text-align: center; padding: 0.5rem; font-size: 0.75rem; color: var(--gray-600);">
-                    +${itens.length - 5} itens...
-                </div>
-            ` : '';
-            
-            return `
-                <div style="margin-top: 1rem;">
-                    <div class="info-row">
-                        <span class="info-label">📦 Itens:</span>
-                        <span class="info-value">${itens.length} total</span>
-                    </div>
-                    <div class="itens-list">
-                        ${itensHtml}
-                        ${maisItens}
-                    </div>
-                </div>
-            `;
-        }
-
-        // ============================================
-        // FUNÇÕES AUXILIARES
-        // ============================================
-        function formatarData(dataStr) {
-            if (!dataStr) return 'N/A';
-            try {
-                const data = new Date(dataStr);
-                return data.toLocaleDateString('pt-BR');
-            } catch {
-                return dataStr;
-            }
-        }
-
-        function atualizarEstatisticas() {
-            const total = todasLicitacoes.length;
-            let alta = 0, media = 0, baixa = 0, incompat = 0;
-            let somaPercentual = 0;
-            let countComCompat = 0;
-            
-            todasLicitacoes.forEach(lic => {
-                const compat = getCompatibilidade(lic);
-                if (compat.confianca === 'ALTA') alta++;
-                else if (compat.confianca === 'MEDIA') media++;
-                else if (compat.confianca === 'BAIXA') baixa++;
-                else incompat++;
-                
-                if (compat.percentual > 0) {
-                    somaPercentual += compat.percentual;
-                    countComCompat++;
-                }
-            });
-            
-            document.getElementById('total-licitacoes').textContent = total;
-            document.getElementById('total-alta').textContent = alta;
-            
-            // Atualiza indicador de compatibilidade média no header
-            if (countComCompat > 0) {
-                const mediaPercentual = somaPercentual / countComCompat;
-                document.getElementById('header-compat-indicator').style.display = 'flex';
-                document.getElementById('header-compat-bar').style.width = Math.min(mediaPercentual, 100) + '%';
-                document.getElementById('header-compat-bar').className = 'compat-bar-fill ' + 
-                    (mediaPercentual >= 30 ? 'compat-alta' : mediaPercentual >= 15 ? 'compat-media' : 'compat-baixa');
-                document.getElementById('header-compat-text').textContent = mediaPercentual.toFixed(1) + '%';
-            }
-        }
-
-        // ============================================
-        // FILTROS
-        // ============================================
-        function filtrarLicitacoes() {
-            const searchTerm = document.getElementById('search-input').value.toLowerCase();
-            const dataInicio = document.getElementById('data-inicio').value;
-            const dataFim = document.getElementById('data-fim').value;
-            const filtroCompat = document.getElementById('filtro-compat').value;
-            
-            const filtradas = todasLicitacoes.filter(lic => {
-                // Filtro de busca
-                const searchMatch = !searchTerm || 
-                    (lic.orgao && lic.orgao.toLowerCase().includes(searchTerm)) ||
-                    (lic.objeto && lic.objeto.toLowerCase().includes(searchTerm)) ||
-                    (lic.edital && lic.edital.toLowerCase().includes(searchTerm));
-                
-                // Filtro de data
-                let dataMatch = true;
-                if (dataInicio || dataFim) {
-                    const dataLic = new Date(lic.data_abertura || lic.data);
-                    if (dataInicio && dataLic < new Date(dataInicio)) dataMatch = false;
-                    if (dataFim && dataLic > new Date(dataFim)) dataMatch = false;
-                }
-                
-                // Filtro de compatibilidade
-                const compat = getCompatibilidade(lic);
-                let compatMatch = filtroCompat === 'todas' || compat.confianca === filtroCompat;
-                
-                return searchMatch && dataMatch && compatMatch;
-            });
-            
-            renderizarLicitacoes(filtradas);
-        }
-
-        function mostrarApenasCompativeis() {
-            document.getElementById('filtro-compat').value = 'ALTA';
-            filtrarLicitacoes();
-        }
-
-        function limparFiltros() {
-            document.getElementById('search-input').value = '';
-            document.getElementById('data-inicio').value = '';
-            document.getElementById('data-fim').value = '';
-            document.getElementById('filtro-compat').value = 'todas';
-            renderizarLicitacoes(todasLicitacoes);
-        }
-
-        // ============================================
-        // AÇÕES
-        // ============================================
-        function toggleDetalhes(id) {
-            // Implementar visualização de detalhes
-            console.log('Toggle detalhes:', id);
-        }
-
-        function excluirLicitacao(id) {
-            if (confirm('Tem certeza que deseja excluir esta licitação?')) {
-                todasLicitacoes = todasLicitacoes.filter(l => (l.edital || l.id) !== id);
-                filtrarLicitacoes();
-                atualizarEstatisticas();
-            }
-        }
-
-        // ============================================
-        // UI HELPERS
-        // ============================================
-        function showLoading(show) {
-            document.getElementById('loading').style.display = show ? 'block' : 'none';
-            document.getElementById('licitacoes-container').style.display = show ? 'none' : 'grid';
-        }
-
-        function showError(msg) {
-            document.getElementById('loading').innerHTML = `
-                <div style="color: var(--danger);">
-                    <div style="font-size: 3rem; margin-bottom: 1rem;">❌</div>
-                    <div>${msg}</div>
-                </div>
-            `;
-        }
-
-        function toggleDebug() {
-            const panel = document.getElementById('debug-panel');
-            panel.classList.toggle('active');
-            
-            if (panel.classList.contains('active')) {
-                document.getElementById('debug-content').innerHTML = `
-                    Total licitações: ${todasLicitacoes.length}<br>
-                    Compatibilidade carregada: ${compatibilidadeData.size}<br>
-                    Primeiro ID: ${todasLicitacoes[0]?.edital || 'N/A'}<br>
-                    Último ID: ${todasLicitacoes[todasLicitacoes.length-1]?.edital || 'N/A'}
-                `;
-            }
-        }
-    </script>
+loadData();
+</script>
 </body>
 </html>
