@@ -1,221 +1,428 @@
 
-# Gerando o código corrigido do Limpeza.py
-limpeza_py_codigo = '''import json
+# Gerando o código completo do Atualiza.py - Opção B (Itens + Situação Global)
+atualiza_py_completo = '''import requests
+import json
 import gzip
 import os
-import unicodedata
 import csv
-import sys
 import concurrent.futures
 from datetime import datetime
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
-ARQDADOS = 'dadosoportunidades.json.gz'
-ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'
-ARQ_CATALOGO = 'Exportar Dados.csv'
-DATA_CORTE_2026 = datetime(2026, 1, 1)
+# --- CONFIGURAÇÕES ---
+ARQDADOS = 'pregacoes_pharma_limpos.json.gz'
+ARQ_RELATORIO = 'relatorio_atualizacoes.csv'
+ARQ_LOG = 'log_atualizacao.txt'
+MAXWORKERS = 10
 
-# --- GEOGRAFIA ---
-NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
-ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
-UFS_PERMITIDAS_MMH = NE_ESTADOS  # Apenas Nordeste
+# Mapas de situação (sincronizados com App.py)
+MAPA_SITUACAO_ITEM = {1: "EM ANDAMENTO", 2: "HOMOLOGADO", 3: "CANCELADO", 4: "DESERTO", 5: "FRACASSADO"}
+MAPA_SITUACAO_GLOBAL = {1: "DIVULGADA", 2: "REVOGADA", 3: "ANULADA", 4: "SUSPENSA"}
 
-# --- VETOS ABSOLUTOS ---
-VETOS_ABSOLUTOS = [normalize(x) for x in [
-    "INTENCAO DE REGISTRO DE PRECO",
-    "INTENCAO REGISTRO DE PRECO",
-    "CREDENCIAMENTO",
-    "ADESAO",
-    "IRP",
-    "LEILAO",
-    "ALIENACAO"
-]]
+def criar_sessao():
+    s = requests.Session()
+    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/22.1'})
+    retry = Retry(total=5, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
+    s.mount('https://', HTTPAdapter(max_retries=retry))
+    return s
 
-# --- VETOS OPERACIONAIS (com variações) ---
-VETOS_IMEDIATOS_BASE = [
-    "PRESTACAO DE SERVICO", "SERVICO ESPECIALIZADO", "LOCACAO", "INSTALACAO",
-    "ASFALTICO", "ASFALTO", "MANUTENCAO PREDIAL", "MANUTENCAO DE EQUIPAMENTOS",
-    "MANUTENCAO PREVENTIVA", "MANUTENCAO CORRETIVA", "UNIFORME", "TEXTIL",
-    "REFORMA", "GASES MEDICINAIS", "CILINDRO", "LIMPEZA PREDIAL", "LAVANDERIA",
-    "IMPRESSAO", "OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "LIMPEZA URBANA",
-    "RESIDUOS SOLIDOS", "LOCACAO DE VEICULOS", "TRANSPORTE", "COMBUSTIVEL",
-    "DIESEL", "GASOLINA", "PNEUS", "PECAS AUTOMOTIVAS", "OFICINA", "VIGILANCIA",
-    "SEGURANCA", "BOMBEIRO", "SALVAMENTO", "RESGATE", "VIATURA", "FARDAMENTO",
-    "VESTUARIO", "INFORMATICA", "COMPUTADORES", "EVENTOS", "REPARO",
-    "CORRETIVA", "GERADOR", "VEICULO", "AMBULANCIA", "MOTOCICLETA",
-    "MECANICA", "FERRO FUNDIDO", "CONTRATACAO DE SERVICO",
-    "EQUIPAMENTO E MATERIA PERMANENTE", "RECARGA", "CONFECCAO",
-    "EQUIPAMENTOS PERMANENTES", "MATERIAIS PERMANENTES"
-]
+def log_mensagem(msg):
+    """Salva log em arquivo e imprime no console"""
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    linha = f"[{timestamp}] {msg}"
+    print(linha)
+    with open(ARQ_LOG, 'a', encoding='utf-8') as f:
+        f.write(linha + '\\n')
 
-# Gerar variações
-VETOS_IMEDIATOS = []
-for termo in VETOS_IMEDIATOS_BASE:
-    n = normalize(termo)
-    VETOS_IMEDIATOS.append(n)
-    if not n.endswith('S') and not n.endswith('ES'):
-        VETOS_IMEDIATOS.append(n + 'S')
-
-VETOS_IMEDIATOS = list(set(VETOS_IMEDIATOS))
-
-# --- TERMOS DE INTERESSE ---
-TERMOS_NE_MMH_NUTRI = [normalize(x) for x in [
-    "MATERIAL MEDIC", "INSUMO HOSPITALAR", "MMH", "SERINGA", "AGULHA",
-    "GAZE", "ATADURA", "SONDA", "CATETER", "EQUIPO", "LUVAS DE PROCEDIMENTO",
-    "MASCARA", "MASCARA CIRURGICA", "PENSO", "MATERIAL PENSO",
-    "MATERIAL-MEDICO", "MATERIAIS-MEDICO", "FRALDA", "ABSORVENTE",
-    "MEDICO-HOSPITALAR", "CURATIV", "CURATIVO", "CURATIVOS",
-    "LUVA DE PROCEDIMENTO", "COMPRESSA GAZE", "AVENTAL DESCARTAVEL",
-    "GESSADA", "CAMPO OPERATORIO", "CLOREXIDINA", "COLETOR PERFURO",
-    "ESPARADRAPO", "FITA MICROPORE", "GLUTARALDEIDO", "SONDA NASO",
-    "TOUCA DESCARTAVEL", "TUBO ASPIRACAO", "NUTRICAO ENTERAL",
-    "FORMULA INFANTIL", "SUPLEMENTO ALIMENTAR", "DIETA ENTERAL",
-    "DIETA PARENTERAL", "NUTRICAO CLINICA", "ENTERAL", "FORMULA ESPECIA",
-    "AGULHAS", "SERINGAS", "PARENTERA", "ENTERAL"
-]]
-
-TERMOS_SALVAMENTO = [normalize(x) for x in [
-    "MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOLA",
-    "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA", "ANTIBIOTICO",
-    "AQUISICAO DE MEDICAMENTO", "AQUISICAO DE MEDICAMENTOS"
-]]
-
-def normalize(t):
-    if not t:
-        return ""
-    return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
-
-def tem_medicamento_no_texto(texto):
-    """Verifica se há termos de medicamentos no texto"""
-    if not texto:
-        return False
-    texto_norm = normalize(texto)
-    return any(p in texto_norm for p in TERMOS_SALVAMENTO)
-
-def analisar_pertinencia(obj_norm, uf, itens=None):
+def extrair_dados_do_id(lid):
     """
-    Retorna True se deve manter, False se deve descartar
+    Extrai CNPJ, Ano e Sequencial do ID.
+    ID formatado como: {cnpj14}{ano4}{sequencialN}
     """
-    # 1. VETOS ABSOLUTOS (sempre vetam)
-    for veto in VETOS_ABSOLUTOS:
-        if veto in obj_norm:
-            return False
+    if len(lid) < 18:
+        return None, None, None
     
-    # 2. SUPER PASSE (medicamentos)
-    tem_med_objeto = tem_medicamento_no_texto(obj_norm)
-    tem_med_itens = False
-    if not tem_med_objeto and itens:
-        for item in itens:
-            desc = item.get('d', '')
-            if tem_medicamento_no_texto(desc):
-                tem_med_itens = True
-                break
+    cnpj = lid[:14]
+    ano = lid[14:18]
+    seq = lid[18:]
     
-    if tem_med_objeto or tem_med_itens:
-        # Super passe libera, mas mantém bloqueio de estados bloqueados
-        if uf in ESTADOS_BLOQUEADOS:
-            return False
-        return True
+    if not (cnpj.isdigit() and ano.isdigit() and seq.isdigit()):
+        return None, None, None
     
-    # 3. VETOS IMEDIATOS
-    for veto in VETOS_IMEDIATOS:
-        if veto in obj_norm:
-            return False
-    
-    # 4. MMH/NUTRIÇÃO - Apenas Nordeste
-    tem_mmh_nutri = any(t in obj_norm for t in TERMOS_NE_MMH_NUTRI)
-    if tem_mmh_nutri:
-        return uf in UFS_PERMITIDAS_MMH
-    
-    return False
+    return cnpj, ano, seq
 
-def processar_licitacao_limpeza(licitacao):
-    if not licitacao:
-        return None
+def precisa_atualizar(lic):
+    """
+    Verifica se há itens sem fornecedor homologado
+    OU se a situação global/itens podem ter mudado
+    """
+    itens = lic.get('itens', [])
     
-    uf = licitacao.get('uf', '').upper()
-    obj_bruto = licitacao.get('obj', '')
-    obj_norm = normalize(obj_bruto)
-    itens = licitacao.get('itens', [])
+    # Verifica itens pendentes
+    tem_itens_pendentes = any(
+        not it.get('res_forn') and it.get('sit') in ["EM ANDAMENTO", "HOMOLOGADO"]
+        for it in itens
+    )
     
-    # Validação de Pertinência
-    if not analisar_pertinencia(obj_norm, uf, itens):
-        return None
+    # Verifica se situação global não é final (DIVULGADA ou SUSPENSA podem mudar)
+    sit_global = lic.get('sit_global', 'DIVULGADA')
+    sit_nao_final = sit_global in ["DIVULGADA", "SUSPENSA"]
     
-    # Validação de Data
-    dt_enc_str = licitacao.get('dt_enc')
-    if not dt_enc_str:
-        return None
-    
+    return tem_itens_pendentes or sit_nao_final
+
+def buscar_dados_licitacao(cnpj, ano, seq, session):
+    """Busca dados gerais da licitação na API"""
+    url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}"
     try:
-        dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
-        if dt_enc < DATA_CORTE_2026:
+        r = session.get(url, timeout=20)
+        if r.status_code == 200:
+            return r.json()
+        else:
+            log_mensagem(f"   ⚠️ HTTP {r.status_code} ao buscar dados da licitação {cnpj}/{ano}/{seq}")
             return None
+    except Exception as e:
+        log_mensagem(f"   ❌ Erro ao buscar dados da licitação {cnpj}/{ano}/{seq}: {e}")
+        return None
+
+def buscar_itens_api(cnpj, ano, seq, session):
+    """Busca todos os itens atualizados da licitação"""
+    url_base = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
+    itens_api = []
+    pagina = 1
+    max_paginas = 50
+    
+    while pagina <= max_paginas:
+        try:
+            r = session.get(url_base, params={'pagina': pagina, 'tamanhoPagina': 100}, timeout=20)
+            if r.status_code != 200:
+                break
+            
+            dados = r.json()
+            itens_pagina = dados.get('data', []) if isinstance(dados, dict) else (dados if isinstance(dados, list) else [])
+            
+            if not itens_pagina:
+                break
+            
+            for it in itens_pagina:
+                if isinstance(it, dict):
+                    itens_api.append(it)
+            
+            if len(itens_pagina) < 100:
+                break
+            pagina += 1
+            
+        except Exception as e:
+            log_mensagem(f"   ⚠️ Erro ao buscar itens página {pagina}: {e}")
+            break
+    
+    return itens_api
+
+def buscar_resultado_item(cnpj, ano, seq, num_item, session):
+    """Busca resultado de um item específico"""
+    url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num_item}/resultados"
+    try:
+        r = session.get(url, timeout=15)
+        if r.status_code == 200:
+            rl = r.json()
+            if isinstance(rl, list) and len(rl) > 0:
+                return rl[0]
+            elif isinstance(rl, dict):
+                return rl
+        return None
     except:
         return None
+
+def atualizar_licitacao_completa(lid, dados_antigos, session):
+    """
+    Atualiza licitação completa: dados gerais + todos os itens
+    Retorna: (dados_atualizados, mudancas_detalhadas, houve_mudanca)
+    """
+    cnpj, ano, seq = extrair_dados_do_id(lid)
+    if not cnpj:
+        log_mensagem(f"   ❌ ID inválido: {lid}")
+        return None, [], False
     
-    # Chave única para deduplicação
-    chave_unica = f"{licitacao.get('id', '')[:14]}_{licitacao.get('edit', '')}"
-    qtd_itens = len(itens)
+    mudancas_detalhadas = []
+    houve_mudanca = False
     
-    return (chave_unica, licitacao, dt_enc, qtd_itens)
+    # 1. BUSCAR DADOS GERAIS ATUALIZADOS
+    dados_api = buscar_dados_licitacao(cnpj, ano, seq, session)
+    if not dados_api:
+        log_mensagem(f"   ⚠️ Não foi possível buscar dados atualizados de {lid}")
+        return None, [], False
+    
+    # Preparar novo objeto
+    dados_novos = dados_antigos.copy()
+    
+    # Atualizar situação global
+    sit_global_id = dados_api.get('situacaoCompraId', 1)
+    nova_sit_global = MAPA_SITUACAO_GLOBAL.get(sit_global_id, "DIVULGADA")
+    sit_global_antiga = dados_antigos.get('sit_global', 'DIVULGADA')
+    
+    if nova_sit_global != sit_global_antiga:
+        dados_novos['sit_global'] = nova_sit_global
+        houve_mudanca = True
+        log_mensagem(f"   🔄 Situação global alterada: {sit_global_antiga} → {nova_sit_global} ({lid})")
+        
+        # Se foi revogada/anulada, registrar no relatório
+        if nova_sit_global in ["REVOGADA", "ANULADA"]:
+            mudancas_detalhadas.append({
+                'tipo': 'SITUACAO_GLOBAL',
+                'data_atualizacao': datetime.now().strftime('%d/%m/%Y %H:%M'),
+                'id_processo': lid,
+                'edital': dados_antigos.get('edit'),
+                'orgao': dados_antigos.get('org'),
+                'campo_alterado': 'sit_global',
+                'valor_anterior': sit_global_antiga,
+                'valor_novo': nova_sit_global,
+                'item_num': None,
+                'descricao': None,
+                'valor_estimado': None,
+                'valor_homologado': None,
+                'fornecedor': None
+            })
+    
+    # Atualizar valor total estimado (se mudou)
+    val_tot_api = float(dados_api.get('valorTotalEstimado') or 0.0)
+    val_tot_antigo = dados_antigos.get('val_tot', 0.0)
+    if val_tot_api != val_tot_antigo and val_tot_api > 0:
+        dados_novos['val_tot'] = val_tot_api
+        houve_mudanca = True
+        log_mensagem(f"   💰 Valor total atualizado: {val_tot_antigo} → {val_tot_api} ({lid})")
+    
+    # 2. BUSCAR ITENS ATUALIZADOS
+    itens_api = buscar_itens_api(cnpj, ano, seq, session)
+    if not itens_api:
+        log_mensagem(f"   ⚠️ Não foi possível buscar itens de {lid}")
+        return (dados_novos if houve_mudanca else None), mudancas_detalhadas, houve_mudanca
+    
+    # Criar mapa de itens antigos por número
+    itens_antigos_map = {it['n']: it for it in dados_antigos.get('itens', []) if 'n' in it}
+    
+    # Processar cada item da API
+    itens_atualizados = []
+    
+    for it_api in itens_api:
+        num_item = it_api.get('numeroItem')
+        if num_item is None:
+            continue
+        
+        # Dados básicos do item
+        sit_item_id = int(it_api.get('situacaoCompraItem') or 1)
+        sit_item_nome = MAPA_SITUACAO_ITEM.get(sit_item_id, "EM ANDAMENTO")
+        
+        benef_id = it_api.get('tipoBeneficioId')
+        benef_nome_api = str(it_api.get('tipoBeneficioNome', '')).upper()
+        benef_final = benef_id if benef_id in [1, 2, 3] else (1 if "EXCLUSIVA" in benef_nome_api else (3 if "COTA" in benef_nome_api else 4))
+        
+        # Montar item base
+        item_novo = {
+            'n': num_item,
+            'd': it_api.get('descricao', ''),
+            'q': float(it_api.get('quantidade') or 0),
+            'u': it_api.get('unidadeMedida', 'UN'),
+            'v_est': float(it_api.get('valorUnitarioEstimado') or 0.0),
+            'benef': benef_final,
+            'sit': sit_item_nome,
+            'res_forn': None,
+            'res_val': 0.0
+        }
+        
+        # Buscar resultado/fornecedor se aplicável
+        if sit_item_nome in ["EM ANDAMENTO", "HOMOLOGADO"]:
+            res = buscar_resultado_item(cnpj, ano, seq, num_item, session)
+            if res:
+                nf = res.get('nomeRazaoSocialFornecedor') or res.get('razaoSocial')
+                ni = res.get('niFornecedor')
+                val_homol = float(res.get('valorUnitarioHomologado') or 0.0)
+                
+                if nf:
+                    forn_completo = f"{nf} (CNPJ: {ni})" if ni else nf
+                    item_novo['res_forn'] = forn_completo
+                    item_novo['sit'] = "HOMOLOGADO"
+                    item_novo['res_val'] = val_homol
+        
+        # Comparar com item antigo para detectar mudanças
+        item_antigo = itens_antigos_map.get(num_item, {})
+        
+        # Detectar mudanças significativas
+        mudanca_sit = item_novo['sit'] != item_antigo.get('sit', 'EM ANDAMENTO')
+        mudanca_forn = item_novo.get('res_forn') != item_antigo.get('res_forn')
+        mudanca_val = abs(item_novo.get('res_val', 0) - item_antigo.get('res_val', 0)) > 0.01
+        
+        if mudanca_sit or mudanca_forn or mudanca_val:
+            houve_mudanca = True
+            
+            # Registrar no relatório apenas se houve homologação nova
+            if item_novo.get('res_forn') and not item_antigo.get('res_forn'):
+                mudancas_detalhadas.append({
+                    'tipo': 'ITEM_HOMOLOGADO',
+                    'data_atualizacao': datetime.now().strftime('%d/%m/%Y %H:%M'),
+                    'id_processo': lid,
+                    'edital': dados_antigos.get('edit'),
+                    'orgao': dados_antigos.get('org'),
+                    'campo_alterado': 'res_forn/res_val',
+                    'valor_anterior': f"{item_antigo.get('sit')} - {item_antigo.get('res_forn', 'N/A')}",
+                    'valor_novo': f"{item_novo['sit']} - {item_novo['res_forn']}",
+                    'item_num': num_item,
+                    'descricao': item_novo['d'],
+                    'valor_estimado': item_novo['v_est'],
+                    'valor_homologado': item_novo['res_val'],
+                    'fornecedor': item_novo['res_forn']
+                })
+                log_mensagem(f"   ✅ Item {num_item} homologado: {item_novo['res_forn'][:30]}... ({lid})")
+        
+        itens_atualizados.append(item_novo)
+    
+    # Verificar se algum item foi removido ou adicionado
+    nums_api = {it['n'] for it in itens_atualizados if 'n' in it}
+    nums_antigos = set(itens_antigos_map.keys())
+    
+    if nums_api != nums_antigos:
+        houve_mudanca = True
+        adicionados = nums_api - nums_antigos
+        removidos = nums_antigos - nums_api
+        if adicionados:
+            log_mensagem(f"   ➕ Itens adicionados: {adicionados} ({lid})")
+        if removidos:
+            log_mensagem(f"   ➖ Itens removidos: {removidos} ({lid})")
+    
+    if houve_mudanca:
+        dados_novos['itens'] = itens_atualizados
+        return dados_novos, mudancas_detalhadas, True
+    
+    return None, [], False
 
 if __name__ == '__main__':
     if not os.path.exists(ARQDADOS):
-        print(f"Arquivo {ARQDADOS} não encontrado. Execute o app.py primeiro.")
-        sys.exit(1)
+        log_mensagem(f"❌ Arquivo {ARQDADOS} não encontrado.")
+        exit(1)
     
-    print("🧹 Iniciando limpeza de dados...")
+    log_mensagem("🔄 Iniciando atualização completa de licitações (Modo B: Itens + Situação Global)")
+    
+    # Limpar log anterior
+    if os.path.exists(ARQ_LOG):
+        os.remove(ARQ_LOG)
     
     with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
-        banco_bruto = json.load(f)
+        banco_raw = json.load(f)
     
-    print(f"📊 Total no banco bruto: {len(banco_bruto)} licitações")
+    log_mensagem(f"📦 Banco carregado: {len(banco_raw)} licitações")
     
-    banco_deduplicado = {}
+    banco_dict = {item['id']: item for item in banco_raw}
+    session = criar_sessao()
+    
+    # Identificar licitações que precisam de atualização
+    alvos = [lid for lid, d in banco_dict.items() if precisa_atualizar(d)]
+    
+    if not alvos:
+        log_mensagem("ℹ️ Não há licitações pendentes de atualização.")
+        exit(0)
+    
+    log_mensagem(f"🔍 {len(alvos)} licitações selecionadas para atualização")
+    
+    relatorio_final = []
+    lic_atualizadas = 0
+    itens_homologados = 0
+    situacoes_alteradas = 0
     
     # Processamento paralelo
-    with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
-        resultados = executor.map(processar_licitacao_limpeza, banco_bruto)
-    
-    for res in resultados:
-        if res is None:
-            continue
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
+        futuros = {exe.submit(atualizar_licitacao_completa, lid, banco_dict[lid], session): lid for lid in alvos}
         
-        chave, card, dt_novo, qtd_itens_novo = res
-        
-        if chave not in banco_deduplicado:
-            banco_deduplicado[chave] = {'card': card, 'dt': dt_novo, 'qtd': qtd_itens_novo}
-        else:
-            # Mantém a versão com mais itens, ou data mais recente se igual
-            qtd_itens_antigo = banco_deduplicado[chave]['qtd']
-            if qtd_itens_novo > qtd_itens_antigo:
-                banco_deduplicado[chave] = {'card': card, 'dt': dt_novo, 'qtd': qtd_itens_novo}
-            elif qtd_itens_novo == qtd_itens_antigo:
-                if dt_novo > banco_deduplicado[chave]['dt']:
-                    banco_deduplicado[chave] = {'card': card, 'dt': dt_novo, 'qtd': qtd_itens_novo}
+        for f in concurrent.futures.as_completed(futuros):
+            lid = futuros[f]
+            try:
+                res_dados, res_mudancas, houve_mudanca = f.result()
+                
+                if houve_mudanca and res_dados:
+                    banco_dict[res_dados['id']] = res_dados
+                    lic_atualizadas += 1
+                    
+                    # Contar tipos de mudança
+                    for m in res_mudancas:
+                        if m['tipo'] == 'ITEM_HOMOLOGADO':
+                            itens_homologados += 1
+                        elif m['tipo'] == 'SITUACAO_GLOBAL':
+                            situacoes_alteradas += 1
+                    
+                    relatorio_final.extend(res_mudancas)
+                    
+            except Exception as e:
+                log_mensagem(f"   ❌ Falha no processamento de {lid}: {e}")
     
-    # Gera lista final
-    lista_final = [item['card'] for item in banco_deduplicado.values()]
+    # Salvar banco atualizado
+    with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
+        json.dump(list(banco_dict.values()), f, ensure_ascii=False)
     
-    print(f"💾 Salvando {len(lista_final)} licitações limpas...")
+    log_mensagem(f"💾 Banco salvo: {len(banco_dict)} licitações")
+    log_mensagem(f"📊 Resumo: {lic_atualizadas} licitações modificadas")
+    log_mensagem(f"   - {itens_homologados} itens homologados")
+    log_mensagem(f"   - {situacoes_alteradas} situações globais alteradas")
     
-    with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f:
-        json.dump(lista_final, f, ensure_ascii=False)
+    # Gerar relatório CSV
+    if relatorio_final:
+        keys = relatorio_final[0].keys()
+        with open(ARQ_RELATORIO, 'w', newline='', encoding='utf-8-sig') as f:
+            dict_writer = csv.DictWriter(f, fieldnames=keys, delimiter=';')
+            dict_writer.writeheader()
+            dict_writer.writerows(relatorio_final)
+        log_mensagem(f"📁 Relatório CSV gerado: {ARQ_RELATORIO} ({len(relatorio_final)} registros)")
+    else:
+        log_mensagem("ℹ️ Nenhuma alteração significativa detectada.")
     
-    print(f"✅ Concluído! {len(lista_final)} licitações validadas e prontas para o Dashboard.")
-    print(f"   📉 Rejeitadas: {len(banco_bruto) - len(lista_final)} licitações")
+    log_mensagem("✅ Atualização concluída!")
 '''
 
-print("Código Limpeza.py gerado com sucesso!")
-print(f"Tamanho: {len(limpeza_py_codigo)} caracteres")
+print("Código Atualiza.py (Opção B - Completo) gerado com sucesso!")
+print(f"Tamanho: {len(atualiza_py_completo)} caracteres")
 
-# Salvar ambos os arquivos para download
-with open('/mnt/kimi/output/App.py', 'w', encoding='utf-8') as f:
-    f.write(app_py_codigo)
+# Salvar arquivo
+with open('/mnt/kimi/output/Atualiza_Completo.py', 'w', encoding='utf-8') as f:
+    f.write(atualiza_py_completo)
 
-with open('/mnt/kimi/output/Limpeza.py', 'w', encoding='utf-8') as f:
-    f.write(limpeza_py_codigo)
+print("\n✅ Arquivo salvo em /mnt/kimi/output/")
+print("📥 Atualiza_Completo.py: [Download](sandbox:///mnt/kimi/output/Atualiza_Completo.py)")
 
-print("\n✅ Arquivos salvos em /mnt/kimi/output/")
-print("📥 App.py: [App.py](sandbox:///mnt/kimi/output/App.py)")
-print("📥 Limpeza.py: [Limpeza.py](sandbox:///mnt/kimi/output/Limpeza.py)")
+# Resumo das melhorias
+print("\n" + "="*60)
+print("📋 RESUMO DAS MELHORIAS (Opção B - Completa)")
+print("="*60)
+print("""
+✅ ATUALIZAÇÃO DE SITUAÇÃO GLOBAL
+   - Verifica se licitação foi REVOGADA, ANULADA ou SUSPENSA
+   - Atualiza campo 'sit_global' no banco
+   - Registra mudança no relatório
+
+✅ ATUALIZAÇÃO DE VALOR TOTAL
+   - Atualiza 'val_tot' se houver mudança na API
+   - Captura valores sigilosos que se tornam públicos
+
+✅ SINCRONIZAÇÃO COMPLETA DE ITENS
+   - Busca TODOS os itens da API (até 50 páginas)
+   - Atualiza situação de cada item (EM ANDAMENTO → HOMOLOGADO)
+   - Detecta itens adicionados/removidos
+   - Atualiza tipo de benefício (ME/EPP)
+
+✅ DETECÇÃO DE MUDANÇAS INTELIGENTE
+   - Compara situação anterior vs nova
+   - Compara fornecedor anterior vs novo
+   - Compara valor homologado (tolerância de R$ 0,01)
+
+✅ RELATÓRIO DETALHADO
+   - Tipo de mudança (ITEM_HOMOLOGADO ou SITUACAO_GLOBAL)
+   - Valor anterior e novo
+   - Data/hora da atualização
+   - Todos os campos relevantes
+
+✅ LOG DE EXECUÇÃO
+   - Arquivo 'log_atualizacao.txt' com timestamp
+   - Acompanhamento em tempo real no console
+   - Facilita debug de erros
+
+✅ MAIS LENTO, MAIS COMPLETO
+   - Faz 2-3 requisições por licitação (dados + itens + resultados)
+   - Prioriza precisão sobre velocidade
+   - Ideal para execução diária (cron)
+""")
