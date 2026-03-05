@@ -1,4 +1,4 @@
-import pandas as pd
+import csv
 import json
 import gzip
 import re
@@ -9,13 +9,14 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ============================================================================
-# CONFIGURAÇÕES - AJUSTE AQUI PARA MAIOR OU MENOR RIGOR
+# CONFIGURAÇÕES - THRESHOLDS AJUSTADOS
 # ============================================================================
 
-# Thresholds de percentual para classificação
-THRESHOLD_ALTA = 30.0       # % mínima para ALTA (era 70 de score)
-THRESHOLD_MEDIA = 15.0      # % mínima para MÉDIA (era 40 de score)
-THRESHOLD_BAIXA = 5.0       # % mínima para BAIXA (era 15 de score)
+# NOVOS Thresholds de percentual para classificação
+THRESHOLD_ALTA = 60.0       # ≥60% = ALTA (Verde)
+THRESHOLD_MEDIA = 20.0      # 20-59% = MÉDIA (Amarelo)
+THRESHOLD_BAIXA = 5.0       # 5-19% = BAIXA (Vermelho)
+# <5% = INCOMPATÍVEL (Transparente)
 
 # Blacklist de termos genéricos que NÃO devem gerar match
 TERMOS_GENERICOS = {
@@ -68,9 +69,9 @@ def normalizar_texto(texto):
     texto = re.sub(r'[ÚÙÛÜ]', 'U', texto)
     texto = re.sub(r'[Ç]', 'C', texto)
     # Remove caracteres especiais, mantém apenas letras, números e espaços
-    texto = re.sub(r'[^A-Z0-9\\s]', ' ', texto)
+    texto = re.sub(r'[^A-Z0-9\s]', ' ', texto)
     # Remove espaços múltiplos
-    texto = re.sub(r'\\s+', ' ', texto).strip()
+    texto = re.sub(r'\s+', ' ', texto).strip()
     return texto
 
 def extrair_tokens_rigorosos(texto):
@@ -134,22 +135,22 @@ def calcular_compatibilidade_percentual(tokens_licitacao, tokens_portfolio):
     return percentual, matches_ordenados
 
 def classificar_compatibilidade(percentual):
-    """Classifica o nível de compatibilidade baseado no percentual"""
+    """Classifica o nível de compatibilidade baseado nos NOVOS thresholds"""
     if percentual >= THRESHOLD_ALTA:
-        return "ALTA"
+        return "ALTA"           # ≥60% = Verde
     elif percentual >= THRESHOLD_MEDIA:
-        return "MEDIA"
+        return "MEDIA"          # 20-59% = Amarelo
     elif percentual >= THRESHOLD_BAIXA:
-        return "BAIXA"
+        return "BAIXA"          # 5-19% = Vermelho
     else:
-        return "INCOMPATIVEL"
+        return "INCOMPATIVEL"   # <5% = Transparente
 
 # ============================================================================
 # CARREGAMENTO DE DADOS
 # ============================================================================
 
 def carregar_portfolio(csv_path="Exportar Dados.csv"):
-    """Carrega portfólio de produtos do CSV"""
+    """Carrega portfólio de produtos do CSV usando biblioteca padrão csv"""
     log(f"Carregando portfólio de {csv_path}...")
     
     if not os.path.exists(csv_path):
@@ -157,41 +158,59 @@ def carregar_portfolio(csv_path="Exportar Dados.csv"):
         return None, None
     
     try:
-        # Tenta diferentes encodings
-        for encoding in ['utf-8', 'latin1', 'iso-8859-1', 'cp1252']:
+        # Detecta encoding e lê CSV
+        encodings = ['utf-8', 'latin1', 'iso-8859-1', 'cp1252']
+        rows = []
+        headers = []
+        
+        for encoding in encodings:
             try:
-                df = pd.read_csv(csv_path, sep=None, engine='python', encoding=encoding)
-                break
-            except:
+                with open(csv_path, 'r', encoding=encoding) as f:
+                    # Detecta delimitador
+                    sample = f.read(2048)
+                    f.seek(0)
+                    
+                    delimiter = ';' if sample.count(';') > sample.count(',') else ','
+                    
+                    reader = csv.reader(f, delimiter=delimiter)
+                    headers = next(reader)
+                    rows = list(reader)
+                    break
+            except Exception:
                 continue
         
-        # Detecta colunas
+        if not rows:
+            log("ERRO: Não foi possível ler o CSV", "ERRO")
+            return None, None
+        
+        # Detecta coluna de descrição
         col_descricao = None
-        for col in df.columns:
+        for i, col in enumerate(headers):
             col_upper = col.upper()
             if any(term in col_upper for term in ['PRODUTO', 'DESCRICAO', 'DESCRIÇÃO', 'MEDICAMENTO', 'ITEM', 'NOME']):
-                col_descricao = col
+                col_descricao = i
                 break
         
-        if not col_descricao:
-            col_descricao = df.columns[0]
-            log(f"Coluna de descrição não identificada, usando primeira coluna: {col_descricao}", "AVISO")
+        if col_descricao is None:
+            col_descricao = 0
+            log(f"Coluna de descrição não identificada, usando primeira coluna: {headers[0]}", "AVISO")
         
         # Extrai tokens de cada produto do portfólio
         tokens_portfolio = set()
         produtos_processados = []
         
-        for _, row in df.iterrows():
-            descricao = str(row[col_descricao]) if pd.notna(row[col_descricao]) else ""
-            if descricao and descricao.lower() != 'nan':
-                tokens_produto = extrair_tokens_rigorosos(descricao)
-                tokens_portfolio.update(tokens_produto)
-                produtos_processados.append({
-                    'descricao_original': descricao,
-                    'tokens': tokens_produto
-                })
+        for row in rows:
+            if len(row) > col_descricao:
+                descricao = row[col_descricao] if row[col_descricao] else ""
+                if descricao and descricao.lower() != 'nan':
+                    tokens_produto = extrair_tokens_rigorosos(descricao)
+                    tokens_portfolio.update(tokens_produto)
+                    produtos_processados.append({
+                        'descricao_original': descricao,
+                        'tokens': tokens_produto
+                    })
         
-        log(f"✅ Portfólio carregado: {len(df)} produtos")
+        log(f"✅ Portfólio carregado: {len(rows)} produtos")
         log(f"📊 Tokens únicos no portfólio: {len(tokens_portfolio)}")
         
         # Mostra alguns exemplos de tokens extraídos
@@ -279,7 +298,7 @@ def avaliar_licitacao(licitacao, tokens_portfolio):
         # Calcula compatibilidade percentual
         percentual, matches = calcular_compatibilidade_percentual(tokens_licitacao, tokens_portfolio)
         
-        # Classifica
+        # Classifica com NOVOS thresholds
         confianca = classificar_compatibilidade(percentual)
         
         return {
@@ -339,28 +358,28 @@ def gerar_relatorio(resultados, origem="MANUAL"):
     arquivo_saida = "relatorio_compatibilidade.csv"
     
     # Prepara dados para CSV (mantém ordem original dos pregões)
-    dados_csv = []
-    for r in resultados:
-        dados_csv.append({
-            'id': r['id'],
-            'orgao': r.get('orgao', ''),
-            'objeto_licitacao': r.get('objeto', ''),
-            'percentual': r['percentual'],
-            'confianca': r['confianca'],
-            'total_tokens': r.get('total_tokens_licitacao', 0),
-            'total_matches': r.get('total_matches', 0),
-            'principais_matches': '|'.join(r.get('matches', []))[:500]
-        })
+    with open(arquivo_saida, 'w', encoding='utf-8-sig', newline='') as f:
+        writer = csv.writer(f, delimiter=';', quoting=csv.QUOTE_MINIMAL)
+        
+        # Escreve header
+        writer.writerow(['id', 'orgao', 'objeto_licitacao', 'percentual', 'confianca', 
+                        'total_tokens', 'total_matches', 'principais_matches'])
+        
+        # Escreve dados
+        for r in resultados:
+            matches_str = '|'.join(r.get('matches', []))[:500]
+            writer.writerow([
+                r['id'],
+                r.get('orgao', ''),
+                r.get('objeto', ''),
+                r['percentual'],
+                r['confianca'],
+                r.get('total_tokens_licitacao', 0),
+                r.get('total_matches', 0),
+                matches_str
+            ])
     
-    df = pd.DataFrame(dados_csv)
-    
-    # NÃO ORDENA POR PERCENTUAL - mantém ordem original dos pregões
-    # df = df.sort_values('percentual', ascending=False)  # REMOVIDO
-    
-    # Salva com encoding UTF-8 e delimitador ;
-    df.to_csv(arquivo_saida, index=False, sep=';', encoding='utf-8-sig')
-    
-    # Estatísticas
+    # Estatísticas com NOVOS thresholds
     total = len(resultados)
     alta = len([r for r in resultados if r['confianca'] == 'ALTA'])
     media = len([r for r in resultados if r['confianca'] == 'MEDIA'])
@@ -369,10 +388,11 @@ def gerar_relatorio(resultados, origem="MANUAL"):
     
     log("="*60)
     log("📊 RELATÓRIO GERADO (ORDEM ORIGINAL MANTIDA)")
+    log("📊 NOVOS THRESHOLDS: ≥60% Verde | 20-59% Amarelo | 5-19% Vermelho | <5% Transparente")
     log("="*60)
     log(f"Arquivo: {arquivo_saida}")
     log(f"Origem: {origem}")
-    log(f"Total: {total} | 🟢 ALTA: {alta} | 🟡 MÉDIA: {media} | 🟠 BAIXA: {baixa} | ⚪ INCOMPATÍVEL: {incomp}")
+    log(f"Total: {total} | 🟢 ALTA (≥60%): {alta} | 🟡 MÉDIA (20-59%): {media} | 🔴 BAIXA (5-19%): {baixa} | ⚪ INCOMPATÍVEL (<5%): {incomp}")
     
     return arquivo_saida
 
@@ -398,7 +418,8 @@ def main():
         origem = sys.argv[1].upper()
     
     log("="*60)
-    log(f"🔍 AVALIAÇÃO DE PORTFÓLIO v3.0 [RIGOROSA - ORDEM PRESERVADA] [{origem}]")
+    log(f"🔍 AVALIAÇÃO DE PORTFÓLIO v3.1 [SEM DEPENDÊNCIAS EXTERNAS] [{origem}]")
+    log(f"📊 REGRAS: ≥60% Verde | 20-59% Amarelo | 5-19% Vermelho | <5% Transparente")
     log("="*60)
     
     # Carrega portfólio
