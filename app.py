@@ -1,6 +1,4 @@
-
-# Gerando o código corrigido do App.py
-app_py_codigo = '''import requests
+import requests
 import json
 import os
 import unicodedata
@@ -94,15 +92,12 @@ VETOS_OPERACIONAL = []
 for termo in VETOS_OPERACIONAIS_BASE:
     n = normalize(termo)
     VETOS_OPERACIONAL.append(n)
-    # Adicionar plural se terminar em consonante ou específicos
     if not n.endswith('S') and not n.endswith('ES'):
         VETOS_OPERACIONAL.append(n + 'S')
     elif n.endswith('L'):
-        VETOS_OPERACIONAL.append(n + 'ES')  # MATERIAL -> MATERIAIS já está na base
+        VETOS_OPERACIONAL.append(n + 'ES')
 
-# Remover duplicatas
 VETOS_OPERACIONAL = list(set(VETOS_OPERACIONAL))
-
 TODOS_VETOS = VETOS_OPERACIONAL + VETOS_ALIMENTACAO + VETOS_EDUCACAO
 
 # --- WHITELISTS ---
@@ -252,7 +247,6 @@ def tem_medicamento_nos_itens(itens):
         desc = item.get('descricao', '')
         if tem_medicamento_no_texto(desc):
             return True
-        # Verificar também na lista de whitelist de medicamentos específicos
         desc_norm = normalize(desc)
         if any(med in desc_norm for med in WL_MEDICAMENTOS):
             return True
@@ -264,47 +258,42 @@ def veta_edital(obj_raw, uf, itens=None):
     status: 'CAPTURAR', 'VETAR', 'IGNORAR'
     """
     obj_norm = normalize(obj_raw)
-    
-    # 1. VETOS ABSOLUTOS (sempre vetam, independente de medicamentos)
+
+    # 1. VETOS ABSOLUTOS (sempo vetam, independente de medicamentos)
     for v in VETOS_ABSOLUTOS:
         if v in obj_norm:
             return ('VETAR', f'Veto absoluto: {v}')
-    
+
     # 2. SUPER PASSE NACIONAL (medicamentos)
-    # Verifica no objeto primeiro
     tem_med_objeto = tem_medicamento_no_texto(obj_raw)
-    # Se não no objeto, verifica nos itens (fallback)
     tem_med_itens = False if tem_med_objeto else tem_medicamento_nos_itens(itens)
-    
+
     if tem_med_objeto or tem_med_itens:
-        # Super passe libera, mas mantém bloqueio de estados bloqueados
         if uf in ESTADOS_BLOQUEADOS:
             return ('IGNORAR', 'Medicamento em estado bloqueado')
         return ('CAPTURAR', 'Super passe: medicamentos')
-    
+
     # 3. VETOS OPERACIONAIS/ALIMENTAÇÃO/EDUCAÇÃO
     for v in TODOS_VETOS:
         if v in obj_norm:
-            # Exceção para nutrição clínica (não escolar)
             if "NUTRICAO" in v or "ALIMENT" in v:
                 if any(bom in obj_norm for bom in WL_NUTRI_CLINICA) and "ESCOLAR" not in obj_norm:
-                    # É nutrição clínica, não alimentação escolar
-                    pass  # Continua para verificar geografia
+                    pass
                 else:
                     return ('VETAR', f'Veto alimentação: {v}')
             else:
                 return ('VETAR', f'Veto operacional: {v}')
-    
+
     # 4. MMH/NUTRIÇÃO - Apenas Nordeste
     tem_mmh = any(t in obj_norm for t in WL_MATERIAIS_NE)
     tem_nutri = any(t in obj_norm for t in WL_NUTRI_CLINICA)
-    
+
     if tem_mmh or tem_nutri:
         if uf in UFS_PERMITIDAS_MMH:
             return ('CAPTURAR', 'MMH/Nutrição no NE')
         else:
             return ('IGNORAR', 'MMH/Nutrição fora do NE')
-    
+
     # 5. TERMOS AMPLOS (SAUDE/HOSPITAL) - Apenas Nordeste
     tem_termo_amplo = any(t in obj_norm for t in WL_TERMOS_AMPLos)
     if tem_termo_amplo:
@@ -312,7 +301,7 @@ def veta_edital(obj_raw, uf, itens=None):
             return ('CAPTURAR', 'Termo amplo no NE')
         else:
             return ('IGNORAR', 'Termo amplo fora do NE')
-    
+
     return ('IGNORAR', 'Não atende critérios')
 
 def safe_float(val):
@@ -333,9 +322,7 @@ def carregar_checkpoint():
 
 def extrair_dados_url_pncp(url):
     """Extrai CNPJ, Ano, Sequencial da URL do PNCP"""
-    # Remove espaços
     url = url.strip()
-    # Padrão: https://pncp.gov.br/app/editais/ {cnpj}/{ano}/{sequencial}
     padrao = r'pncp\.gov\.br/app/editais/(\d+)/(\d+)/(\d+)'
     match = re.search(padrao, url)
     if match:
@@ -347,40 +334,34 @@ def processar_licitacao(lic, session, forcado=False):
     try:
         if not isinstance(lic, dict):
             return ('ERRO', {'msg': 'Formato JSON inválido da API principal'}, 0, 0)
-        
+
         cnpj = lic.get('orgaoEntidade', {}).get('cnpj', '0000')
         ano = lic.get('anoCompra', '0000')
         seq = lic.get('sequencialCompra', '0000')
         id_ref = f"{cnpj}/{ano}/{seq}"
-        
+
         sit_global_id = lic.get('situacaoCompraId') or 1
         sit_global_nome = MAPA_SITUACAO_GLOBAL.get(sit_global_id, "DIVULGADA")
-        
+
         uo = lic.get('unidadeOrgao', {})
         uf = uo.get('ufSigla', '').upper()
-        
+
         obj_raw = lic.get('objetoCompra') or "Sem Objeto"
         dt_enc_str = lic.get('dataEncerramentoProposta') or datetime.now().isoformat()
-        
-        # Modo forçado (links manuais): bypass em filtros de data/objeto
+
         if not forcado:
-            # Filtro de data de encerramento
             try:
                 dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
                 if dt_enc < DATA_CORTE_FIXA:
                     return ('IGNORADO', None, 0, 0)
             except:
                 pass
-            
-            # Filtro de UF bloqueada (apenas se não for super passe, verificado depois)
-            # A verificação real está em veta_edital()
-        
-        # Buscar itens da licitação
+
         url_itens = f'https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens'
         itens_brutos = []
         pagina_atual = 1
-        max_paginas = 50  # Limite de segurança
-        
+        max_paginas = 50
+
         while pagina_atual <= max_paginas:
             try:
                 r_itens = session.get(url_itens, params={'pagina': pagina_atual, 'tamanhoPagina': 100}, timeout=20)
@@ -389,13 +370,13 @@ def processar_licitacao(lic, session, forcado=False):
                         return ('ERRO', {'msg': f"HTTP {r_itens.status_code} em {url_itens}"}, 0, 0)
                     else:
                         break
-                
+
                 resp_json = r_itens.json()
                 itens_raw = resp_json.get('data', []) if isinstance(resp_json, dict) else (resp_json if isinstance(resp_json, list) else [])
-                
+
                 if not itens_raw:
                     break
-                
+
                 for it in itens_raw:
                     if not isinstance(it, dict):
                         continue
@@ -405,7 +386,7 @@ def processar_licitacao(lic, session, forcado=False):
                     benef_id = it.get('tipoBeneficioId')
                     benef_nome_api = str(it.get('tipoBeneficioNome', '')).upper()
                     benef_final = benef_id if benef_id in [1, 2, 3] else (1 if "EXCLUSIVA" in benef_nome_api else (3 if "COTA" in benef_nome_api else 4))
-                    
+
                     itens_brutos.append({
                         'n': it.get('numeroItem'),
                         'd': desc,
@@ -417,26 +398,24 @@ def processar_licitacao(lic, session, forcado=False):
                         'res_forn': None,
                         'res_val': 0.0
                     })
-                
+
                 if len(itens_raw) < 100:
                     break
                 pagina_atual += 1
             except Exception as e:
                 print(f"   ⚠️ Erro ao buscar itens página {pagina_atual}: {e}")
                 break
-        
+
         if not itens_brutos and not forcado:
             return ('IGNORADO', None, 0, 0)
-        
-        # Aplicar filtros de conteúdo
+
         status, motivo = veta_edital(obj_raw, uf, itens_brutos if not forcado else None)
-        
+
         if status == 'VETAR':
             return ('VETADO', {'motivo': motivo}, 0, 0)
         elif status == 'IGNORAR':
             return ('IGNORADO', {'motivo': motivo}, 0, 0)
-        
-        # Se chegou aqui, é para capturar
+
         dados_finais = {
             'id': f"{cnpj}{ano}{seq}",
             'dt_enc': dt_enc_str,
@@ -454,7 +433,7 @@ def processar_licitacao(lic, session, forcado=False):
             'fonte': lic.get('nomeEntidadeIntegradora', 'PNCP Direto')
         }
         return ('CAPTURADO', dados_finais, len(itens_brutos), 0)
-        
+
     except Exception as e:
         return ('ERRO', {'msg': f"Erro interno em {id_ref}: {str(e)}"}, 0, 0)
 
@@ -462,36 +441,34 @@ def processar_links_manuais(session, banco):
     """Processa links manuais do arquivo links_manuais.txt"""
     if not os.path.exists(ARQ_MANUAL):
         return {'processados': 0, 'erros': 0}
-    
+
     stats = {'processados': 0, 'erros': 0, 'adicionados': 0}
-    links_processados = []
-    
+
     try:
         with open(ARQ_MANUAL, 'r', encoding='utf-8') as f:
             links = [line.strip() for line in f if line.strip() and not line.startswith('#')]
     except Exception as e:
         print(f"   ⚠️ Erro ao ler links_manuais.txt: {e}")
         return stats
-    
+
     if not links:
         return stats
-    
-    print(f"\n📎 Processando {len(links)} links manuais...")
-    
+
+    print(f"
+📎 Processando {len(links)} links manuais...")
+
     for url in links:
         cnpj, ano, seq = extrair_dados_url_pncp(url)
         if not cnpj:
             print(f"   ❌ URL inválida: {url}")
             stats['erros'] += 1
             continue
-        
-        # Verificar se já existe no banco
+
         chave = f"{cnpj}{ano}_{str(seq).zfill(5)}/{ano}"
         if chave in banco:
             print(f"   ℹ️ Já existe: {chave}")
             continue
-        
-        # Buscar dados da licitação
+
         url_api = f'https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}'
         try:
             r = session.get(url_api, timeout=30)
@@ -499,11 +476,10 @@ def processar_links_manuais(session, banco):
                 print(f"   ❌ Erro HTTP {r.status_code} ao buscar {url}")
                 stats['erros'] += 1
                 continue
-            
+
             lic = r.json()
-            # Processar em modo forçado (bypass em filtros de data/objeto, mas mantém veto absoluto e estados bloqueados)
             st, d, i_qtd, _ = processar_licitacao(lic, session, forcado=True)
-            
+
             if st == 'CAPTURADO' and d:
                 banco[f"{d['id'][:14]}_{d['edit']}"] = d
                 stats['adicionados'] += 1
@@ -515,33 +491,32 @@ def processar_links_manuais(session, banco):
             else:
                 print(f"   ❌ Erro ao processar: {url}")
                 stats['erros'] += 1
-                
+
         except Exception as e:
             print(f"   ❌ Exceção ao processar {url}: {e}")
             stats['erros'] += 1
-    
+
     print(f"   📊 Links manuais: {stats['adicionados']} adicionados, {stats['erros']} erros")
     return stats
 
 def buscar_periodo(session, banco, d_ini, d_fim):
     stats = {'vetados': 0, 'capturados': 0, 'itens': 0, 'ignorados': 0, 'erros': 0}
     checkpoint = carregar_checkpoint()
-    
+
     delta = d_fim - d_ini
     for i in range(delta.days + 1):
         dia_obj = d_ini + timedelta(days=i)
         dia = dia_obj.strftime('%Y%m%d')
-        
-        # Pula dias já concluídos no checkpoint
+
         if checkpoint and dia < checkpoint['dia']:
             continue
-        
-        print(f"\\n📅 DATA: {dia}")
+
+        print(f"
+📅 DATA: {dia}")
         url = 'https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao'
-        
-        # Retoma da página correta
+
         pag = checkpoint['pagina'] if checkpoint and dia == checkpoint['dia'] else 1
-        
+
         while True:
             try:
                 r = session.get(url, params={
@@ -551,20 +526,20 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                     'pagina': pag,
                     'tamanhoPagina': 50
                 }, timeout=30)
-                
+
                 if r.status_code != 200:
                     print(f"   ⚠️ Erro crítico HTTP {r.status_code}. Salvando checkpoint.")
                     salvar_checkpoint(dia, pag)
                     break
-                
+
                 dados = r.json()
                 lics = dados.get('data', [])
                 if not lics:
                     break
-                
+
                 tot_pag = dados.get('totalPaginas', 1)
                 s_pag = {'vetados': 0, 'capturados': 0, 'itens': 0, 'ignorados': 0, 'erros': 0}
-                
+
                 with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
                     futuros = [exe.submit(processar_licitacao, l, session) for l in lics]
                     for f in concurrent.futures.as_completed(futuros):
@@ -579,51 +554,48 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                             s_pag['ignorados'] += 1
                         elif st == 'ERRO':
                             s_pag['erros'] += 1
-                
+
                 for k in stats:
                     stats[k] += s_pag[k]
-                
+
                 print(f"   📄 Pág {pag}/{tot_pag}: 🎯 {s_pag['capturados']} Caps | 🚫 {s_pag['vetados']} Vets | ⚪ {s_pag['ignorados']} Ign | 🔥 {s_pag['erros']} Erros")
-                
-                # Salva checkpoint após cada página
+
                 salvar_checkpoint(dia, pag + 1)
-                
+
                 if pag >= tot_pag:
-                    # Dia concluído, avança para próximo
                     salvar_checkpoint((dia_obj + timedelta(days=1)).strftime('%Y%m%d'), 1)
                     break
                 pag += 1
-                
+
             except Exception as e:
                 print(f"   ⚠️ Falha na página {pag}: {e}. Salvando checkpoint.")
                 salvar_checkpoint(dia, pag)
                 break
-    
+
     return stats
 
 if __name__ == '__main__':
     if os.path.exists(ARQ_LOCK):
         print("🔒 Execução já em andamento. Saindo.")
         sys.exit(0)
-    
+
     with open(ARQ_LOCK, 'w') as f:
         f.write("lock")
-    
+
     try:
         parser = argparse.ArgumentParser()
         parser.add_argument('--start', type=str)
         parser.add_argument('--end', type=str)
         args = parser.parse_args()
-        
+
         dt_start = datetime.strptime(args.start, '%Y-%m-%d').date() if args.start else date.today() - timedelta(days=15)
         dt_end = datetime.strptime(args.end, '%Y-%m-%d').date() if args.end else date.today()
-        
+
         print(f"🚀 Sniper Pharma v22.2 - Período: {dt_start} a {dt_end}")
-        
+
         session = criar_sessao()
         banco = {}
-        
-        # Carrega banco existente
+
         if os.path.exists(ARQDADOS):
             try:
                 with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
@@ -634,29 +606,24 @@ if __name__ == '__main__':
                 print(f"📦 Banco carregado: {len(banco)} licitações")
             except Exception as e:
                 print(f"⚠️ Erro ao carregar banco: {e}")
-        
-        # Processa período
+
         stats = buscar_periodo(session, banco, dt_start, dt_end)
-        print(f"\\n📊 Resumo busca: 🎯 {stats['capturados']} | 🚫 {stats['vetados']} | ⚪ {stats['ignorados']} | 🔥 {stats['erros']}")
-        
-        # Processa links manuais
+        print(f"
+📊 Resumo busca: 🎯 {stats['capturados']} | 🚫 {stats['vetados']} | ⚪ {stats['ignorados']} | 🔥 {stats['erros']}")
+
         stats_manual = processar_links_manuais(session, banco)
-        
-        # Salva banco
-        print("\\n💾 Salvando banco de dados...")
+
+        print("
+💾 Salvando banco de dados...")
         with gzip.open(ARQ_TEMP, 'wt', encoding='utf-8') as f:
             json.dump(list(banco.values()), f, ensure_ascii=False)
-        
+
         if os.path.exists(ARQ_TEMP):
             os.replace(ARQ_TEMP, ARQDADOS)
             if os.path.exists(ARQ_CHECKPOINT):
                 os.remove(ARQ_CHECKPOINT)
             print(f"✅ Banco atualizado: {len(banco)} licitações totais")
-        
+
     finally:
         if os.path.exists(ARQ_LOCK):
             os.remove(ARQ_LOCK)
-'''
-
-print("Código App.py gerado com sucesso!")
-print(f"Tamanho: {len(app_py_codigo)} caracteres")
