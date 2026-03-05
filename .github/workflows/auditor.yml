@@ -1,6 +1,5 @@
 name: Sniper Pharma (Auditor de Resultados)
 
-# TRAVA DE CONCORRÊNCIA: Mantém a integridade do banco de dados
 concurrency:
   group: banco-dados-pharma
   cancel-in-progress: false
@@ -9,26 +8,17 @@ on:
   schedule:
     - cron: '0 15,21 * * *'  # 15:00 e 21:00 UTC (12:00 e 18:00 Brasília)
   workflow_dispatch:
-    inputs:
-      mode:
-        description: 'Modo de Execução'
-        required: true
-        default: 'completo'
-        type: choice
-        options:
-        - completo
-        - rapido
 
 jobs:
   auditoria:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      actions: read
+      actions: write
     steps:
     - uses: actions/checkout@v4
       with:
-        fetch-depth: 0 
+        fetch-depth: 0
 
     - name: Setup Python
       uses: actions/setup-python@v5
@@ -36,60 +26,72 @@ jobs:
         python-version: '3.11'
 
     - name: Install deps
-      run: pip install requests urllib3
+      run: pip install requests
 
     - name: 🩺 Run Auditor (atualiza.py)
       run: python atualiza.py
 
-    - name: 💾 Commit Auditoria, Relatório e Log
+    - name: 📊 Run Avaliação de Portfólio
+      if: always()  # Roda mesmo se atualiza.py falhar
+      run: python avalia_portfolio.py
+
+    - name: 💾 Commit Auditoria, Atualização e Avaliação
       run: |
         git config user.name "Sniper Pharma Auditor"
         git config user.email "auditor@pharma.bot"
 
-        # Adiciona todos os arquivos gerados/atualizados
+        # Adiciona todos os arquivos de dados
         git add pregacoes_pharma_limpos.json.gz || true
         git add relatorio_atualizacoes.csv || true
+        git add relatorio_compatibilidade.csv || true
+        git add log_avaliacao.txt || true
         git add log_atualizacao.txt || true
 
         # Só commita se houver mudanças
         if ! git diff --staged --quiet; then
-          DATA_HORA=$(date +'%d/%m/%Y %H:%M')
-          git commit -m "Auditoria $DATA_HORA: Banco atualizado com situações e homologações"
-          git pull origin main --rebase -X theirs
-          git push origin main
-          echo "✅ Mudanças commitadas e push realizados"
+          git commit -m "Auditoria: $(date +'%Y-%m-%d %H:%M') - Atualização e Avaliação de Portfólio"
+          git pull origin main --rebase -X theirs || true
+          git push origin main || true
         else
-          echo "ℹ️ Nenhuma mudança detectada para commitar"
+          echo "ℹ️ Nenhuma mudança para commitar"
         fi
 
-    - name: 📁 Upload Relatório como Artefato
+    - name: 📁 Upload Relatórios como Artefatos
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: relatorio-homologacoes-${{ github.run_number }}
+        name: relatorios-auditoria-${{ github.run_id }}
         path: |
           relatorio_atualizacoes.csv
+          relatorio_compatibilidade.csv
           log_atualizacao.txt
+          log_avaliacao.txt
         retention-days: 30
-        if-no-files-found: warn
+        compression-level: 6
 
-    - name: 📊 Resumo da Execução
+    - name: 📋 Resumo da Execução
       if: always()
       run: |
         echo "=========================================="
-        echo "📋 RESUMO DA AUDITORIA"
+        echo "  AUDITORIA E AVALIAÇÃO CONCLUÍDAS"
         echo "=========================================="
+
+        # Resumo da atualização
         if [ -f log_atualizacao.txt ]; then
-          echo "📝 Log de execução:"
-          tail -20 log_atualizacao.txt
-        else
-          echo "⚠️ Arquivo de log não encontrado"
+          echo ""
+          echo "🔄 ATUALIZAÇÃO:"
+          tail -n 5 log_atualizacao.txt
         fi
-        echo "=========================================="
-        if [ -f relatorio_atualizacoes.csv ]; then
-          LINHAS=$(wc -l < relatorio_atualizacoes.csv)
-          echo "📊 Registros no relatório: $((LINHAS - 1))"
-        else
-          echo "ℹ️ Nenhum relatório gerado (sem mudanças)"
+
+        # Resumo da avaliação
+        if [ -f log_avaliacao.txt ]; then
+          echo ""
+          echo "📊 AVALIAÇÃO DE PORTFÓLIO:"
+          tail -n 5 log_avaliacao.txt
         fi
-        echo "=========================================="
+
+        # Estatísticas dos relatórios
+        echo ""
+        echo "📁 ARQUIVOS GERADOS:"
+        [ -f relatorio_atualizacoes.csv ] && echo "   - Atualizações: $(wc -l < relatorio_atualizacoes.csv) linhas"
+        [ -f relatorio_compatibilidade.csv ] && echo "   - Compatibilidade: $(wc -l < relatorio_compatibilidade.csv) linhas"
