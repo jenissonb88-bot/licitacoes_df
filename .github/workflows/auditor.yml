@@ -1,6 +1,4 @@
-
-# Gerando auditor.yml atualizado
-auditor_yml = '''name: Sniper Pharma (Auditor de Resultados)
+name: Sniper Pharma (Auditor de Resultados)
 
 # TRAVA DE CONCORRÊNCIA: Mantém a integridade do banco de dados
 concurrency:
@@ -31,12 +29,12 @@ jobs:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0 
-        
+
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-        
+
     - name: Install deps
       run: pip install requests urllib3
 
@@ -47,12 +45,12 @@ jobs:
       run: |
         git config user.name "Sniper Pharma Auditor"
         git config user.email "auditor@pharma.bot"
-        
+
         # Adiciona todos os arquivos gerados/atualizados
         git add pregacoes_pharma_limpos.json.gz || true
         git add relatorio_atualizacoes.csv || true
         git add log_atualizacao.txt || true
-        
+
         # Só commita se houver mudanças
         if ! git diff --staged --quiet; then
           DATA_HORA=$(date +'%d/%m/%Y %H:%M')
@@ -95,34 +93,3 @@ jobs:
           echo "ℹ️ Nenhum relatório gerado (sem mudanças)"
         fi
         echo "=========================================="
-'''
-
-# Salvar
-with open('/mnt/kimi/output/auditor.yml', 'w', encoding='utf-8') as f:
-    f.write(auditor_yml)
-
-print("✅ auditor.yml atualizado")
-print(f"Tamanho: {len(auditor_yml)} caracteres")
-
-print("\n" + "="*60)
-print("📋 RESUMO DAS MUDANÇAS NOS WORKFLOWS")
-print("="*60)
-print("""
-🔄 SYNC-DATA.YML (Captura)
-   ✅ Instala urllib3 (dependência do retry)
-   ✅ Adiciona checkpoint.json ao commit
-   ✅ Mensagem de commit mais descritiva (período completo)
-   
-🩺 AUDITOR.YML (Atualização)
-   ✅ Usa Atualiza_Completo.py (modo completo)
-   ✅ Adiciona log_atualizacao.txt ao commit
-   ✅ Upload de ambos os arquivos (CSV + LOG) como artefatos
-   ✅ Retention aumentado para 30 dias
-   ✅ Step de resumo da execução no final
-   ✅ Nome do artefato com run_number (evita conflitos)
-   ✅ Só commita se houver mudanças reais
-""")
-
-print("📥 Downloads:")
-print("   sync-data.yml: [Download](sandbox:///mnt/kimi/output/sync-data.yml)")
-print("   auditor.yml: [Download](sandbox:///mnt/kimi/output/auditor.yml)")
