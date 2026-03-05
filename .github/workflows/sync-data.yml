@@ -59,11 +59,11 @@ jobs:
             echo "MODE=${{ inputs.mode }}" >> $GITHUB_ENV
         fi
 
-    - name: 🚀 1. Run Core Crawler (App.py)
-      run: python App.py --start "$START_DATE" --end "$END_DATE"
+    - name: 🚀 1. Run Core Crawler (app.py)
+      run: python app.py --start "$START_DATE" --end "$END_DATE"
 
-    - name: 🧹 2. Run Data Cleaner (Limpeza.py)
-      run: python Limpeza.py
+    - name: 🧹 2. Run Data Cleaner (limpeza.py)
+      run: python limpeza.py
 
     - name: 💾 Commit Extração e Limpeza
       run: |
