@@ -17,7 +17,7 @@
         .header-bold { font-weight: 700; }
         .badge-uf-header { background-color: #000; color: #fff; font-weight: 800; padding: 2px 8px; border-radius: 4px; margin-right: 5px; }
 
-        /* Badge de compatibilidade - ATUALIZADO PARA NOVOS THRESHOLDS */
+        /* Badge de compatibilidade */
         .compat-badge {
             display: inline-flex;
             align-items: center;
@@ -29,40 +29,31 @@
             margin-right: 8px;
             border: 1px solid rgba(255,255,255,0.4);
         }
-        /* 🟢 Verde: ≥60% */
-        .compat-alta { 
-            background: #28a745; 
-            color: white; 
-            box-shadow: 0 2px 4px rgba(40, 167, 69, 0.4);
-        }
-        /* 🟡 Amarelo: 20-59% */
-        .compat-media { 
-            background: #ffc107; 
-            color: #212529; 
-            box-shadow: 0 2px 4px rgba(255, 193, 7, 0.4);
-        }
-        /* 🔴 Vermelho: 5-19% */
-        .compat-baixa { 
-            background: #dc3545; 
-            color: white; 
-            box-shadow: 0 2px 4px rgba(220, 53, 69, 0.4);
-        }
-        /* ⚪ Transparente: <5% */
-        .compat-na { 
-            background: rgba(255,255,255,0.15); 
-            color: rgba(255,255,255,0.6); 
-            border: 1px solid rgba(255,255,255,0.3);
-        }
+        .compat-alta { background: #28a745; color: white; box-shadow: 0 2px 4px rgba(40, 167, 69, 0.4); }
+        .compat-media { background: #ffc107; color: #212529; box-shadow: 0 2px 4px rgba(255, 193, 7, 0.4); }
+        .compat-baixa { background: #dc3545; color: white; box-shadow: 0 2px 4px rgba(220, 53, 69, 0.4); }
+        .compat-na { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.3); }
 
-        /* Destaque para itens compatíveis */
+        /* DESTAQUE PARA ITENS COMPATÍVEIS - REFORÇADO */
         .item-compativel {
             background-color: #d4edda !important;
             font-weight: 700 !important;
-            border-left: 3px solid #28a745 !important;
+            border-left: 4px solid #28a745 !important;
         }
         .item-compativel td { 
             color: #155724 !important; 
             font-weight: 700 !important; 
+        }
+        .item-compativel .descricao-item {
+            color: #0b2e13 !important;
+            font-weight: 800 !important;
+        }
+        /* Indicador visual de compatibilidade na linha */
+        .item-compativel::before {
+            content: '✓';
+            color: #28a745;
+            font-weight: bold;
+            margin-right: 5px;
         }
 
         .benef-sim { color: var(--red-df) !important; font-weight: bold !important; }
@@ -87,7 +78,46 @@
         .header-status-deserto { background-color: #f8d7da; font-weight: bold; color: #721c24; text-align: center; }
         .header-status-cancelado { background-color: #e2e3e5; font-weight: bold; color: #383d41; text-align: center; }
         
-        .pagination-container { display: flex; align-items: center; justify-content: center; gap: 15px; margin-top: 20px; padding-bottom: 40px; }
+        /* PAGINAÇÃO ATUALIZADA - COM INPUT DE NAVEGAÇÃO */
+        .pagination-container { 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 10px; 
+            margin-top: 20px; 
+            padding-bottom: 40px; 
+            flex-wrap: wrap;
+        }
+        .page-input {
+            width: 60px;
+            text-align: center;
+            padding: 4px 8px;
+            border: 1px solid #004a99;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+        .page-input:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(0, 74, 153, 0.25);
+        }
+        .btn-go {
+            background: #004a99;
+            color: white;
+            border: none;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-go:hover {
+            background: #003366;
+        }
+        .page-info-text {
+            font-size: 0.875rem;
+            color: #666;
+        }
         
         .btn-excluir { font-size: 0.7rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 2px 8px; border-radius: 4px; cursor: pointer; }
         .btn-excluir:hover { background: var(--red-df); border-color: var(--red-df); }
@@ -134,9 +164,15 @@
 
     <div id="monitor-content"></div>
 
+    <!-- PAGINAÇÃO ATUALIZADA COM NAVEGAÇÃO DIRETA -->
     <div class="pagination-container">
         <button class="btn btn-sm btn-outline-primary px-3" id="prevPage">Anterior</button>
-        <span id="pageInfo" class="fw-bold px-2 small">Página 1</span>
+        
+        <span class="page-info-text">Página</span>
+        <input type="number" id="pageInput" class="page-input" min="1" value="1" onkeypress="if(event.key==='Enter')irParaPagina()">
+        <span class="page-info-text">de <span id="totalPages">1</span></span>
+        <button class="btn-go" onclick="irParaPagina()">Ir</button>
+        
         <button class="btn btn-sm btn-outline-primary px-3" id="nextPage">Próxima</button>
     </div>
 </div>
@@ -192,6 +228,7 @@ let allData = [];
 let filteredData = [];
 let compatData = {};
 let currentPage = 1;
+let totalPages = 1;
 const itemsPerPage = 20;
 
 const GITHUB_OWNER = 'jenissonb88-bot';
@@ -201,7 +238,6 @@ const GITHUB_FILE_PATH = 'links_manuais.txt';
 const modalObj = new bootstrap.Modal(document.getElementById('modalDetalhes'));
 const modalInclusaoObj = new bootstrap.Modal(document.getElementById('modalInclusao'));
 
-// ATUALIZADO: Carrega dados de compatibilidade do novo formato (percentual em vez de score)
 async function loadCompatData() {
     try {
         const response = await fetch('relatorio_compatibilidade.csv');
@@ -212,8 +248,6 @@ async function loadCompatData() {
         if (lines.length < 2) return;
         
         const headers = lines[0].split(';').map(h => h.trim().replace(/^\uFEFF/, ''));
-        
-        // Mapeia índices das colunas (novo formato usa 'percentual' em vez de 'score_final')
         const colId = headers.findIndex(h => h.toLowerCase().includes('id'));
         const colPercentual = headers.findIndex(h => h.toLowerCase().includes('percentual'));
         const colConfianca = headers.findIndex(h => h.toLowerCase().includes('confianca'));
@@ -222,7 +256,6 @@ async function loadCompatData() {
         for (let i = 1; i < lines.length; i++) {
             const cols = lines[i].split(';');
             if (cols.length >= 4) {
-                // Usa índices encontrados ou defaults
                 const id = colId >= 0 ? cols[colId] : cols[0];
                 const percentual = parseFloat(colPercentual >= 0 ? cols[colPercentual] : cols[3]) || 0;
                 const confianca = (colConfianca >= 0 ? cols[colConfianca] : cols[4]) || 'INCOMPATIVEL';
@@ -233,15 +266,11 @@ async function loadCompatData() {
                 }
             }
         }
-        
-        console.log(`✅ Compatibilidade carregada: ${Object.keys(compatData).length} registros`);
     } catch (e) {
         console.log('Compatibilidade não carregada:', e);
     }
 }
 
-// ATUALIZADO: Retorna HTML do badge com NOVOS THRESHOLDS
-// 🟢 Verde: ≥60% | 🟡 Amarelo: 20-59% | 🔴 Vermelho: 5-19% | ⚪ Transparente: <5%
 function getCompatBadgeHTML(licId) {
     const compat = compatData[licId];
     if (!compat || compat.percentual < 5) {
@@ -250,16 +279,11 @@ function getCompatBadgeHTML(licId) {
     
     const pct = compat.percentual.toFixed(1);
     
-    // 🟢 Verde: ≥60%
     if (compat.percentual >= 60) {
         return `<span class="compat-badge compat-alta" title="${compat.matches.slice(0,3).join(', ')}">🟢 ${pct}%</span>`;
-    }
-    // 🟡 Amarelo: 20-59%
-    else if (compat.percentual >= 20) {
+    } else if (compat.percentual >= 20) {
         return `<span class="compat-badge compat-media" title="${compat.matches.slice(0,3).join(', ')}">🟡 ${pct}%</span>`;
-    }
-    // 🔴 Vermelho: 5-19%
-    else {
+    } else {
         return `<span class="compat-badge compat-baixa" title="${compat.matches.slice(0,3).join(', ')}">🔴 ${pct}%</span>`;
     }
 }
@@ -275,8 +299,6 @@ async function loadData() {
         const text = await new Response(decompressedStream).text();
         
         allData = JSON.parse(text);
-        
-        // MANTÉM ORDENAÇÃO ORIGINAL POR DATA (futuro -> passado) - NÃO REORDENA POR PERCENTUAL
         allData.sort((a, b) => new Date(b.dt_enc) - new Date(a.dt_enc));
         
         filteredData = [...allData];
@@ -358,8 +380,31 @@ function renderMonitor() {
         container.appendChild(div);
     });
 
-    const totalPages = Math.ceil(filteredData.length / itemsPerPage) || 1;
-    document.getElementById('pageInfo').innerText = `Página ${currentPage}`;
+    // ATUALIZA CONTROLES DE PAGINAÇÃO
+    totalPages = Math.ceil(filteredData.length / itemsPerPage) || 1;
+    document.getElementById('totalPages').textContent = totalPages;
+    document.getElementById('pageInput').value = currentPage;
+    document.getElementById('pageInput').max = totalPages;
+    
+    // Habilita/desabilita botões
+    document.getElementById('prevPage').disabled = currentPage <= 1;
+    document.getElementById('nextPage').disabled = currentPage >= totalPages;
+}
+
+// NOVA FUNÇÃO: Ir para página específica
+function irParaPagina() {
+    const input = document.getElementById('pageInput');
+    let pagina = parseInt(input.value);
+    
+    if (isNaN(pagina) || pagina < 1) {
+        pagina = 1;
+    } else if (pagina > totalPages) {
+        pagina = totalPages;
+    }
+    
+    currentPage = pagina;
+    renderMonitor();
+    window.scrollTo(0, 0);
 }
 
 function filtrar() {
@@ -431,7 +476,7 @@ function abrirItens(id) {
     modalObj.show();
 }
 
-// ATUALIZADO: Renderiza linha de item com destaque para compatíveis
+// REFORÇADO: Destaque para itens compatíveis
 function renderLinhaItem(it, licId) {
     const isMeEpp = [1, 2, 3].includes(parseInt(it.benef));
     const meEppHtml = isMeEpp ? '<span class="benef-sim">SIM</span>' : '<span class="benef-nao">NÃO</span>';
@@ -439,22 +484,40 @@ function renderLinhaItem(it, licId) {
     const valEstimado = it.v_est || 0;
     const valorTotal = valFinal > 0 ? (valFinal * it.q) : (valEstimado * it.q);
 
-    // Verifica se item é compatível (mesma lógica de antes)
+    // VERIFICAÇÃO REFORÇADA DE COMPATIBILIDADE
     let compatClass = '';
+    let compatIndicator = '';
     const compat = compatData[licId];
+    
     if (compat && compat.matches && compat.matches.length > 0) {
         const descNorm = normalizeText(it.d || '');
+        const descLower = descNorm.toLowerCase();
+        
         const isCompat = compat.matches.some(match => {
             if (!match) return false;
-            return descNorm.includes(normalizeText(match));
+            const matchNorm = normalizeText(match);
+            const matchLower = matchNorm.toLowerCase();
+            
+            // Verifica se o match está contido na descrição ou vice-versa
+            return descLower.includes(matchLower) || 
+                   matchLower.includes(descLower.substring(0, 20));
         });
-        if (isCompat) compatClass = 'item-compativel';
+
+        if (isCompat) {
+            compatClass = 'item-compativel';
+            compatIndicator = '<span style="color: #28a745; font-weight: bold; margin-right: 5px;">✓</span>';
+        }
     }
 
-    return `<tr class="${compatClass}"><td class="text-center fw-bold">${it.n}</td><td>${it.d}</td><td class="text-center">${meEppHtml}</td>
-            <td class="text-center">${it.q} ${it.u}</td><td class="text-center val-estimado">R$ ${valEstimado.toFixed(4)}</td>
+    return `<tr class="${compatClass}">
+            <td class="text-center fw-bold">${it.n}</td>
+            <td>${compatIndicator}${it.d}</td>
+            <td class="text-center">${meEppHtml}</td>
+            <td class="text-center">${it.q} ${it.u}</td>
+            <td class="text-center val-estimado">R$ ${valEstimado.toFixed(4)}</td>
             <td class="text-center val-homologado">${valFinal > 0 ? 'R$ ' + valFinal.toFixed(4) : '---'}</td>
-            <td class="text-center fw-bold">R$ ${valorTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td></tr>`;
+            <td class="text-center fw-bold">R$ ${valorTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+            </tr>`;
 }
 
 function normalizeText(text) {
@@ -516,7 +579,7 @@ async function processarInclusaoManual() {
                 'Authorization': `token ${token}`,
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
+n            body: JSON.stringify({
                 message: "Inclusão manual de link via Sniper Pharma Panel",
                 content: btoa(unescape(encodeURIComponent(newContent))),
                 sha: sha
@@ -536,9 +599,24 @@ async function processarInclusaoManual() {
     }
 }
 
-document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
-document.getElementById('nextPage').onclick = () => { if(currentPage * itemsPerPage < filteredData.length) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
+// EVENT LISTENERS ATUALIZADOS
+document.getElementById('prevPage').onclick = () => { 
+    if(currentPage > 1) { 
+        currentPage--; 
+        renderMonitor(); 
+        window.scrollTo(0,0); 
+    } 
+};
 
+document.getElementById('nextPage').onclick = () => { 
+    if(currentPage < totalPages) { 
+        currentPage++; 
+        renderMonitor(); 
+        window.scrollTo(0,0); 
+    } 
+};
+
+// Inicializa
 loadData();
 </script>
 </body>
