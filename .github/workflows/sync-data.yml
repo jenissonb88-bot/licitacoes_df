@@ -39,7 +39,9 @@ jobs:
         python-version: '3.11'
 
     - name: Install deps
-      run: pip install requests
+      run: |
+        pip install requests
+        pip install pandas  # NOVO: necessário para avalia_portfolio.py
 
     - name: Definir Datas e Modo
       id: config
