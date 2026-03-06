@@ -1,51 +1,319 @@
-import csv
+import pandas as pd
+import re
 import json
 import gzip
-import re
+import csv
 import os
 import sys
-from collections import defaultdict
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from difflib import SequenceMatcher
+import unicodedata
 
 # ============================================================================
-# CONFIGURAÇÕES - THRESHOLDS AJUSTADOS
+# CONFIGURAÇÕES
 # ============================================================================
 
-# NOVOS Thresholds de percentual para classificação
-THRESHOLD_ALTA = 60.0       # ≥60% = ALTA (Verde)
-THRESHOLD_MEDIA = 20.0      # 20-59% = MÉDIA (Amarelo)
-THRESHOLD_BAIXA = 5.0       # 5-19% = BAIXA (Vermelho)
-# <5% = INCOMPATÍVEL (Transparente)
+# Thresholds de matching (ajustáveis)
+THRESHOLD_ALTO = 0.70      # ≥70% = ALTO (participar)
+THRESHOLD_MEDIO = 0.50   # 50-69% = MÉDIA (avaliar)
+THRESHOLD_BAIXO = 0.30   # 30-49% = BAIXA (descartar)
+# <30% = INCOMPATÍVEL
 
-# Blacklist de termos genéricos que NÃO devem gerar match
-TERMOS_GENERICOS = {
-    # Unidades e medidas
-    'MG', 'ML', 'G', 'KG', 'MCG', 'UI', 'UN', 'UNIDADE', 'UNIDADES',
-    # Formas farmacêuticas
-    'COMPRIMIDO', 'COMPRIMIDOS', 'CAPSULA', 'CAPSULAS', 'DRAGEA', 'DRAGEAS',
-    'SOLUCAO', 'SOLUÇÃO', 'SOLUCOES', 'SOLUÇÕES', 'SUSPENSAO', 'SUSPENSÃO',
-    'XAROPE', 'XAROPES', 'INJETAVEL', 'INJETÁVEL', 'INJETAVEIS', 'INJETÁVEIS',
-    'AMPOLA', 'AMPOLAS', 'FRASCO', 'FRASCOS', 'BISNAGA', 'BISNAGAS',
-    'TUBO', 'TUBOS', 'POTE', 'POTES', 'CAIXA', 'CAIXAS', 'EMBALAGEM', 'EMBALAGENS',
-    # Vias de administração
-    'ORAL', 'INTRAVENOSO', 'IV', 'IM', 'INTRAMUSCULAR', 'TOPICO', 'TÓPICO',
-    'RETAL', 'VAGINAL', 'NASAL', 'OFTALMICO', 'OFTÁLMICO', 'OTICO', 'ÓTICO',
-    # Quantidades genéricas
-    'UND', 'CP', 'CAP', 'AMP', 'FR', 'CX', 'TB', 'COMPR', 'CAPS',
-    # Outros termos genéricos
-    'GENERICO', 'GENÉRICO', 'SIMILAR', 'REFERENCIA', 'REFERÊNCIA', 'ETICO', 'ÉTICO',
-    'APRESENTACAO', 'APRESENTAÇÃO', 'CONCENTRACAO', 'CONCENTRAÇÃO', 'DOSAGEM',
-    'QUANTIDADE', 'QTD', 'TOTAL', 'PARCIAL', 'ITEM', 'ITENS',
-    'MEDICAMENTO', 'MEDICAMENTOS', 'FARMACO', 'FÁRMACO', 'PRODUTO', 'PRODUTOS',
-    'MATERIAL', 'MATERIAIS', 'INSUMO', 'INSUMOS', 'HOSPITALAR', 'HOSPITALARES'
-}
+# Arquivos padrão (compatíveis com fluxo existente)
+ARQ_PORTFOLIO = 'Exportar Dados.csv'
+ARQ_LICITACOES = 'pregacoes_pharma_limpos.json.gz'
+ARQ_SAIDA = 'relatorio_compatibilidade.csv'
+ARQ_LOG = 'log_matcher.log'
 
-# Peso por especificidade do termo
-PESO_MINIMO_CARACTERES = 4  # Termos com menos caracteres são ignorados
-
-# Número de workers para paralelização
 MAX_WORKERS = 10
+
+# ============================================================================
+# DICIONÁRIO DE SINÔNIMOS FARMACÊUTICOS (expansível)
+# ============================================================================
+
+SINONIMOS_FARMACOS = {
+    "ESCOPOLAMINA": ["HIOSCINA", "BUTILBROMETO DE ESCOPOLAMINA", "BROMETO DE ESCOPOLAMINA", 
+                     "BUTILESCOPOLAMINA", "BUSCOPAN", "BUSCOPAN COMPOSTO", "BUSCOPAN COMP"],
+    "DIPIRONA": ["METAMIZOL", "DIPIRONA MONOIDRATADA", "DIPIRONA SODICA", 
+                 "NORAMIDAZOFENINA", "DIPIRONA SODICA + ESCOPOLAMINA"],
+    "EPINEFRINA": ["ADRENALINA"],
+    "FENITOÍNA": ["HIDANTOÍNA", "DIFENILHIDANTOÍNA", "FENITOINA"],
+    "FENOBARBITAL": ["FENOBARBITONA", "GARDENAL"],
+    "DIAZEPAM": ["VALIUM"],
+    "MIDAZOLAM": ["DORMONID"],
+    "CLONAZEPAM": ["RIVOTRIL"],
+    "HALOPERIDOL": ["HALDOL"],
+    "PARACETAMOL": ["ACETAMINOFENO", "ACETAMINOFEN"],
+    "CLAVULANATO DE POTÁSSIO": ["CLAV POTASSIO", "CLAVULANATO", "CLAV POT", 
+                                 "ÁCIDO CLAVULÂNICO", "CLAVULANATO POTASSIO"],
+    "AMOXICILINA": ["AMOXICILINA TRIIDRATADA"],
+    "SULFAMETOXAZOL": ["SULFA", "SULFAMETOXAZOL"],
+    "TRIMETOPRIMA": ["TMP"],
+    "VITAMINA C": ["ÁCIDO ASCÓRBICO", "ASCORBINICO", "ACIDO ASCORBICO"],
+    "VITAMINA A": ["RETINOL"],
+    "VITAMINA D": ["COLECALCIFEROL", "ERGOCALCIFEROL"],
+    "VITAMINA K": ["FITOMENADIONA", "FITONADIONA", "FITOADIONA"],
+    "GLICOSE": ["DEXTRose"],
+    "CLORETO DE SODIO": ["SORO FISIOLOGICO", "SF", "NACL"],
+    "AAS": ["ÁCIDO ACETILSALICÍLICO", "ACETYLSALICYLIC ACID", "ACIDO ACETILSALICILICO"],
+    "ÁCIDO ACETILSALICÍLICO": ["AAS"],
+    "BUTILBROMETO DE ESCOPOLAMINA": ["HIOSCINA", "ESCOPOLAMINA"],
+    "NOREPINEFRINA": ["NORADRENALINA"],
+    "FENTANILA": ["CITRATO DE FENTANILA"],
+    "MORFINA": ["CLORETO DE MORFINA", "SULFATO DE MORFINA"],
+    "DEXTROCETAMINA": ["CETAMINA"],
+    "CETOPROFENO": ["CETOPROFENO"],
+    "DICLOFENACO": ["DICLOFENACO SODICO", "DICLOFENACO POTASSICO", "VOLTAREN"],
+    "IBUPROFENO": ["ADVIL", "MOTRIN"],
+    "NAPROXENO": ["FLANAX", "NAPROSYN"],
+    "CEFALEXINA": ["KEFLEX"],
+    "AZITROMICINA": ["ZITROMAC"],
+    "CLARITROMICINA": ["KLACID"],
+    "METFORMINA": ["GLIFAGE"],
+    "GLIBENCLAMIDA": ["DAONIL"],
+    "ENALAPRIL": ["RENITE"],
+    "CAPTOPRIL": ["CAPOTEN"],
+    "LOSARTANA": ["COZAAR"],
+    "ATENOLOL": ["ATELOCARD"],
+    "PROPRANOLOL": ["INDERAL"],
+    "METOPROLOL": ["LOPRESOR"],
+    "ANLODIPINO": ["NORVASC"],
+    "OMEPRAZOL": ["LOSEC", "OMEPRAM"],
+    "PANTOPRAZOL": ["PANTOZOL"],
+    "ESOMEPRAZOL": ["NEXIUM"],
+    "RANITIDINA": ["AERODIN"],
+    "ONDANSETRONA": ["ZOFRAN"],
+    "METOCLOPRAMIDA": ["PLASIL"],
+    "BROMOPRIDA": ["DIGESPRID"],
+    "SIMETICONA": ["GAS-X", "AIRLIX"],
+    "BISACODIL": ["DULCOLAX"],
+    "SENNA": ["SEAKAL", "LAXOL"],
+    "LOPERAMIDA": ["IMODIUM"],
+    "CLORPROMAZINA": ["AMINAZIN", "CLOPROMAZ"],
+    "LEVOMEPROMAZINA": ["NOZINAN"],
+    "HALOPERIDOL": ["HALDOL"],
+    "RISPERIDONA": ["RISPERDAL"],
+    "OLANZAPINA": ["ZYPREXA"],
+    "QUETIAPINA": ["SEROQUEL"],
+    "ARIPIPRAZOL": ["ABILIFY"],
+    "CLOZAPINA": ["LEPONEX"],
+    "CARBAMAZEPINA": ["TEGRETOL"],
+    "VALPROATO": ["DEPAKENE", "VALPAK"],
+    "FENITOINA": ["HIDANTOINA"],
+    "LAMOTRIGINA": ["LAMICTAL"],
+    "TOPIRAMATO": ["TOPAMAX"],
+    "GABAPENTINA": ["NEURONTIN"],
+    "PREGABALINA": ["LYRICA"],
+    "SERTRALINA": ["ZOLOFT"],
+    "FLUOXETINA": ["PROZAC"],
+    "PAROXETINA": ["PAXIL", "AROPAX"],
+    "CITALOPRAM": ["CELEXA"],
+    "ESCITALOPRAM": ["LEXAPRO"],
+    "VENLAFAXINA": ["EFEXOR"],
+    "DULOXETINA": ["CYMBALTA"],
+    "BUPROPIONA": ["WELLBUTRIN", "ZYBAN"],
+    "MITRATAZAPINA": ["REMERON"],
+    "TRAZODONA": ["DESYREL"],
+    "AMITRIPTILINA": ["TRYPTANOL"],
+    "NORTRIPTILINA": ["PAMELOR"],
+    "IMIPRAMINA": ["TOFRANIL"],
+    "CLOMIPRAMINA": ["ANAFRANIL"],
+    "ALPRAZOLAM": ["FRONTAL", "XANAX"],
+    "BROMAZEPAM": ["LEXOTAN"],
+    "LORAZEPAM": ["ATIVAN"],
+    "NITRAZEPAM": ["MOGADON"],
+    "FLUNITRAZEPAM": ["ROHYPNOL"],
+    "ZOLPIDEM": ["STILNOX"],
+    "ZOPICLONA": ["IMOVANE"],
+    "TRAMADOL": ["TRAMAL"],
+    "CODEINA": ["CODALGIN"],
+    "MORFINA": ["DIMORF"],
+    "FENTANILA": ["DURAGESIC", "FENTANYL"],
+    "METADONA": ["METADOL"],
+    "NALBUFINA": ["NUBAIN"],
+    "BUPRENORFINA": ["SUBUTEX", "TEMGESIC"],
+    "NALOXONA": ["NARCAN"],
+    "ACICLOVIR": ["ZOVIRAX"],
+    "VALACICLOVIR": ["VALTREX"],
+    "FAMCICLOVIR": ["FAMVIR"],
+    "AMANTADINA": ["SYMMETREL"],
+    "OSSELTAMIVIR": ["TAMIFLU"],
+    "RIBAVIRINA": ["VIRAZOLE", "REBETOL"],
+    "ZIDOVUDINA": ["RETROVIR"],
+    "LAMIVUDINA": ["EPIVIR"],
+    "TENOFOVIR": ["VIREAD"],
+    "EFAVIRENZ": ["SUSTIVA"],
+    "NEVIRAPINA": ["VIRAMUNE"],
+    "INDINAVIR": ["CRIXIVAN"],
+    "RITONAVIR": ["NORVIR"],
+    "LOPINAVIR": ["KALETRA"],
+    "ATAZANAVIR": ["REYATAZ"],
+    "DARUNAVIR": ["PREZISTA"],
+    "RALTEGRAVIR": ["ISENTRESS"],
+    "MARAVIROC": ["SELZENTRY"],
+    "ENFUROVITIDA": ["FUZEON"],
+    "FLUCONAZOL": ["DIFLUCAN"],
+    "ITRACONAZOL": ["SPORANOX"],
+    "VORICONAZOL": ["VFEND"],
+    "POSACONAZOL": ["NOXAFIL"],
+    "ANFOTERICINA": ["FUNGIZONE", "AMBISOME"],
+    "CASPofungina": ["CANCIDAS"],
+    "MICAFUNGINA": ["MYCAMINE"],
+    "ANIDULAFUNGINA": ["ERAXIS"],
+    "CETOCONAZOL": ["NIZORAL"],
+    "MICONAZOL": ["MONISTAT", "Daktarin"],
+    "CLOTRIMAZOL": ["CANESTEN", "GYNE-LOTRIMIN"],
+    "NISTATINA": ["MYCOSTATIN", "NILSTAT"],
+    "TERBINAFINA": ["LAMISIL"],
+    "GRISEOFULVINA": ["FULVICIN"],
+    "AMFOTERICINA": ["AMBISOME", "ABELCET"],
+    "PENTAMIDINA": ["PENTAM", "NEBUPENT"],
+    "ATOVaquona": ["MEPRON"],
+    "AZITROMICINA": ["ZITROMAX", "AZITHROMYCIN"],
+    "CLARITROMICINA": ["BIAXIN", "KLARICID"],
+    "ERITROMICINA": ["ILOSONE", "ERYTHROCIN"],
+    "ROXITROMICINA": ["RULID", "XITOCIN"],
+    "ESPIRAMICINA": ["ROVAMYCINE"],
+    "JOSAMICINA": ["JOSACINE", "JOSALID"],
+    "MIDEACAMICINA": ["MOCAMYCIN"],
+    "CLINDAMICINA": ["DALACIN", "CLEOCIN"],
+    "LINCOMICINA": ["LINCOCIN"],
+    "PIRMECILINAM": ["SELEXID", "MECILINAM"],
+    "FOSFOMICINA": ["MONUROL", "FOSFOMYCIN"],
+    "FUSIDICO": ["FUCIDIN", "FUSIDIC ACID"],
+    "MUPROCINA": ["BACTROBAN"],
+    "RETAPAMULINA": ["ALTABAX"],
+    "BACITRACINA": ["BACIGUENT"],
+    "NEOMICINA": ["MYCIFRADIN", "FRAMYCETIN"],
+    "GENTAMICINA": ["GARAMYCIN", "CIDOMYCIN"],
+    "TOBRAMICINA": ["TOBREX", "TOBI"],
+    "AMICACINA": ["AMIKIN", "AMIKACIN"],
+    "NETILMICINA": ["NETROMICIN"],
+    "ESTREPTOMICINA": ["STREPTOMYCIN"],
+    "KANAMICINA": ["KANTREX"],
+    "CAPREOMICINA": ["CAPASTAT"],
+    "VIOMICINA": ["VIOCIN"],
+    "PAROMOMICINA": ["HUMATIN", "AMINOSIDIN"],
+    "SPECTINOMICINA": ["TROBICIN"],
+    "POLIMIXINA": ["POLYMYXIN", "AEROSPORIN"],
+    "COLISTINA": ["COLISTIMETHATE", "PROMIX"],
+    "VANCOMICINA": ["VANCOCIN", "VANCOLED"],
+    "TEICOPLANINA": ["TARGOCID"],
+    "TELAVANCINA": ["VIBATIV"],
+    "DALBAVANCINA": ["DALVANCE"],
+    "ORITAVANCINA": ["ORBACTIV"],
+    "DAPTOMICINA": ["CUBICIN"],
+    "TIGECICLINA": ["TYGACIL"],
+    "ERAVACICLINA": ["XERAVA"],
+    "OMADACICLINA": ["NUZYRA"],
+    "TETRACICLINA": ["ACHROMYCIN", "SUMYCIN"],
+    "DOXICICLINA": ["VIBRAMYCIN", "DORYX"],
+    "MINOCICLINA": ["MINOCIN", "DYNACIN"],
+    "CLORTETRACICLINA": ["AUREOMYCIN"],
+    "OMETRACICLINA": ["TERRAMYCIN"],
+    "METRONIDAZOL": ["FLAGYL"],
+    "TINIDAZOL": ["TINDAMAX", "FASIGYN"],
+    "ORNIDAZOL": ["TIBERAL", "ORNID"],
+    "SECNIDAZOL": ["SECNID", "FLADEN"],
+    "NIMORAZOL": ["NAXOGIN", "ACTIV"],
+    "ALBENDAZOL": ["ZENTEL", "ALBENZA"],
+    "MEBENDAZOL": ["VERMOX", "OVEX"],
+    "TIABENDAZOL": ["MINTEZOL"],
+    "PIRANTEL": ["COMBANTRIN", "ANTIMINTH"],
+    "IVERMECTINA": ["STROMECTOL", "MECTIZAN"],
+    "DIETILCARBAMAZINA": ["HETRAZAN", "BANOCIDE"],
+    "PRAZIQUANTEL": ["BILTRICIDE", "DISTOCIDE"],
+    "OXAMNIQUINA": ["MANSIL", "VANSIL"],
+    "NICLOSAMIDA": ["YOMESAN", "TREDEMINE"],
+    "NITAZOXANIDA": ["ALINIA", "CRYPTEX"],
+    "QUININO": ["QUALAQUIN", "QUINAMM"],
+    "CLOROQUINA": ["ARALEN", "NIVAQUINE"],
+    "HIDROXICLOROQUINA": ["PLAQUENIL"],
+    "PRIMAQUINA": ["PRIMAQUINE"],
+    "MEFLOQUINA": ["LARIAM"],
+    "ATOVAQUONA": ["MEPRON", "WELLVONE"],
+    "PROGUANILA": ["PALUDRINE"],
+    "PIRIMETAMINA": ["DARAPRIM"],
+    "SULFADOXINA": ["FANSIDAR", "MALARIVON"],
+    "ARTEMETER": ["PALuther", "COARTEM"],
+    "ARTESUNATO": ["FALCIGO", "AMALATE"],
+    "DIIDROARTEMISININA": ["COTEXIN", "ALAXIN"],
+    "ARTEMOTIL": ["ARCOXIN", "PALMOXINE"],
+    "ARTEMISININA": ["QINGHAOSU", "ARTEANNuin"],
+    "LUMEFANTRINA": ["BENFLUMETOL", "COARTEM"],
+    "PIPERAQUINA": ["ARTEKIN", "DUOCOTEXIN"],
+    "AMODIAQUINA": ["CAMOQUIN", "FLAVOQUINE"],
+    "TAFENOQUINA": ["KRINTAFEL", "ETAFENONE"],
+    "GANAPLACIDE": ["GANAPAR", "HEBRON"],
+    "METILENO": ["AZUL DE METILENO", "UROLENE BLUE"],
+    "NITROFURANTOINA": ["MACRODANTIN", "FURADANTIN"],
+    "FOSFOMICINA": ["MONUROL", "FOSMICIN"],
+    "FURAZOLIDONA": ["FUROXONE", "DIAFURON"],
+    "NALIDIXICO": ["NEGGRAM", "WINTOMYLON"],
+    "ACIDO PIPEMIDICO": ["PIPRAM", "SELEXID"],
+    "CIPROFLOXACINO": ["CIPRO", "CILOXAN"],
+    "NORFLOXACINO": ["NOROXIN", "CHIBROXIN"],
+    "OFLOXACINO": ["FLOXIN", "OCUFLOX"],
+    "LEVOFLOXACINO": ["LEVAQUIN", "TAVANIC"],
+    "MOXIFLOXACINO": ["AVELOX", "VIGAMOX"],
+    "GATIFLOXACINO": ["TEQUIN", "ZYMAR"],
+    "GEMIFLOXACINO": ["FACTIVE", "GAMIMYCIN"],
+    "ENOXACINO": ["PENETREX", "COMPRECIN"],
+    "LOMEFLOXACINO": ["MAXAQUIN", "CHIBRO-LOM"],
+    "TROVAFLOXACINO": ["TROVAN", "TROVAN-TE"],
+    "ALATROFLOXACINO": ["TROVAN-XR"],
+    "TOSUFLOXACINO": ["OZEX", "TOSUXACIN"],
+    "SPARFLOXACINO": ["ZAGAM", "TOROSPAR"],
+    "TEMafloxacino": ["TEMAC", "SUPRACIN"],
+    "FLEROXACINO": ["MEGALOCIN", "ROXAMONE"],
+    "RUFLOXACINO": ["UROFLOX", "MONOS", "QARI"],
+    "OXOLINICO": ["OXOLINIC ACID", "UTIBID"],
+    "CINOXACINO": ["CINOBAC", "CINOXIB"],
+    "ROSOXACINO": ["ERADACIL", "WINOXIB"],
+    "CLINafloxacino": ["CLINAFLOX", "CLINACIN"],
+    "DANAFLOXACINO": ["ADVOCIN", "DANOCIN"],
+    "DIFLOXACINO": ["DICURAL", "A-56619"],
+    "IBAFLOXACINO": ["IBAFLOX", "R-12511"],
+    "MARBOfloxacino": ["ZENEQUIN", "VICTAS"],
+    "ORBIFLOXACINO": ["ORBAX", "CEFAZIL"],
+    "PRADOfloxacino": ["PRADOFLOX", "VERAFLOX"],
+    "SARAFLOXACINO": ["SARAFLOX", "FLOXASUL"],
+    "DAPSONA": ["AVLOSULFON", "DISULONE"],
+    "SULFAMETOXAZOL": ["GANTANOL", "SULFAMIN"],
+    "SULFADIAZINA": ["SILVADENE", "FLAMAZINE"],
+    "SULFADIAZINA PRATA": ["SSD", "SILVADENE"],
+    "SULFASSALAZINA": ["AZULFIDINE", "SALAZOPYRIN"],
+    "SULFADOXINA": ["FANSIDAR", "MALARIVON"],
+    "SULFAFURAZOL": ["SULFISUXOLE", "ENTUSS"],
+    "SULFAGUANIDINA": ["SUFLGUANIDINE", "SHIGATOX"],
+    "SULFAMERAZINA": ["SULFAMERAZIN", "METHYL"],
+    "SULFAMETIZOL": ["SULFAMETHIZOLE", "THIOSULFIL"],
+    "SULFAMETOXIPIRIDAZINA": ["LIDEPRIN", "DAZOLIN"],
+    "SULFAMETOXIDIAZINA": ["SULFAMETHOXIDIAZINE", "ELCOSINE"],
+    "SULFAPIRIDINA": ["SULFAPYRIDINE", "DAGENAN"],
+    "SULFAQUINOXALINA": ["SULFAQUINOXALINE", "SULQIN"],
+    "SULFATIAZOL": ["SULFATHIAZOLE", "CIBAZOL"],
+    "SULFATIODIAZOL": ["SULFATHIODIAZOLE", "THIODIAZOL"],
+    "SULFISOXAZOL": ["GANTRISIN", "SULFURIN"],
+    "SULFACLORPIRIDAZINA": ["SONILYT", "AQUA-SULF"],
+    "SULFADIMETOXINA": ["MADRIBON", "SULFADIMETHOXINE"],
+    "SULFADIMIDINA": ["SULFADIMETHYLPYRIMIDINE", "SULFISOMIDINE"],
+    "SULFAFENAZOL": ["ORISUL", "SULFAPHENAZOLE"],
+    "SULFAGUANOL": ["SULFAGUANOL", "SULFAGUANIDINE"],
+    "SULFALENO": ["SULFALENE", "KELFIZINA"],
+    "SULFAMETOXAZOL": ["SINOMIN", "GANTANOL"],
+    "SULFAMONOMETOXINA": ["SULFAMONOMETHOXINE", "SULFAMIN"],
+    "SULFAPERINA": ["SULFAPERINE", "METYLAL"],
+    "SULFARIT": ["SULFARITH", "SULFARIDINE"],
+    "SULFASOMIZOL": ["SULFASOMIZOLE", "SULFASOMIDINE"],
+    "SULFATERC": ["SULFATERC", "SULFATHIOUREA"],
+    "SULFATIOMIDINA": ["SULFATHIOMIDINE", "SULFATHIAMIDINE"],
+    "SULFATO DE POLIMIXINA B": ["AEROSPORIN", "POLYMYXIN B SULFATE"],
+    "POLIMIXINA B": ["AEROSPORIN", "POLYMYXIN B"],
+    "COLISTIMETATO": ["COLISTIMETHATE", "PROMIX"],
+    "COLISTINA": ["COLISTIN", "COLIMYCIN"],
+}
 
 # ============================================================================
 # FUNÇÕES UTILITÁRIAS
@@ -54,299 +322,500 @@ MAX_WORKERS = 10
 def log(msg, nivel="INFO"):
     """Log com timestamp"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{timestamp}] [{nivel}] {msg}")
+    linha = f"[{timestamp}] [{nivel}] {msg}"
+    print(linha)
+    with open(ARQ_LOG, 'a', encoding='utf-8') as f:
+        f.write(linha + '\n')
 
 def normalizar_texto(texto):
-    """Normaliza texto para comparação"""
-    if not isinstance(texto, str):
+    """Normaliza texto: remove acentos, maiúsculas, espaços extras"""
+    if not texto:
         return ""
-    # Remove acentos e converte para maiúsculo
-    texto = texto.upper()
-    texto = re.sub(r'[ÁÀÂÃÄ]', 'A', texto)
-    texto = re.sub(r'[ÉÈÊË]', 'E', texto)
-    texto = re.sub(r'[ÍÌÎÏ]', 'I', texto)
-    texto = re.sub(r'[ÓÒÔÕÖ]', 'O', texto)
-    texto = re.sub(r'[ÚÙÛÜ]', 'U', texto)
-    texto = re.sub(r'[Ç]', 'C', texto)
-    # Remove caracteres especiais, mantém apenas letras, números e espaços
-    texto = re.sub(r'[^A-Z0-9\s]', ' ', texto)
-    # Remove espaços múltiplos
-    texto = re.sub(r'\s+', ' ', texto).strip()
+
+    texto = str(texto).upper().strip()
+
+    # Remove acentos
+    texto = ''.join(c for c in unicodedata.normalize('NFD', texto) 
+                   if unicodedata.category(c) != 'Mn')
+
+    # Normaliza espaços
+    texto = re.sub(r'\s+', ' ', texto)
+
     return texto
 
-def extrair_tokens_rigorosos(texto):
-    """
-    Extrai tokens de forma rigorosa, excluindo termos genéricos e curtos.
-    Retorna apenas tokens significativos (nomes de medicamentos/produtos).
-    """
-    if not texto:
-        return set()
-    
-    texto_normalizado = normalizar_texto(texto)
-    tokens = set()
-    
-    # Divide em tokens
-    palavras = texto_normalizado.split()
-    
-    # Adiciona tokens individuais (se não forem genéricos e tiverem tamanho mínimo)
-    for palavra in palavras:
-        if len(palavra) >= PESO_MINIMO_CARACTERES and palavra not in TERMOS_GENERICOS:
-            tokens.add(palavra)
-    
-    # Adiciona bigramas (2 palavras consecutivas) para maior especificidade
-    for i in range(len(palavras) - 1):
-        bigrama = f"{palavras[i]} {palavras[i+1]}"
-        # Só adiciona se nenhuma das palavras for genérica
-        if palavras[i] not in TERMOS_GENERICOS and palavras[i+1] not in TERMOS_GENERICOS:
-            if len(bigrama) >= PESO_MINIMO_CARACTERES * 2:
-                tokens.add(bigrama)
-    
-    # Adiciona trigramas (3 palavras) para máxima especificidade
-    for i in range(len(palavras) - 2):
-        trigrama = f"{palavras[i]} {palavras[i+1]} {palavras[i+2]}"
-        if (palavras[i] not in TERMOS_GENERICOS and 
-            palavras[i+1] not in TERMOS_GENERICOS and 
-            palavras[i+2] not in TERMOS_GENERICOS):
-            if len(trigrama) >= PESO_MINIMO_CARACTERES * 3:
-                tokens.add(trigrama)
-    
-    return tokens
-
-def calcular_compatibilidade_percentual(tokens_licitacao, tokens_portfolio):
-    """
-    Calcula compatibilidade como percentual de itens da licitação presentes no portfólio.
-    
-    Fórmula: (tokens_licitacao ∩ tokens_portfolio) / tokens_licitacao × 100
-    
-    Retorna: (percentual, matches_encontrados)
-    """
-    if not tokens_licitacao:
-        return 0.0, []
-    
-    # Interseção: tokens que existem em ambos
-    matches = tokens_licitacao.intersection(tokens_portfolio)
-    
-    # Cálculo de percentual
-    percentual = (len(matches) / len(tokens_licitacao)) * 100
-    
-    # Ordena matches por tamanho (mais específicos primeiro)
-    matches_ordenados = sorted(matches, key=lambda x: len(x), reverse=True)
-    
-    return percentual, matches_ordenados
-
-def classificar_compatibilidade(percentual):
-    """Classifica o nível de compatibilidade baseado nos NOVOS thresholds"""
-    if percentual >= THRESHOLD_ALTA:
-        return "ALTA"           # ≥60% = Verde
-    elif percentual >= THRESHOLD_MEDIA:
-        return "MEDIA"          # 20-59% = Amarelo
-    elif percentual >= THRESHOLD_BAIXA:
-        return "BAIXA"          # 5-19% = Vermelho
-    else:
-        return "INCOMPATIVEL"   # <5% = Transparente
+def similaridade_texto(s1, s2):
+    """Calcula similaridade usando SequenceMatcher"""
+    if not s1 or not s2:
+        return 0.0
+    return SequenceMatcher(None, s1.upper(), s2.upper()).ratio()
 
 # ============================================================================
-# CARREGAMENTO DE DADOS
+# CLASSE PORTFOLIO MATCHER
 # ============================================================================
 
-def carregar_portfolio(csv_path="Exportar Dados.csv"):
-    """Carrega portfólio de produtos do CSV usando biblioteca padrão csv"""
+class PortfolioMatcher:
+    """
+    Sistema de matching farmacêutico com:
+    - Reconhecimento de sinônimos químicos
+    - Matching de combinações (Opção B: parcial aceitável)
+    - Threshold de 50%
+    """
+
+    def __init__(self, df_portfolio):
+        self.df = df_portfolio.copy()
+        self._preprocessar_portfolio()
+
+    def _preprocessar_portfolio(self):
+        """Pré-processa o portfólio para matching eficiente"""
+        # Normalizar fármacos
+        self.df['FARMACO_NORM'] = self.df['Fármaco'].apply(self._normalizar_farmaco)
+
+        # Identificar combinações
+        self.df['IS_COMBO'] = self.df['Fármaco'].apply(self._identificar_combinacao)
+        self.df['COMPONENTES'] = self.df['Fármaco'].apply(self._extrair_componentes)
+
+        # Extrair concentrações
+        self.df['DOSAGEM_NORM'] = self.df.apply(
+            lambda row: self._extrair_concentracao(row['Descrição'], row['Dosagem']), 
+            axis=1
+        )
+
+    def _normalizar_farmaco(self, farmaco):
+        """Normaliza nome do fármaco"""
+        if pd.isna(farmaco):
+            return ""
+
+        farmaco = str(farmaco).upper().strip()
+
+        # Abreviações comuns
+        subs = {
+            'CLAV.': 'CLAVULANATO', 'CLAV ': 'CLAVULANATO ',
+            'FOSF.': 'FOSFATO', 'FOSF ': 'FOSFATO ',
+            'SOD.': 'SODICO', 'SOD ': 'SODICO ',
+            'POT.': 'POTASSIO', 'POT ': 'POTASSIO ',
+            'CAP.': 'CAPSULA', 'CAP ': 'CAPSULA ',
+            'CPR.': 'COMPRIMIDO', 'CPR ': 'COMPRIMIDO ',
+            'COMP.': 'COMPRIMIDO', 'COMP ': 'COMPRIMIDO ',
+            'AMP.': 'AMPOLA', 'AMP ': 'AMPOLA ',
+            'FR.': 'FRASCO', 'FR ': 'FRASCO ',
+            'SOL.': 'SOLUCAO', 'SOL ': 'SOLUCAO ',
+            'CREM.': 'CREME', 'CREM ': 'CREME ',
+            'POM.': 'POMADA', 'POM ': 'POMADA ',
+            'GTS.': 'GOTAS', 'GTS ': 'GOTAS ',
+            'XPE.': 'XAROPE', 'XPE ': 'XAROPE ',
+            'SUSP.': 'SUSPENSAO', 'SUSP ': 'SUSPENSAO ',
+            'INJ.': 'INJETAVEL', 'INJ ': 'INJETAVEL ',
+            'COMB.': 'COMBINACAO', 'COMB ': 'COMBINACAO ',
+        }
+
+        for antigo, novo in subs.items():
+            farmaco = farmaco.replace(antigo, novo)
+
+        return farmaco
+
+    def _identificar_combinacao(self, farmaco):
+        """Identifica se é uma combinação (tem +)"""
+        if pd.isna(farmaco):
+            return False
+        return '+' in str(farmaco) or ' E ' in str(farmaco).upper()
+
+    def _extrair_componentes(self, farmaco):
+        """Extrai lista de componentes do fármaco"""
+        if pd.isna(farmaco):
+            return []
+
+        farmaco_str = str(farmaco).upper()
+        separadores = ['+', ' E ', '/']
+
+        for sep in separadores:
+            if sep in farmaco_str:
+                comps = [c.strip() for c in farmaco_str.split(sep)]
+                return [c for c in comps if len(c) > 2]
+
+        return [farmaco_str] if len(farmaco_str) > 2 else []
+
+    def _extrair_concentracao(self, descricao, dosagem):
+        """Extrai concentração da descrição ou campo dosagem"""
+        if pd.notna(dosagem) and str(dosagem).strip():
+            return normalizar_texto(dosagem)
+
+        if pd.isna(descricao):
+            return ""
+
+        # Padrões de concentração
+        padroes = [
+            r'(\d+[,.]?\d*)\s*(MG|ML|G|UI|MCG|MG/ML|UNIDADES|%)',
+            r'(\d+[,.]?\d*)\s*(?:MG|ML|G)\b'
+        ]
+
+        for padrao in padroes:
+            match = re.search(padrao, str(descricao).upper())
+            if match:
+                return normalizar_texto(match.group(0))
+
+        return ""
+
+    def _match_componente(self, comp_edital, comp_portfolio):
+        """Match de componente com sinônimos"""
+        comp_edit = normalizar_texto(comp_edital)
+        comp_port = normalizar_texto(comp_portfolio)
+
+        if not comp_edit or not comp_port:
+            return 0.0
+
+        # Match exato
+        if comp_edit == comp_port:
+            return 1.0
+
+        # Match via sinônimos
+        for principal, sinonimos in SINONIMOS_FARMACOS.items():
+            todos = [principal] + sinonimos
+            if any(comp_edit == s for s in todos) and any(comp_port == s for s in todos):
+                return 1.0
+
+        # Similaridade parcial
+        sim = similaridade_texto(comp_edit, comp_port)
+
+        # Se um contém o outro
+        if comp_edit in comp_port or comp_port in comp_edit:
+            sim = max(sim, 0.7)
+
+        return sim
+
+    def _extrair_componentes_edital(self, descricao):
+        """Extrai componentes de descrição do edital"""
+        desc = normalizar_texto(descricao)
+        if not desc:
+            return []
+
+        # Limpa termos técnicos comuns
+        desc = re.sub(r'(CONCENTRACAO|DOSAGEM|FORMA FARMACEUTICA|VIA|APRESENTACAO|EMBALAGEM|CONTEM|COM)\s*', ' ', desc)
+
+        componentes = []
+
+        # Separar por +
+        if '+' in desc:
+            partes = desc.split('+')
+        else:
+            partes = [desc]
+
+        for parte in partes:
+            # Remove concentrações e números
+            parte = re.sub(r'\d+[,.]?\d*\s*(MG|ML|G|UI|MCG|MG/ML|%|UN).*', '', parte)
+            parte = parte.strip()
+
+            if len(parte) > 3:
+                componentes.append(parte)
+
+        return componentes
+
+    def match(self, descricao_edital, concentracao_edital=None, forma_edital=None):
+        """
+        Faz matching de um item do edital contra o portfólio
+
+        Returns:
+            Lista de dicts com matches ordenados por score (decrescente)
+        """
+        resultados = []
+
+        comps_edital = self._extrair_componentes_edital(descricao_edital)
+        num_comps_edital = len(comps_edital)
+
+        for idx, row in self.df.iterrows():
+            score = 0.0
+            detalhes = {}
+
+            comps_portfolio = row['COMPONENTES']
+            if not comps_portfolio:
+                continue
+
+            num_comps_portfolio = len(comps_portfolio)
+
+            # 1. MATCH DE COMPONENTES (60% do score)
+            if comps_edital and comps_portfolio:
+                matches = []
+                for comp_port in comps_portfolio:
+                    melhor_match = max(
+                        self._match_componente(ce, comp_port) 
+                        for ce in comps_edital
+                    ) if comps_edital else 0.0
+                    matches.append(melhor_match)
+
+                score_comp = sum(matches) / len(matches)
+                cobertura = sum(1 for m in matches if m > 0.7) / len(matches)
+
+                # Bônus para combinações completas
+                if num_comps_edital >= 2 and num_comps_portfolio >= 2 and cobertura == 1.0:
+                    score_comp = min(1.0, score_comp * 1.15)  # +15%
+                    detalhes['tipo'] = 'COMBINACAO_COMPLETA'
+                elif num_comps_portfolio == 1:
+                    detalhes['tipo'] = 'SIMPLES'
+                else:
+                    detalhes['tipo'] = 'PARCIAL'
+
+                score += (score_comp * 0.7 + cobertura * 0.3) * 0.60
+                detalhes['componentes_score'] = f"{score_comp:.2f}"
+                detalhes['cobertura'] = f"{cobertura:.0%}"
+
+            # 2. MATCH DE CONCENTRAÇÃO (25% do score)
+            if concentracao_edital and row['DOSAGEM_NORM']:
+                conc_edit = normalizar_texto(concentracao_edital)
+                conc_port = row['DOSAGEM_NORM']
+
+                # Remove espaços para comparar
+                conc_edit_clean = re.sub(r'\s+', '', conc_edit)
+                conc_port_clean = re.sub(r'\s+', '', conc_port)
+
+                if conc_edit_clean == conc_port_clean:
+                    sim_conc = 1.0
+                else:
+                    sim_conc = similaridade_texto(conc_edit, conc_port)
+                    # Verificar se uma contém a outra
+                    if conc_edit_clean in conc_port_clean or conc_port_clean in conc_edit_clean:
+                        sim_conc = max(sim_conc, 0.6)
+
+                score += sim_conc * 0.25
+                detalhes['concentracao_score'] = f"{sim_conc:.2f}"
+            else:
+                score += 0.15  # Neutro
+                detalhes['concentracao_score'] = "N/A"
+
+            # 3. MATCH DE FORMA FARMACÊUTICA (15% do score)
+            if forma_edital and pd.notna(row['Forma Farmacêutica']):
+                forma_edit = normalizar_texto(forma_edital)
+                forma_port = normalizar_texto(row['Forma Farmacêutica'])
+
+                sim_forma = similaridade_texto(forma_edit, forma_port)
+
+                if forma_edit in forma_port or forma_port in forma_edit:
+                    sim_forma = max(sim_forma, 0.8)
+
+                score += sim_forma * 0.15
+                detalhes['forma_score'] = f"{sim_forma:.2f}"
+            else:
+                score += 0.075  # Neutro
+                detalhes['forma_score'] = "N/A"
+
+            # Threshold de 50%
+            if score >= 0.50:
+                resultados.append({
+                    'idx': idx,
+                    'score': score,
+                    'item_portfolio': row,
+                    'detalhes': detalhes
+                })
+
+        # Ordenar por score decrescente
+        resultados.sort(key=lambda x: x['score'], reverse=True)
+        return resultados
+
+# ============================================================================
+# FUNÇÕES DE CARREGAMENTO
+# ============================================================================
+
+def carregar_portfolio(csv_path=ARQ_PORTFOLIO):
+    """Carrega portfólio do CSV"""
     log(f"Carregando portfólio de {csv_path}...")
-    
+
     if not os.path.exists(csv_path):
         log(f"ERRO: Arquivo {csv_path} não encontrado!", "ERRO")
-        return None, None
-    
+        return None
+
     try:
-        # Detecta encoding e lê CSV
-        encodings = ['utf-8', 'latin1', 'iso-8859-1', 'cp1252']
-        rows = []
-        headers = []
-        
-        for encoding in encodings:
+        # Detecta encoding
+        encodings = ['utf-8-sig', 'latin1', 'iso-8859-1', 'cp1252']
+        df = None
+
+        for enc in encodings:
             try:
-                with open(csv_path, 'r', encoding=encoding) as f:
-                    # Detecta delimitador
-                    sample = f.read(2048)
-                    f.seek(0)
-                    
-                    delimiter = ';' if sample.count(';') > sample.count(',') else ','
-                    
-                    reader = csv.reader(f, delimiter=delimiter)
-                    headers = next(reader)
-                    rows = list(reader)
-                    break
-            except Exception:
-                continue
-        
-        if not rows:
-            log("ERRO: Não foi possível ler o CSV", "ERRO")
-            return None, None
-        
-        # Detecta coluna de descrição
-        col_descricao = None
-        for i, col in enumerate(headers):
-            col_upper = col.upper()
-            if any(term in col_upper for term in ['PRODUTO', 'DESCRICAO', 'DESCRIÇÃO', 'MEDICAMENTO', 'ITEM', 'NOME']):
-                col_descricao = i
+                df = pd.read_csv(csv_path, encoding=enc)
                 break
-        
-        if col_descricao is None:
-            col_descricao = 0
-            log(f"Coluna de descrição não identificada, usando primeira coluna: {headers[0]}", "AVISO")
-        
-        # Extrai tokens de cada produto do portfólio
-        tokens_portfolio = set()
-        produtos_processados = []
-        
-        for row in rows:
-            if len(row) > col_descricao:
-                descricao = row[col_descricao] if row[col_descricao] else ""
-                if descricao and descricao.lower() != 'nan':
-                    tokens_produto = extrair_tokens_rigorosos(descricao)
-                    tokens_portfolio.update(tokens_produto)
-                    produtos_processados.append({
-                        'descricao_original': descricao,
-                        'tokens': tokens_produto
-                    })
-        
-        log(f"✅ Portfólio carregado: {len(rows)} produtos")
-        log(f"📊 Tokens únicos no portfólio: {len(tokens_portfolio)}")
-        
-        # Mostra alguns exemplos de tokens extraídos
-        exemplos = sorted(list(tokens_portfolio), key=len, reverse=True)[:10]
-        log(f"🔍 Exemplos de tokens: {exemplos}")
-        
-        return tokens_portfolio, produtos_processados
-        
+            except:
+                continue
+
+        if df is None:
+            log("ERRO: Não foi possível ler o CSV", "ERRO")
+            return None
+
+        log(f"✅ Portfólio carregado: {len(df)} itens")
+
+        return df
+
     except Exception as e:
         log(f"ERRO ao carregar portfólio: {e}", "ERRO")
-        return None, None
+        return None
 
-def carregar_licitacoes(json_path="pregacoes_pharma_limpos.json.gz"):
-    """Carrega licitações do arquivo JSON comprimido MANTENDO ORDENAÇÃO ORIGINAL"""
+def carregar_licitacoes(json_path=ARQ_LICITACOES):
+    """Carrega licitações do JSON comprimido (mantém ordem original)"""
     log(f"Carregando licitações de {json_path}...")
-    
+
     if not os.path.exists(json_path):
         log(f"ERRO: Arquivo {json_path} não encontrado!", "ERRO")
         return None
-    
+
     try:
         with gzip.open(json_path, 'rt', encoding='utf-8') as f:
             dados = json.load(f)
-        
-        # Converte para lista se for dicionário MANTENDO A ORDEM ORIGINAL
-        licitacoes = []
+
+        # Garante que é lista
         if isinstance(dados, dict):
+            licitacoes = []
             for orgao, editais in dados.items():
                 for edital, info in editais.items():
                     info['orgao'] = orgao
                     info['edital'] = edital
-                    # Preserva índice original para manter ordenação
                     info['_index_original'] = len(licitacoes)
                     licitacoes.append(info)
         else:
             for idx, item in enumerate(dados):
                 item['_index_original'] = idx
-                licitacoes.append(item)
-        
-        log(f"✅ {len(licitacoes)} licitações carregadas (ordem original preservada)")
+            licitacoes = dados
+
+        log(f"✅ {len(licitacoes)} licitações carregadas")
         return licitacoes
-        
+
     except Exception as e:
         log(f"ERRO ao carregar licitações: {e}", "ERRO")
         return None
 
 # ============================================================================
-# AVALIAÇÃO DE LICITAÇÕES
+# FUNÇÃO DE AVALIAÇÃO
 # ============================================================================
 
-def avaliar_licitacao(licitacao, tokens_portfolio):
-    """Avalia uma única licitação contra o portfólio"""
+def avaliar_licitacao(licitacao, matcher):
+    """Avalia uma licitação contra o portfólio"""
     try:
-        # Extrai texto do objeto da licitação
-        objeto = str(licitacao.get('objeto', ''))
-        
-        # Extrai itens se existirem
-        itens_texto = []
+        # Extrai dados
+        objeto = str(licitacao.get('obj', '') or licitacao.get('objeto', ''))
+        edital_id = licitacao.get('edital', licitacao.get('id', 'unknown'))
+        orgao = licitacao.get('orgao', licitacao.get('org', 'N/A'))
+
+        # Extrai itens
         itens = licitacao.get('itens', [])
-        if isinstance(itens, list):
-            for item in itens:
-                if isinstance(item, dict):
-                    desc_item = item.get('descricao', '') or item.get('nome', '') or str(item)
-                    itens_texto.append(desc_item)
-                else:
-                    itens_texto.append(str(item))
-        
-        # Combina objeto + itens
-        texto_completo = objeto + " " + " ".join(itens_texto)
-        
-        # Extrai tokens da licitação
-        tokens_licitacao = extrair_tokens_rigorosos(texto_completo)
-        
-        if not tokens_licitacao:
+        if not isinstance(itens, list):
+            itens = []
+
+        # Se não tiver itens, usa objeto como fallback
+        if not itens:
+            itens = [{'descricao': objeto, 'concentracao': None, 'forma': None}]
+
+        # Avalia cada item
+        melhores_matches = []
+
+        for item in itens:
+            if isinstance(item, dict):
+                desc = item.get('d', '') or item.get('descricao', '')
+                conc = item.get('concentracao')
+                forma = item.get('forma') or item.get('forma_farmaceutica')
+            else:
+                desc = str(item)
+                conc = None
+                forma = None
+
+            if not desc:
+                continue
+
+            matches = matcher.match(desc, conc, forma)
+
+            if matches:
+                melhor = matches[0]
+                melhores_matches.append({
+                    'item_descricao': desc,
+                    'score': melhor['score'],
+                    'portfolio_descricao': melhor['item_portfolio']['Descrição'],
+                    'tipo': melhor['detalhes'].get('tipo', 'SIMPLES'),
+                    'detalhes': melhor['detalhes']
+                })
+
+        if not melhores_matches:
             return {
-                'id': licitacao.get('edital', 'unknown'),
+                'id': edital_id,
+                'orgao': orgao,
+                'objeto': objeto[:200],
                 'percentual': 0.0,
                 'confianca': 'INCOMPATIVEL',
                 'matches': [],
-                'total_tokens_licitacao': 0,
-                'total_matches': 0,
+                'total_itens': len(itens),
+                'itens_compativeis': 0,
                 '_index_original': licitacao.get('_index_original', 0)
             }
-        
-        # Calcula compatibilidade percentual
-        percentual, matches = calcular_compatibilidade_percentual(tokens_licitacao, tokens_portfolio)
-        
-        # Classifica com NOVOS thresholds
-        confianca = classificar_compatibilidade(percentual)
-        
+
+        # Calcula score agregado da licitação
+        scores = [m['score'] for m in melhores_matches]
+        score_medio = sum(scores) / len(scores)
+
+        # Bônus se mais da metade dos itens são compatíveis
+        taxa_compatibilidade = len(melhores_matches) / len(itens) if itens else 0
+        if taxa_compatibilidade >= 0.5:
+            score_final = min(1.0, score_medio * (1 + 0.1 * taxa_compatibilidade))
+        else:
+            score_final = score_medio
+
+        # Converte para percentual
+        percentual = round(score_final * 100, 2)
+
+        # Classifica
+        if score_final >= THRESHOLD_ALTO:
+            confianca = 'ALTA'
+        elif score_final >= THRESHOLD_MEDIO:
+            confianca = 'MEDIA'
+        elif score_final >= THRESHOLD_BAIXO:
+            confianca = 'BAIXA'
+        else:
+            confianca = 'INCOMPATIVEL'
+
+        # Prepara lista de matches para relatório
+        matches_str = []
+        for m in melhores_matches[:5]:  # Top 5
+            matches_str.append(f"{m['portfolio_descricao'][:30]}... ({m['score']:.0%})")
+
         return {
-            'id': licitacao.get('edital', licitacao.get('id', 'unknown')),
-            'orgao': licitacao.get('orgao', 'N/A'),
+            'id': edital_id,
+            'orgao': orgao,
             'objeto': objeto[:200],
-            'percentual': round(percentual, 2),
+            'percentual': percentual,
             'confianca': confianca,
-            'matches': matches[:10],
-            'total_tokens_licitacao': len(tokens_licitacao),
-            'total_matches': len(matches),
-            '_index_original': licitacao.get('_index_original', 0)  # PRESERVA ÍNDICE
+            'matches': matches_str,
+            'total_itens': len(itens),
+            'itens_compativeis': len(melhores_matches),
+            'score_detalhado': score_final,
+            '_index_original': licitacao.get('_index_original', 0)
         }
-        
+
     except Exception as e:
+        log(f"Erro ao avaliar licitação {licitacao.get('id', 'unknown')}: {e}", "ERRO")
         return {
-            'id': licitacao.get('edital', 'unknown'),
+            'id': licitacao.get('id', 'unknown'),
             'percentual': 0.0,
             'confianca': 'ERRO',
-            'matches': [],
             'erro': str(e),
             '_index_original': licitacao.get('_index_original', 0)
         }
 
-def avaliar_todas_licitacoes(licitacoes, tokens_portfolio):
-    """Avalia todas as licitações em paralelo MANTENDO ORDENAÇÃO"""
-    log(f"🔍 Avaliando compatibilidade de {len(licitacoes)} licitações...")
-    
+def avaliar_todas_licitacoes(licitacoes, matcher):
+    """Avalia todas as licitações em paralelo"""
+    log(f"🔍 Avaliando {len(licitacoes)} licitações...")
+
     resultados = []
     processadas = 0
-    
+
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = {
-            executor.submit(avaliar_licitacao, lic, tokens_portfolio): lic 
+            executor.submit(avaliar_licitacao, lic, matcher): lic 
             for lic in licitacoes
         }
-        
+
         for future in as_completed(futures):
             resultado = future.result()
             resultados.append(resultado)
             processadas += 1
-            
+
             if processadas % 100 == 0:
                 log(f"Processadas {processadas}/{len(licitacoes)}...")
-    
-    # ORDENA PELO ÍNDICE ORIGINAL (mantém ordem das licitações)
+
+    # Ordena pelo índice original (mantém ordem das licitações)
     resultados.sort(key=lambda x: x['_index_original'])
-    
+
     return resultados
 
 # ============================================================================
@@ -354,18 +823,22 @@ def avaliar_todas_licitacoes(licitacoes, tokens_portfolio):
 # ============================================================================
 
 def gerar_relatorio(resultados, origem="MANUAL"):
-    """Gera relatório CSV com resultados MANTENDO ORDEM ORIGINAL"""
-    arquivo_saida = "relatorio_compatibilidade.csv"
-    
-    # Prepara dados para CSV (mantém ordem original dos pregões)
-    with open(arquivo_saida, 'w', encoding='utf-8-sig', newline='') as f:
+    """Gera relatório CSV com resultados"""
+    log("="*60)
+    log(f"📊 GERANDO RELATÓRIO [{origem}]")
+    log("="*60)
+
+    # Prepara dados para CSV
+    with open(ARQ_SAIDA, 'w', encoding='utf-8-sig', newline='') as f:
         writer = csv.writer(f, delimiter=';', quoting=csv.QUOTE_MINIMAL)
-        
-        # Escreve header
-        writer.writerow(['id', 'orgao', 'objeto_licitacao', 'percentual', 'confianca', 
-                        'total_tokens', 'total_matches', 'principais_matches'])
-        
-        # Escreve dados
+
+        # Header
+        writer.writerow([
+            'id', 'orgao', 'objeto_licitacao', 'percentual', 'confianca',
+            'total_itens', 'itens_compativeis', 'principais_matches'
+        ])
+
+        # Dados
         for r in resultados:
             matches_str = '|'.join(r.get('matches', []))[:500]
             writer.writerow([
@@ -374,37 +847,26 @@ def gerar_relatorio(resultados, origem="MANUAL"):
                 r.get('objeto', ''),
                 r['percentual'],
                 r['confianca'],
-                r.get('total_tokens_licitacao', 0),
-                r.get('total_matches', 0),
+                r.get('total_itens', 0),
+                r.get('itens_compativeis', 0),
                 matches_str
             ])
-    
-    # Estatísticas com NOVOS thresholds
+
+    # Estatísticas
     total = len(resultados)
     alta = len([r for r in resultados if r['confianca'] == 'ALTA'])
     media = len([r for r in resultados if r['confianca'] == 'MEDIA'])
     baixa = len([r for r in resultados if r['confianca'] == 'BAIXA'])
     incomp = len([r for r in resultados if r['confianca'] == 'INCOMPATIVEL'])
-    
-    log("="*60)
-    log("📊 RELATÓRIO GERADO (ORDEM ORIGINAL MANTIDA)")
-    log("📊 NOVOS THRESHOLDS: ≥60% Verde | 20-59% Amarelo | 5-19% Vermelho | <5% Transparente")
-    log("="*60)
-    log(f"Arquivo: {arquivo_saida}")
-    log(f"Origem: {origem}")
-    log(f"Total: {total} | 🟢 ALTA (≥60%): {alta} | 🟡 MÉDIA (20-59%): {media} | 🔴 BAIXA (5-19%): {baixa} | ⚪ INCOMPATÍVEL (<5%): {incomp}")
-    
-    return arquivo_saida
 
-def salvar_cache(dados, origem):
-    """Salva cache para evitar reprocessamento"""
-    cache_data = {
-        'timestamp': datetime.now().isoformat(),
-        'origem': origem,
-        'total_licitacoes': len(dados)
-    }
-    with open('cache_avaliacao.json', 'w', encoding='utf-8') as f:
-        json.dump(cache_data, f)
+    log(f"📁 Arquivo: {ARQ_SAIDA}")
+    log(f"📊 Total: {total}")
+    log(f"   🟢 ALTA (≥{THRESHOLD_ALTO:.0%}): {alta}")
+    log(f"   🟡 MÉDIA ({THRESHOLD_MEDIO:.0%}-{THRESHOLD_ALTO:.0%}): {media}")
+    log(f"   🔴 BAIXA ({THRESHOLD_BAIXO:.0%}-{THRESHOLD_MEDIO:.0%}): {baixa}")
+    log(f"   ⚪ INCOMPATÍVEL (<{THRESHOLD_BAIXO:.0%}): {incomp}")
+
+    return ARQ_SAIDA
 
 # ============================================================================
 # FUNÇÃO PRINCIPAL
@@ -412,38 +874,45 @@ def salvar_cache(dados, origem):
 
 def main():
     """Função principal"""
-    # Detecta origem (SYNC ou AUDITOR)
+
+    # Detecta origem
     origem = "MANUAL"
     if len(sys.argv) > 1:
         origem = sys.argv[1].upper()
-    
-    log("="*60)
-    log(f"🔍 AVALIAÇÃO DE PORTFÓLIO v3.1 [SEM DEPENDÊNCIAS EXTERNAS] [{origem}]")
-    log(f"📊 REGRAS: ≥60% Verde | 20-59% Amarelo | 5-19% Vermelho | <5% Transparente")
-    log("="*60)
-    
+
+    # Limpa log anterior
+    if os.path.exists(ARQ_LOG):
+        os.remove(ARQ_LOG)
+
+    log("="*70)
+    log(f"🤖 MATCHER FARMACÊUTICO v1.0 [SINÔNIMOS + COMBINAÇÕES] [{origem}]")
+    log(f"📊 THRESHOLDS: ≥{THRESHOLD_ALTO:.0%} ALTO | ≥{THRESHOLD_MEDIO:.0%} MÉDIO | ≥{THRESHOLD_BAIXO:.0%} BAIXA")
+    log("="*70)
+
     # Carrega portfólio
-    tokens_portfolio, produtos = carregar_portfolio()
-    if not tokens_portfolio:
+    df_portfolio = carregar_portfolio()
+    if df_portfolio is None:
         log("❌ Falha ao carregar portfólio. Abortando.", "ERRO")
         return 1
-    
+
+    # Inicializa matcher
+    log("🧠 Inicializando motor de matching...")
+    matcher = PortfolioMatcher(df_portfolio)
+    log(f"✅ Matcher pronto: {len(matcher.df)} itens indexados")
+
     # Carrega licitações
     licitacoes = carregar_licitacoes()
-    if not licitacoes:
+    if licitacoes is None:
         log("❌ Falha ao carregar licitações. Abortando.", "ERRO")
         return 1
-    
+
     # Avalia
-    resultados = avaliar_todas_licitacoes(licitacoes, tokens_portfolio)
-    
+    resultados = avaliar_todas_licitacoes(licitacoes, matcher)
+
     # Gera relatório
     gerar_relatorio(resultados, origem)
-    
-    # Salva cache
-    salvar_cache(licitacoes, origem)
-    
-    log(f"✅ Avaliação [{origem}] concluída! Ordem original dos pregões mantida.")
+
+    log(f"✅ Matcher [{origem}] concluído!")
     return 0
 
 if __name__ == "__main__":
