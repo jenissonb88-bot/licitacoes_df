@@ -17,7 +17,7 @@
         .header-bold { font-weight: 700; }
         .badge-uf-header { background-color: #000; color: #fff; font-weight: 800; padding: 2px 8px; border-radius: 4px; margin-right: 5px; }
 
-        /* Badge de compatibilidade - NOVOS THRESHOLDS E CORES */
+        /* Badge de compatibilidade - ATUALIZADO PARA NOVOS THRESHOLDS */
         .compat-badge {
             display: inline-flex;
             align-items: center;
@@ -201,39 +201,47 @@ const GITHUB_FILE_PATH = 'links_manuais.txt';
 const modalObj = new bootstrap.Modal(document.getElementById('modalDetalhes'));
 const modalInclusaoObj = new bootstrap.Modal(document.getElementById('modalInclusao'));
 
-// Carrega dados de compatibilidade
+// ATUALIZADO: Carrega dados de compatibilidade do novo formato (percentual em vez de score)
 async function loadCompatData() {
     try {
         const response = await fetch('relatorio_compatibilidade.csv');
         if (!response.ok) return;
         
         const csvText = await response.text();
-        const lines = csvText.trim().split('\\n');
+        const lines = csvText.trim().split('\n');
         if (lines.length < 2) return;
         
-        const headers = lines[0].split(';').map(h => h.trim().replace(/^\\ufeff/, ''));
-        const colId = headers.indexOf('id');
-        const colPercentual = headers.indexOf('percentual');
-        const colConfianca = headers.indexOf('confianca');
-        const colMatches = headers.indexOf('principais_matches');
+        const headers = lines[0].split(';').map(h => h.trim().replace(/^\uFEFF/, ''));
+        
+        // Mapeia índices das colunas (novo formato usa 'percentual' em vez de 'score_final')
+        const colId = headers.findIndex(h => h.toLowerCase().includes('id'));
+        const colPercentual = headers.findIndex(h => h.toLowerCase().includes('percentual'));
+        const colConfianca = headers.findIndex(h => h.toLowerCase().includes('confianca'));
+        const colMatches = headers.findIndex(h => h.toLowerCase().includes('matches'));
         
         for (let i = 1; i < lines.length; i++) {
             const cols = lines[i].split(';');
             if (cols.length >= 4) {
-                const id = cols[colId] || cols[0];
-                const percentual = parseFloat(cols[colPercentual]) || 0;
-                const confianca = cols[colConfianca] || 'INCOMPATIVEL';
-                const matches = (cols[colMatches] || '').split('|').filter(m => m);
+                // Usa índices encontrados ou defaults
+                const id = colId >= 0 ? cols[colId] : cols[0];
+                const percentual = parseFloat(colPercentual >= 0 ? cols[colPercentual] : cols[3]) || 0;
+                const confianca = (colConfianca >= 0 ? cols[colConfianca] : cols[4]) || 'INCOMPATIVEL';
+                const matches = (colMatches >= 0 ? cols[colMatches] : '').split('|').filter(m => m);
                 
-                compatData[id] = { percentual, confianca, matches };
+                if (id) {
+                    compatData[id] = { percentual, confianca: confianca.toUpperCase(), matches };
+                }
             }
         }
+        
+        console.log(`✅ Compatibilidade carregada: ${Object.keys(compatData).length} registros`);
     } catch (e) {
         console.log('Compatibilidade não carregada:', e);
     }
 }
 
-// NOVOS THRESHOLDS: Retorna HTML do badge de compatibilidade
+// ATUALIZADO: Retorna HTML do badge com NOVOS THRESHOLDS
+// 🟢 Verde: ≥60% | 🟡 Amarelo: 20-59% | 🔴 Vermelho: 5-19% | ⚪ Transparente: <5%
 function getCompatBadgeHTML(licId) {
     const compat = compatData[licId];
     if (!compat || compat.percentual < 5) {
@@ -268,7 +276,7 @@ async function loadData() {
         
         allData = JSON.parse(text);
         
-        // MANTÉM ORDENAÇÃO ORIGINAL POR DATA (futuro -> passado)
+        // MANTÉM ORDENAÇÃO ORIGINAL POR DATA (futuro -> passado) - NÃO REORDENA POR PERCENTUAL
         allData.sort((a, b) => new Date(b.dt_enc) - new Date(a.dt_enc));
         
         filteredData = [...allData];
@@ -423,6 +431,7 @@ function abrirItens(id) {
     modalObj.show();
 }
 
+// ATUALIZADO: Renderiza linha de item com destaque para compatíveis
 function renderLinhaItem(it, licId) {
     const isMeEpp = [1, 2, 3].includes(parseInt(it.benef));
     const meEppHtml = isMeEpp ? '<span class="benef-sim">SIM</span>' : '<span class="benef-nao">NÃO</span>';
@@ -430,10 +439,10 @@ function renderLinhaItem(it, licId) {
     const valEstimado = it.v_est || 0;
     const valorTotal = valFinal > 0 ? (valFinal * it.q) : (valEstimado * it.q);
 
-    // Verifica se item é compatível
+    // Verifica se item é compatível (mesma lógica de antes)
     let compatClass = '';
     const compat = compatData[licId];
-    if (compat && compat.matches.length > 0) {
+    if (compat && compat.matches && compat.matches.length > 0) {
         const descNorm = normalizeText(it.d || '');
         const isCompat = compat.matches.some(match => {
             if (!match) return false;
@@ -452,8 +461,8 @@ function normalizeText(text) {
     if (!text) return '';
     return text.toUpperCase()
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^A-Z0-9\\s]/g, ' ')
-        .replace(/\\s+/g, ' ')
+        .replace(/[^A-Z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
         .trim();
 }
 
@@ -499,7 +508,7 @@ async function processarInclusaoManual() {
             currentContent = decodeURIComponent(escape(atob(dataGet.content))); 
         }
 
-        const newContent = currentContent + (currentContent.endsWith('\\n') || currentContent === "" ? "" : "\\n") + link + "\\n";
+        const newContent = currentContent + (currentContent.endsWith('\n') || currentContent === "" ? "" : "\n") + link + "\n";
         
         const resPut = await fetch(urlFile, {
             method: 'PUT',
