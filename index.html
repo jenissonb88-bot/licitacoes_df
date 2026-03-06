@@ -17,7 +17,6 @@
         .header-bold { font-weight: 700; }
         .badge-uf-header { background-color: #000; color: #fff; font-weight: 800; padding: 2px 8px; border-radius: 4px; margin-right: 5px; }
 
-        /* Badge de compatibilidade */
         .compat-badge {
             display: inline-flex;
             align-items: center;
@@ -29,32 +28,17 @@
             margin-right: 8px;
             border: 1px solid rgba(255,255,255,0.4);
         }
-        .compat-alta { background: #28a745; color: white; box-shadow: 0 2px 4px rgba(40, 167, 69, 0.4); }
-        .compat-media { background: #ffc107; color: #212529; box-shadow: 0 2px 4px rgba(255, 193, 7, 0.4); }
-        .compat-baixa { background: #dc3545; color: white; box-shadow: 0 2px 4px rgba(220, 53, 69, 0.4); }
-        .compat-na { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.3); }
+        .compat-alta { background: #28a745; color: white; }
+        .compat-media { background: #ffc107; color: #212529; }
+        .compat-baixa { background: #dc3545; color: white; }
+        .compat-na { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.6); }
 
-        /* DESTAQUE PARA ITENS COMPATÍVEIS - REFORÇADO */
         .item-compativel {
             background-color: #d4edda !important;
             font-weight: 700 !important;
             border-left: 4px solid #28a745 !important;
         }
-        .item-compativel td { 
-            color: #155724 !important; 
-            font-weight: 700 !important; 
-        }
-        .item-compativel .descricao-item {
-            color: #0b2e13 !important;
-            font-weight: 800 !important;
-        }
-        /* Indicador visual de compatibilidade na linha */
-        .item-compativel::before {
-            content: '✓';
-            color: #28a745;
-            font-weight: bold;
-            margin-right: 5px;
-        }
+        .item-compativel td { color: #155724 !important; font-weight: 700 !important; }
 
         .benef-sim { color: var(--red-df) !important; font-weight: bold !important; }
         .benef-nao { color: var(--green-df) !important; font-weight: bold !important; }
@@ -71,53 +55,16 @@
         .table-itens { font-size: 0.82em; }
         .val-estimado { background-color: #fffdf2; }
         .val-homologado { background-color: #f2f7ff; }
-        
         .header-fornecedor { background-color: #f8f9fa; color: var(--blue-df); font-weight: bold; }
-        
         .header-status-andamento { background-color: #fff9db; font-weight: bold; color: #856404; text-align: center; }
         .header-status-deserto { background-color: #f8d7da; font-weight: bold; color: #721c24; text-align: center; }
         .header-status-cancelado { background-color: #e2e3e5; font-weight: bold; color: #383d41; text-align: center; }
         
-        /* PAGINAÇÃO ATUALIZADA - COM INPUT DE NAVEGAÇÃO */
-        .pagination-container { 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            gap: 10px; 
-            margin-top: 20px; 
-            padding-bottom: 40px; 
-            flex-wrap: wrap;
-        }
-        .page-input {
-            width: 60px;
-            text-align: center;
-            padding: 4px 8px;
-            border: 1px solid #004a99;
-            border-radius: 4px;
-            font-size: 0.875rem;
-            font-weight: 600;
-        }
-        .page-input:focus {
-            outline: none;
-            box-shadow: 0 0 0 2px rgba(0, 74, 153, 0.25);
-        }
-        .btn-go {
-            background: #004a99;
-            color: white;
-            border: none;
-            padding: 4px 12px;
-            border-radius: 4px;
-            font-size: 0.875rem;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        .btn-go:hover {
-            background: #003366;
-        }
-        .page-info-text {
-            font-size: 0.875rem;
-            color: #666;
-        }
+        .pagination-container { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 20px; padding-bottom: 40px; flex-wrap: wrap; }
+        .page-input { width: 60px; text-align: center; padding: 4px 8px; border: 1px solid #004a99; border-radius: 4px; font-size: 0.875rem; font-weight: 600; }
+        .btn-go { background: #004a99; color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 0.875rem; font-weight: 600; cursor: pointer; }
+        .btn-go:hover { background: #003366; }
+        .page-info-text { font-size: 0.875rem; color: #666; }
         
         .btn-excluir { font-size: 0.7rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 2px 8px; border-radius: 4px; cursor: pointer; }
         .btn-excluir:hover { background: var(--red-df); border-color: var(--red-df); }
@@ -162,17 +109,21 @@
         </div>
     </div>
 
-    <div id="monitor-content"></div>
+    <div id="monitor-content">
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Carregando...</span>
+            </div>
+            <p class="mt-2 text-muted">Carregando licitações...</p>
+        </div>
+    </div>
 
-    <!-- PAGINAÇÃO ATUALIZADA COM NAVEGAÇÃO DIRETA -->
     <div class="pagination-container">
         <button class="btn btn-sm btn-outline-primary px-3" id="prevPage">Anterior</button>
-        
         <span class="page-info-text">Página</span>
         <input type="number" id="pageInput" class="page-input" min="1" value="1" onkeypress="if(event.key==='Enter')irParaPagina()">
         <span class="page-info-text">de <span id="totalPages">1</span></span>
         <button class="btn-go" onclick="irParaPagina()">Ir</button>
-        
         <button class="btn btn-sm btn-outline-primary px-3" id="nextPage">Próxima</button>
     </div>
 </div>
@@ -248,10 +199,10 @@ async function loadCompatData() {
         if (lines.length < 2) return;
         
         const headers = lines[0].split(';').map(h => h.trim().replace(/^\uFEFF/, ''));
-        const colId = headers.findIndex(h => h.toLowerCase().includes('id'));
-        const colPercentual = headers.findIndex(h => h.toLowerCase().includes('percentual'));
-        const colConfianca = headers.findIndex(h => h.toLowerCase().includes('confianca'));
-        const colMatches = headers.findIndex(h => h.toLowerCase().includes('matches'));
+        const colId = headers.indexOf('id');
+        const colPercentual = headers.indexOf('percentual');
+        const colConfianca = headers.indexOf('confianca');
+        const colMatches = headers.indexOf('principais_matches');
         
         for (let i = 1; i < lines.length; i++) {
             const cols = lines[i].split(';');
@@ -261,31 +212,22 @@ async function loadCompatData() {
                 const confianca = (colConfianca >= 0 ? cols[colConfianca] : cols[4]) || 'INCOMPATIVEL';
                 const matches = (colMatches >= 0 ? cols[colMatches] : '').split('|').filter(m => m);
                 
-                if (id) {
-                    compatData[id] = { percentual, confianca: confianca.toUpperCase(), matches };
-                }
+                if (id) compatData[id] = { percentual, confianca: confianca.toUpperCase(), matches };
             }
         }
     } catch (e) {
-        console.log('Compatibilidade não carregada:', e);
+        console.log('Erro compatibilidade:', e);
     }
 }
 
 function getCompatBadgeHTML(licId) {
     const compat = compatData[licId];
-    if (!compat || compat.percentual < 5) {
-        return '<span class="compat-badge compat-na">⚪ N/A</span>';
-    }
+    if (!compat || compat.percentual < 5) return '<span class="compat-badge compat-na">⚪ N/A</span>';
     
     const pct = compat.percentual.toFixed(1);
-    
-    if (compat.percentual >= 60) {
-        return `<span class="compat-badge compat-alta" title="${compat.matches.slice(0,3).join(', ')}">🟢 ${pct}%</span>`;
-    } else if (compat.percentual >= 20) {
-        return `<span class="compat-badge compat-media" title="${compat.matches.slice(0,3).join(', ')}">🟡 ${pct}%</span>`;
-    } else {
-        return `<span class="compat-badge compat-baixa" title="${compat.matches.slice(0,3).join(', ')}">🔴 ${pct}%</span>`;
-    }
+    if (compat.percentual >= 60) return `<span class="compat-badge compat-alta">🟢 ${pct}%</span>`;
+    if (compat.percentual >= 20) return `<span class="compat-badge compat-media">🟡 ${pct}%</span>`;
+    return `<span class="compat-badge compat-baixa">🔴 ${pct}%</span>`;
 }
 
 async function loadData() {
@@ -293,18 +235,50 @@ async function loadData() {
         await loadCompatData();
         
         const response = await fetch('pregacoes_pharma_limpos.json.gz');
-        if(!response.ok) throw new Error();
-        const ds = new DecompressionStream('gzip');
-        const decompressedStream = response.body.pipeThrough(ds);
-        const text = await new Response(decompressedStream).text();
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         
-        allData = JSON.parse(text);
-        allData.sort((a, b) => new Date(b.dt_enc) - new Date(a.dt_enc));
+        if (typeof DecompressionStream === 'undefined') {
+            const fallbackResponse = await fetch('pregacoes_pharma_limpos.json');
+            if (fallbackResponse.ok) {
+                const text = await fallbackResponse.text();
+                allData = JSON.parse(text);
+            } else {
+                throw new Error('Browser não suporta descompressão e arquivo fallback não encontrado');
+            }
+        } else {
+            const ds = new DecompressionStream('gzip');
+            const decompressedStream = response.body.pipeThrough(ds);
+            const text = await new Response(decompressedStream).text();
+            allData = JSON.parse(text);
+        }
+        
+        if (!Array.isArray(allData)) {
+            const temp = [];
+            for (const orgao in allData) {
+                for (const edital in allData[orgao]) {
+                    const item = allData[orgao][edital];
+                    item.orgao = orgao;
+                    item.edital = edital;
+                    temp.push(item);
+                }
+            }
+            allData = temp;
+        }
+        
+        allData.sort((a, b) => new Date(b.dt_enc || 0) - new Date(a.dt_enc || 0));
         
         filteredData = [...allData];
         renderMonitor();
-    } catch (e) { 
-        document.getElementById('monitor-content').innerHTML = '<div class="alert alert-info">Aguardando novos dados processados pelo GitHub Actions...</div>';
+        
+    } catch (e) {
+        console.error('Erro:', e);
+        document.getElementById('monitor-content').innerHTML = `
+            <div class="alert alert-danger m-4">
+                <h4>❌ Erro ao carregar dados</h4>
+                <p>${e.message}</p>
+                <button class="btn btn-primary mt-2" onclick="location.reload()">🔄 Tentar Novamente</button>
+            </div>
+        `;
     }
 }
 
@@ -317,7 +291,8 @@ function renderMonitor() {
     const pageItems = filteredData.slice(start, end);
 
     if (pageItems.length === 0) {
-        container.innerHTML = '<div class="text-center py-5 text-muted">Nenhuma licitação encontrada para os filtros aplicados.</div>';
+        container.innerHTML = '<div class="text-center py-5 text-muted">Nenhuma licitação encontrada.</div>';
+        return;
     }
 
     pageItems.forEach(lic => {
@@ -328,10 +303,8 @@ function renderMonitor() {
             ? `R$ ${lic.val_tot.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` 
             : 'Sigiloso/Não inf.';
 
-        let tipoLic = "AMPLO";
-        let cssTipo = "badge-amplo";
-        
-        if (lic.itens && lic.itens.length > 0) {
+        let tipoLic = "AMPLO", cssTipo = "badge-amplo";
+        if (lic.itens?.length > 0) {
             const todosExclusivos = lic.itens.every(it => [1, 2, 3].includes(parseInt(it.benef)));
             const algumExclusivo = lic.itens.some(it => [1, 2, 3].includes(parseInt(it.benef)));
             if (todosExclusivos) { tipoLic = "EXCLUSIVO"; cssTipo = "badge-exclusivo"; } 
@@ -345,12 +318,12 @@ function renderMonitor() {
 
         const compatBadge = getCompatBadgeHTML(lic.id);
 
-        div.innerHTML = `
+        div.innerHTML = ` 
             <div class="header-card">
                 <div>
-                    <span class="badge-uf-header">${lic.uf}</span>
+                    <span class="badge-uf-header">${lic.uf || '??'}</span>
                     <span class="header-bold">${lic.org || '---'}</span>
-                    <span class="ms-2 opacity-75 small">| Edital: ${lic.edit}</span>
+                    <span class="ms-2 opacity-75 small">| Edital: ${lic.edit || lic.id || '---'}</span>
                     ${compatBadge}
                 </div>
                 <button class="btn-excluir" onclick="excluirLicitacao('${lic.id}')">Excluir</button>
@@ -361,8 +334,8 @@ function renderMonitor() {
                         <small class="text-muted d-block mb-1">${lic.cid || '---'} - ${lic.unid_nome || '---'}</small>
                         <h6 class="fw-bold mb-2">${lic.obj || 'Sem descrição'}</h6>
                         <div class="d-flex gap-2 mt-2">
-                            <span class="badge bg-secondary d-flex align-items-center">UASG/Código: ${lic.uasg}</span>
-                            <span class="badge bg-info text-dark d-flex align-items-center">Vencimento: ${new Date(lic.dt_enc).toLocaleString('pt-BR')}</span>
+                            <span class="badge bg-secondary">UASG: ${lic.uasg || 'N/A'}</span>
+                            <span class="badge bg-info text-dark">Venc: ${lic.dt_enc ? new Date(lic.dt_enc).toLocaleString('pt-BR') : 'N/A'}</span>
                             <span class="badge-tipo ${cssTipo}">${tipoLic}</span>
                         </div>
                     </div>
@@ -370,37 +343,30 @@ function renderMonitor() {
                         <small class="text-muted">VALOR ESTIMADO TOTAL</small>
                         <h5 class="fw-bold text-primary mb-0">${valorTotal}</h5>
                         ${alertaGlobalHtml}
-                        <div class="mt-3 d-flex justify-content-center align-items-center gap-2">
-                            <span class="badge bg-dark" style="font-size: 0.7rem;" title="Fonte da Licitação">${lic.fonte || 'PNCP Direto'}</span>
-                            <button class="btn btn-sm btn-primary px-4 fw-bold" onclick="abrirItens('${lic.id}')">DETALHAR ${lic.itens.length} ITENS</button>
+                        <div class="mt-3">
+                            <span class="badge bg-dark me-2">${lic.fonte || 'PNCP'}</span>
+                            <button class="btn btn-sm btn-primary px-4 fw-bold" onclick="abrirItens('${lic.id}')">DETALHAR ${lic.itens?.length || 0} ITENS</button>
                         </div>
                     </div>
                 </div>
-            </div>`;
+             </div>`;
         container.appendChild(div);
     });
 
-    // ATUALIZA CONTROLES DE PAGINAÇÃO
     totalPages = Math.ceil(filteredData.length / itemsPerPage) || 1;
     document.getElementById('totalPages').textContent = totalPages;
     document.getElementById('pageInput').value = currentPage;
     document.getElementById('pageInput').max = totalPages;
     
-    // Habilita/desabilita botões
     document.getElementById('prevPage').disabled = currentPage <= 1;
     document.getElementById('nextPage').disabled = currentPage >= totalPages;
 }
 
-// NOVA FUNÇÃO: Ir para página específica
 function irParaPagina() {
     const input = document.getElementById('pageInput');
-    let pagina = parseInt(input.value);
-    
-    if (isNaN(pagina) || pagina < 1) {
-        pagina = 1;
-    } else if (pagina > totalPages) {
-        pagina = totalPages;
-    }
+    let pagina = parseInt(input.value) || 1;
+    if (pagina < 1) pagina = 1;
+    if (pagina > totalPages) pagina = totalPages;
     
     currentPage = pagina;
     renderMonitor();
@@ -415,19 +381,20 @@ function filtrar() {
     const edt = document.getElementById('filterEdital').value.toUpperCase();
 
     filteredData = allData.filter(lic => {
-        const dataLic = lic.dt_enc.split('T')[0];
+        const dataLic = lic.dt_enc ? lic.dt_enc.split('T')[0] : '';
         return (!dataEnc || dataLic === dataEnc) &&
-               (!uf || lic.uf.includes(uf)) &&
-               (!cid || (lic.cid || "").toUpperCase().includes(cid)) &&
-               (!org || (lic.org || "").toUpperCase().includes(org) || (lic.uasg||"").includes(org)) &&
-               (!edt || (lic.edit || "").includes(edt));
+               (!uf || (lic.uf || '').toUpperCase().includes(uf)) &&
+               (!cid || (lic.cid || '').toUpperCase().includes(cid)) &&
+               (!org || (lic.org || '').toUpperCase().includes(org) || (lic.uasg || '').includes(org)) &&
+               (!edt || (lic.edit || lic.id || '').toUpperCase().includes(edt));
     });
+    
     currentPage = 1;
     renderMonitor();
 }
 
 function limparFiltros() {
-    document.querySelectorAll('.form-control').forEach(i => i.value = '');
+    document.querySelectorAll('input').forEach(i => i.value = '');
     filteredData = [...allData];
     currentPage = 1;
     renderMonitor();
@@ -435,48 +402,48 @@ function limparFiltros() {
 
 function abrirItens(id) {
     const lic = allData.find(x => x.id === id);
-    document.getElementById('modalTitle').innerText = `Itens: ${lic.org} (Edital ${lic.edit})`;
-    document.getElementById('linkPncp').href = lic.link;
+    if (!lic) return;
+    
+    document.getElementById('modalTitle').innerText = `Itens: ${lic.org || '---'} (Edital ${lic.edit || '---'})`;
+    document.getElementById('linkPncp').href = lic.link || '#';
 
-    const grupos = {};
-    const andamento = [], desertos = [], cancelados = [];
+    const grupos = {}, andamento = [], desertos = [], cancelados = [];
 
-    lic.itens.forEach(it => {
+    (lic.itens || []).forEach(it => {
         if (it.sit === "HOMOLOGADO" && it.res_forn) {
             if (!grupos[it.res_forn]) grupos[it.res_forn] = [];
             grupos[it.res_forn].push(it);
-        } else if (it.sit === "CANCELADO") { cancelados.push(it); } 
-        else if (it.sit === "DESERTO" || it.sit === "FRACASSADO") { desertos.push(it); } 
-        else { andamento.push(it); }
+        } else if (it.sit === "CANCELADO") cancelados.push(it);
+        else if (it.sit === "DESERTO" || it.sit === "FRACASSADO") desertos.push(it);
+        else andamento.push(it);
     });
 
-    let html = `<div class="table-responsive"><table class="table table-sm table-bordered table-itens align-middle"><thead class="table-dark">
-        <tr><th class="text-center">#</th><th>Descrição</th><th class="text-center">ME/EPP</th><th class="text-center">Qtd/Un</th><th class="text-center">Est. Unit.</th><th class="text-center">Final Unit.</th><th class="text-center">Total</th></tr>
-        </thead><tbody>`;
+    let html = `<div class="table-responsive"><table class="table table-sm table-bordered table-itens"><thead class="table-dark"> 
+        <tr><th>#</th><th>Descrição</th><th>ME/EPP</th><th>Qtd/Un</th><th>Est. Unit.</th><th>Final Unit.</th><th>Total</th></tr></thead><tbody>`;
 
     if (andamento.length > 0) {
-        html += `<tr><td colspan="7" class="header-status-andamento py-1 small">ITENS EM ANDAMENTO</td></tr>`;
+        html += `<tr><td colspan="7" class="header-status-andamento">ITENS EM ANDAMENTO (${andamento.length})</td></tr>`;
         andamento.forEach(it => html += renderLinhaItem(it, lic.id));
     }
     if (desertos.length > 0) {
-        html += `<tr><td colspan="7" class="header-status-deserto py-1 small">ITENS DESERTOS / FRACASSADOS</td></tr>`;
+        html += `<tr><td colspan="7" class="header-status-deserto">ITENS DESERTOS (${desertos.length})</td></tr>`;
         desertos.forEach(it => html += renderLinhaItem(it, lic.id));
     }
     if (cancelados.length > 0) {
-        html += `<tr><td colspan="7" class="header-status-cancelado py-1 small">ITENS CANCELADOS</td></tr>`;
+        html += `<tr><td colspan="7" class="header-status-cancelado">ITENS CANCELADOS (${cancelados.length})</td></tr>`;
         cancelados.forEach(it => html += renderLinhaItem(it, lic.id));
     }
-    for (const forn in grupos) {
-        html += `<tr class="header-fornecedor"><td colspan="7">Fornecedor: ${forn}</td></tr>`;
+    
+    Object.keys(grupos).forEach(forn => {
+        html += `<tr class="header-fornecedor"><td colspan="7">Fornecedor: ${forn} (${grupos[forn].length} itens)</td></tr>`;
         grupos[forn].forEach(it => html += renderLinhaItem(it, lic.id));
-    }
+    });
 
-    html += `</tbody></table></div>`;
+    html += '</tbody></table></div>';
     document.getElementById('modalBody').innerHTML = html;
     modalObj.show();
 }
 
-// REFORÇADO: Destaque para itens compatíveis
 function renderLinhaItem(it, licId) {
     const isMeEpp = [1, 2, 3].includes(parseInt(it.benef));
     const meEppHtml = isMeEpp ? '<span class="benef-sim">SIM</span>' : '<span class="benef-nao">NÃO</span>';
@@ -484,53 +451,35 @@ function renderLinhaItem(it, licId) {
     const valEstimado = it.v_est || 0;
     const valorTotal = valFinal > 0 ? (valFinal * it.q) : (valEstimado * it.q);
 
-    // VERIFICAÇÃO REFORÇADA DE COMPATIBILIDADE
     let compatClass = '';
-    let compatIndicator = '';
+    let compatIcon = '';
     const compat = compatData[licId];
     
-    if (compat && compat.matches && compat.matches.length > 0) {
-        const descNorm = normalizeText(it.d || '');
-        const descLower = descNorm.toLowerCase();
-        
+    if (compat?.matches?.length > 0) {
+        const descNorm = (it.d || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         const isCompat = compat.matches.some(match => {
             if (!match) return false;
-            const matchNorm = normalizeText(match);
-            const matchLower = matchNorm.toLowerCase();
-            
-            // Verifica se o match está contido na descrição ou vice-versa
-            return descLower.includes(matchLower) || 
-                   matchLower.includes(descLower.substring(0, 20));
+            return descNorm.includes(match.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
         });
-
         if (isCompat) {
             compatClass = 'item-compativel';
-            compatIndicator = '<span style="color: #28a745; font-weight: bold; margin-right: 5px;">✓</span>';
+            compatIcon = '✓ ';
         }
     }
 
     return `<tr class="${compatClass}">
-            <td class="text-center fw-bold">${it.n}</td>
-            <td>${compatIndicator}${it.d}</td>
+            <td class="text-center fw-bold">${it.n || '?'}</td>
+            <td>${compatIcon}${it.d || 'Sem descrição'}</td>
             <td class="text-center">${meEppHtml}</td>
-            <td class="text-center">${it.q} ${it.u}</td>
+            <td class="text-center">${it.q || 0} ${it.u || ''}</td>
             <td class="text-center val-estimado">R$ ${valEstimado.toFixed(4)}</td>
             <td class="text-center val-homologado">${valFinal > 0 ? 'R$ ' + valFinal.toFixed(4) : '---'}</td>
             <td class="text-center fw-bold">R$ ${valorTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-            </tr>`;
-}
-
-function normalizeText(text) {
-    if (!text) return '';
-    return text.toUpperCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^A-Z0-9\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+             </tr>`;
 }
 
 function excluirLicitacao(id) {
-    if(confirm("Deseja remover esta licitação da visualização temporária?")) {
+    if(confirm("Deseja remover esta licitação?")) {
         allData = allData.filter(x => x.id !== id);
         filtrar();
     }
@@ -549,72 +498,47 @@ async function processarInclusaoManual() {
     const statusDiv = document.getElementById('statusInclusao');
 
     if (!link || !token) {
-        statusDiv.innerHTML = '<span class="text-danger">Erro: Preencha o link e o seu Token.</span>';
+        statusDiv.innerHTML = '<span class="text-danger">Preencha link e token.</span>';
         return;
     }
 
-    statusDiv.innerHTML = '<span class="text-primary">Conectando ao Repositório...</span>';
+    statusDiv.innerHTML = '<span class="text-primary">Conectando...</span>';
 
     try {
         const urlFile = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE_PATH}`;
-        
-        const resGet = await fetch(urlFile, {
-            headers: { 'Authorization': `token ${token}` }
-        });
+        const resGet = await fetch(urlFile, { headers: { 'Authorization': `token ${token}` } });
 
-        let currentContent = "";
-        let sha = "";
-
+        let sha = "", currentContent = "";
         if (resGet.ok) {
-            const dataGet = await resGet.json();
-            sha = dataGet.sha;
-            currentContent = decodeURIComponent(escape(atob(dataGet.content))); 
+            const data = await resGet.json();
+            sha = data.sha;
+            currentContent = decodeURIComponent(escape(atob(data.content)));
         }
 
-        const newContent = currentContent + (currentContent.endsWith('\n') || currentContent === "" ? "" : "\n") + link + "\n";
+        const newContent = currentContent + (currentContent.endsWith('\n') ? "" : "\n") + link + "\n";
         
         const resPut = await fetch(urlFile, {
             method: 'PUT',
-            headers: {
-                'Authorization': `token ${token}`,
-                'Content-Type': 'application/json',
-            },
-n            body: JSON.stringify({
-                message: "Inclusão manual de link via Sniper Pharma Panel",
+            headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: "Inclusão manual via Sniper Pharma",
                 content: btoa(unescape(encodeURIComponent(newContent))),
                 sha: sha
             })
         });
 
-        if (resPut.ok) {
-            statusDiv.innerHTML = '<span class="text-success">✅ SUCESSO! O arquivo foi atualizado. O sistema levará alguns minutos para processar os novos dados via GitHub Actions.</span>';
-            setTimeout(() => modalInclusaoObj.hide(), 3000);
-        } else {
-            const err = await resPut.json();
-            statusDiv.innerHTML = `<span class="text-danger">Erro GitHub: ${err.message}</span>`;
-        }
-
+        statusDiv.innerHTML = resPut.ok 
+            ? '<span class="text-success">✅ Salvo com sucesso!</span>' 
+            : '<span class="text-danger">Erro ao salvar</span>';
+            
+        if (resPut.ok) setTimeout(() => modalInclusaoObj.hide(), 2000);
     } catch (e) {
-        statusDiv.innerHTML = `<span class="text-danger">Erro de Conexão: ${e.message}</span>`;
+        statusDiv.innerHTML = `<span class="text-danger">Erro: ${e.message}</span>`;
     }
 }
 
-// EVENT LISTENERS ATUALIZADOS
-document.getElementById('prevPage').onclick = () => { 
-    if(currentPage > 1) { 
-        currentPage--; 
-        renderMonitor(); 
-        window.scrollTo(0,0); 
-    } 
-};
-
-document.getElementById('nextPage').onclick = () => { 
-    if(currentPage < totalPages) { 
-        currentPage++; 
-        renderMonitor(); 
-        window.scrollTo(0,0); 
-    } 
-};
+document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
+document.getElementById('nextPage').onclick = () => { if(currentPage < totalPages) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
 
 // Inicializa
 loadData();
