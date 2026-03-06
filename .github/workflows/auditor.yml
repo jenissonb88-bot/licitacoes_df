@@ -26,7 +26,9 @@ jobs:
         python-version: '3.11'
 
     - name: Install deps
-      run: pip install requests
+      run: |
+        pip install requests
+        pip install pandas  # NOVO: necessário para avalia_portfolio.py
 
     - name: 🩺 Run Auditor (atualiza.py)
       run: python atualiza.py
