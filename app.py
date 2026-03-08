@@ -1,29 +1,154 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-ATUALIZAÇÃO DE LICITAÇÕES PNCP
-Atualiza status e resultados de licitações já capturadas
-"""
-
 import requests
 import json
-import gzip
 import os
+import unicodedata
+import gzip
+import argparse
+import sys
 import csv
+import re
 import concurrent.futures
-from datetime import datetime
+from datetime import datetime, timedelta, date
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-# --- CONFIGURAÇÕES ---
-ARQDADOS = 'pregacoes_pharma_limpos.json.gz'
-ARQ_RELATORIO = 'relatorio_atualizacoes.csv'
-ARQ_LOG = 'log_atualizacao.txt'
-MAXWORKERS = 10
+# --- CONFIGURAÇOES ---
+ARQDADOS = 'dadosoportunidades.json.gz'
+ARQ_TEMP = ARQDADOS + '.tmp'
+ARQ_CHECKPOINT = 'checkpoint.json'
+ARQ_LOCK = 'execucao.lock'
+ARQ_CATALOGO = 'Exportar Dados.csv'
+ARQ_MANUAL = 'links_manuais.txt'
+MAXWORKERS = 15
+DATA_CORTE_FIXA = datetime(2025, 12, 1)
 
-# Mapas de situação (sincronizados com app.py)
+# --- GEOGRAFIA E MAPAS ---
+NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
+ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
+UFS_PERMITIDAS_MMH = NE_ESTADOS  # Apenas Nordeste, sem DF
+
 MAPA_SITUACAO_ITEM = {1: "EM ANDAMENTO", 2: "HOMOLOGADO", 3: "CANCELADO", 4: "DESERTO", 5: "FRACASSADO"}
 MAPA_SITUACAO_GLOBAL = {1: "DIVULGADA", 2: "REVOGADA", 3: "ANULADA", 4: "SUSPENSA"}
+
+def normalize(t):
+    if not t:
+        return ""
+    return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
+
+# --- VETOS ABSOLUTOS (Sempre vetam, mesmo com medicamentos) ---
+VETOS_ABSOLUTOS = [normalize(x) for x in [
+    "INTENCAO DE REGISTRO DE PRECO",
+    "INTENCAO REGISTRO DE PRECO",
+    "CREDENCIAMENTO",
+    "ADESAO",
+    "IRP",
+    "LEILAO",
+    "ALIENACAO"
+]]
+
+# --- SUPER PASSE (Libera para qualquer UF, exceto ESTADOS_BLOQUEADOS) ---
+PALAVRAS_MEDICAMENTOS = [normalize(x) for x in [
+    "MEDICAMENTO", "MEDICAMENTOS",
+    "AQUISICAO DE MEDICAMENTO", "AQUISICAO DE MEDICAMENTOS",
+    "AQUISICAO MEDICAMENTO", "AQUISICAO MEDICAMENTOS",
+    "COMPRA DE MEDICAMENTO", "COMPRA DE MEDICAMENTOS",
+    "FORNECIMENTO DE MEDICAMENTO", "FORNECIMENTO DE MEDICAMENTOS"
+]]
+
+# --- VETOS OPERACIONAIS (Com variaoes SING/PLURAL) ---
+VETOS_OPERACIONAIS_BASE = [
+    "OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "REFORMA", "MANUTENCAO",
+    "LIMPEZA URBANA", "RESIDUOS SOLIDOS", "LOCACAO", "TRANSPORTE",
+    "COMBUSTIVEL", "DIESEL", "GASOLINA", "PNEUS", "PECAS AUTOMOTIVAS",
+    "OFICINA", "VIGILANCIA", "SEGURANCA", "BOMBEIRO", "SALVAMENTO",
+    "RESGATE", "VIATURA", "FARDAMENTO", "VESTUARIO", "UNIFORME", "TEXTIL",
+    "INFORMATICA", "COMPUTADORES", "IMPRESSAO", "EVENTOS", "REPARO",
+    "CORRETIVA", "PREVENTIVA", "VEICULO", "AMBULANCIA", "MOTOCICLETA",
+    "MECANICA", "FERRO FUNDIDO", "CONTRATACAO DE SERVICO",
+    "EQUIPAMENTO E MATERIA PERMANENTE", "MATERIAIS PERMANENTES",
+    "EQUIPAMENTOS PERMANENTES", "INSTALACAO", "ASFALTICO", "ASFALTO",
+    "MANUTENCAO PREDIAL", "MANUTENCAO DE EQUIPAMENTOS",
+    "MANUTENCAO PREVENTIVA", "MANUTENCAO CORRETIVA",
+    "GASES MEDICINAIS", "CILINDRO", "LIMPEZA PREDIAL", "LAVANDERIA",
+    "GERADOR", "RECARGA", "CONFECCAO", "PRESTACAO DE SERVICO",
+    "SERVICO ESPECIALIZADO"
+]
+
+VETOS_ALIMENTACAO = [normalize(x) for x in [
+    "ALIMENTACAO ESCOLAR", "GENEROS ALIMENTICIOS", "MERENDA", "PNAE",
+    "PERECIVEIS", "HORTIFRUTI", "CARNES", "PANIFICACAO", "CESTAS BASICAS",
+    "LANCHE", "REFEICOES", "COFFEE BREAK", "BUFFET", "COZINHA", "AÇOUGUE",
+    "POLPA DE FRUTA", "ESTIAGEM"
+]]
+
+VETOS_EDUCACAO = [normalize(x) for x in [
+    "MATERIAL ESCOLAR", "PEDAGOGICO", "DIDATICO", "BRINQUEDOS", "LIVROS",
+    "TRANSPORTE ESCOLAR", "KIT ALUNO", "REDE MUNICIPAL DE ENSINO",
+    "SECRETARIA DE EDUCACAO"
+]]
+
+# Gerar variaoes sing/plural para vetos operacionais
+VETOS_OPERACIONAL = []
+for termo in VETOS_OPERACIONAIS_BASE:
+    n = normalize(termo)
+    VETOS_OPERACIONAL.append(n)
+    if not n.endswith('S') and not n.endswith('ES'):
+        VETOS_OPERACIONAL.append(n + 'S')
+    elif n.endswith('L'):
+        VETOS_OPERACIONAL.append(n + 'ES')
+
+VETOS_OPERACIONAL = list(set(VETOS_OPERACIONAL))
+TODOS_VETOS = VETOS_OPERACIONAL + VETOS_ALIMENTACAO + VETOS_EDUCACAO
+
+# --- WHITELISTS ---
+WL_MEDICAMENTOS = [normalize(x) for x in [
+    "MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOAL",
+    "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA", "ANTIBIOTICO"
+]]
+
+WL_NUTRI_CLINICA = [normalize(x) for x in [
+    "NUTRICAO ENTERAL", "FORMULA INFANTIL", "SUPLEMENTO ALIMENTAR",
+    "DIETA ENTERAL", "DIETA PARENTERAL", "NUTRICAO CLINICA",
+    "ENTERAL", "PARENTERA", "ENTERA"
+]]
+
+WL_MATERIAIS_NE = [normalize(x) for x in [
+    "MATERIAL MEDIC", "INSUMO HOSPITALAR", "MMH", "SERINGA", "AGULHA",
+    "GAZE", "ATADURA", "SONDA", "CATETER", "EQUIPO",
+    "LUVAS DE PROCEDIMENTO", "MASCARA", "MASCARA CIRURGICA", "PENSO",
+    "MATERIAL PENSO", "MATERIAL-MEDICO", "MATERIAIS-MEDICO", "FRALDA",
+    "ABSORVENTE", "MEDICO-HOSPITALAR", "CURATIV", "CURATIVO",
+    "CURATIVOS", "LUVA DE PROCEDIMENTO", "COMPRESSA GAZE",
+    "AVENTAL DESCARTAVEL", "GESSADA", "CAMPO OPERATORIO", "CLOREXIDINA",
+    "COLETOR PERFURO", "ESPARADRAPO", "FITA MICROPORE", "GLUTARALDEIDO",
+    "SONDA NASO", "TOUCA DESCARTAVEL", "TUBO ASPIRACAO", "CORRELATO",
+    "AGULHAS", "SERINGAS"
+]]
+
+WL_TERMOS_AMPLos = [normalize(x) for x in ["SAUDE", "HOSPITAL", "HOSPITALAR"]]
+
+# --- CARREGAMENTO DO CATALOGO ---
+CATALOGO_TERMOS = set()
+if os.path.exists(ARQ_CATALOGO):
+    try:
+        for enc in ['utf-8', 'latin-1', 'cp1252']:
+            try:
+                with open(ARQ_CATALOGO, 'r', encoding=enc) as f:
+                    leitor = csv.reader(f, delimiter=';')
+                    next(leitor, None)
+                    for row in leitor:
+                        if len(row) > 1:
+                            termos = [row[0], row[1]] if len(row) > 1 else [row[0]]
+                            for t in termos:
+                                norm = normalize(t)
+                                if len(norm) > 4:
+                                    CATALOGO_TERMOS.add(norm)
+                print(f"📚 Catálogo carregado: {len(CATALOGO_TERMOS)} termos.")
+                break
+            except:
+                continue
+    except:
+        pass
 
 def criar_sessao():
     s = requests.Session()
@@ -32,349 +157,395 @@ def criar_sessao():
     s.mount('https://', HTTPAdapter(max_retries=retry))
     return s
 
-def log_mensagem(msg):
-    """Salva log em arquivo e imprime no console"""
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    linha = f"[{timestamp}] {msg}"
-    print(linha)
-    with open(ARQ_LOG, 'a', encoding='utf-8') as f:
-        f.write(linha + chr(10))  # chr(10) = \n
+def tem_medicamento_no_texto(texto):
+    """Verifica se há termos de medicamentos no texto"""
+    if not texto:
+        return False
+    texto_norm = normalize(texto)
+    return any(p in texto_norm for p in PALAVRAS_MEDICAMENTOS)
 
-def extrair_dados_do_id(lid):
+def tem_medicamento_nos_itens(itens):
+    """Fallback: verifica se algum item contem medicamentos"""
+    if not itens:
+        return False
+    for item in itens:
+        desc = item.get('descricao', '')
+        if tem_medicamento_no_texto(desc):
+            return True
+        desc_norm = normalize(desc)
+        if any(med in desc_norm for med in WL_MEDICAMENTOS):
+            return True
+    return False
+
+def veta_edital(obj_raw, uf, itens=None):
     """
-    Extrai CNPJ, Ano e Sequencial do ID.
-    ID formatado como: {cnpj14}{ano4}{sequencialN}
+    Retorna: (status, motivo)
+    status: 'CAPTURAR', 'VETAR', 'IGNORAR'
     """
-    if len(lid) < 18:
-        return None, None, None
+    obj_norm = normalize(obj_raw)
 
-    cnpj = lid[:14]
-    ano = lid[14:18]
-    seq = lid[18:]
+    # 1. VETOS ABSOLUTOS (sempo vetam, independente de medicamentos)
+    for v in VETOS_ABSOLUTOS:
+        if v in obj_norm:
+            return ('VETAR', f'Veto absoluto: {v}')
 
-    if not (cnpj.isdigit() and ano.isdigit() and seq.isdigit()):
-        return None, None, None
+    # 2. SUPER PASSE NACIONAL (medicamentos)
+    tem_med_objeto = tem_medicamento_no_texto(obj_raw)
+    tem_med_itens = False if tem_med_objeto else tem_medicamento_nos_itens(itens)
 
-    return cnpj, ano, seq
+    if tem_med_objeto or tem_med_itens:
+        if uf in ESTADOS_BLOQUEADOS:
+            return ('IGNORAR', 'Medicamento em estado bloqueado')
+        return ('CAPTURAR', 'Super passe: medicamentos')
 
-def precisa_atualizar(lic):
-    """
-    Verifica se há itens sem fornecedor homologado
-    OU se a situação global/itens podem ter mudado
-    """
-    itens = lic.get('itens', [])
+    # 3. VETOS OPERACIONAIS/ALIMENTACAO/EDUCACAO
+    for v in TODOS_VETOS:
+        if v in obj_norm:
+            if "NUTRICAO" in v or "ALIMENT" in v:
+                if any(bom in obj_norm for bom in WL_NUTRI_CLINICA) and "ESCOLAR" not in obj_norm:
+                    pass
+                else:
+                    return ('VETAR', f'Veto alimentacao: {v}')
+            else:
+                return ('VETAR', f'Veto operacional: {v}')
 
-    # Verifica itens pendentes
-    tem_itens_pendentes = any(
-        not it.get('res_forn') and it.get('sit') in ["EM ANDAMENTO", "HOMOLOGADO"]
-        for it in itens
-    )
+    # 4. MMH/NUTRICAO - Apenas Nordeste
+    tem_mmh = any(t in obj_norm for t in WL_MATERIAIS_NE)
+    tem_nutri = any(t in obj_norm for t in WL_NUTRI_CLINICA)
 
-    # Verifica se situação global não é final (DIVULGADA ou SUSPENSA podem mudar)
-    sit_global = lic.get('sit_global', 'DIVULGADA')
-    sit_nao_final = sit_global in ["DIVULGADA", "SUSPENSA"]
-
-    return tem_itens_pendentes or sit_nao_final
-
-def buscar_dados_licitacao(cnpj, ano, seq, session):
-    """Busca dados gerais da licitação na API"""
-    url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}"
-    try:
-        r = session.get(url, timeout=20)
-        if r.status_code == 200:
-            return r.json()
+    if tem_mmh or tem_nutri:
+        if uf in UFS_PERMITIDAS_MMH:
+            return ('CAPTURAR', 'MMH/Nutricao no NE')
         else:
-            log_mensagem(f"   ⚠️ HTTP {r.status_code} ao buscar dados da licitação {cnpj}/{ano}/{seq}")
-            return None
-    except Exception as e:
-        log_mensagem(f"   ❌ Erro ao buscar dados da licitação {cnpj}/{ano}/{seq}: {e}")
-        return None
+            return ('IGNORAR', 'MMH/Nutricao fora do NE')
 
-def buscar_itens_api(cnpj, ano, seq, session):
-    """Busca todos os itens atualizados da licitação"""
-    url_base = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
-    itens_api = []
-    pagina = 1
-    max_paginas = 50
+    # 5. TERMOS AMPLOS (SAUDE/HOSPITAL) - Apenas Nordeste
+    tem_termo_amplo = any(t in obj_norm for t in WL_TERMOS_AMPLos)
+    if tem_termo_amplo:
+        if uf in UFS_PERMITIDAS_MMH:
+            return ('CAPTURAR', 'Termo amplo no NE')
+        else:
+            return ('IGNORAR', 'Termo amplo fora do NE')
 
-    while pagina <= max_paginas:
-        try:
-            r = session.get(url_base, params={'pagina': pagina, 'tamanhoPagina': 100}, timeout=20)
-            if r.status_code != 200:
-                break
+    return ('IGNORAR', 'Nao atende criterios')
 
-            dados = r.json()
-            itens_pagina = dados.get('data', []) if isinstance(dados, dict) else (dados if isinstance(dados, list) else [])
-
-            if not itens_pagina:
-                break
-
-            for it in itens_pagina:
-                if isinstance(it, dict):
-                    itens_api.append(it)
-
-            if len(itens_pagina) < 100:
-                break
-            pagina += 1
-
-        except Exception as e:
-            log_mensagem(f"   ⚠️ Erro ao buscar itens página {pagina}: {e}")
-            break
-
-    return itens_api
-
-def buscar_resultado_item(cnpj, ano, seq, num_item, session):
-    """Busca resultado de um item específico"""
-    url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num_item}/resultados"
+def safe_float(val):
     try:
-        r = session.get(url, timeout=15)
-        if r.status_code == 200:
-            rl = r.json()
-            if isinstance(rl, list) and len(rl) > 0:
-                return rl[0]
-            elif isinstance(rl, dict):
-                return rl
-        return None
+        return float(val) if val is not None else 0.0
     except:
-        return None
+        return 0.0
 
-def atualizar_licitacao_completa(lid, dados_antigos, session):
-    """
-    Atualiza licitação completa: dados gerais + todos os itens
-    Retorna: (dados_atualizados, mudancas_detalhadas, houve_mudanca)
-    """
-    cnpj, ano, seq = extrair_dados_do_id(lid)
-    if not cnpj:
-        log_mensagem(f"   ❌ ID inválido: {lid}")
-        return None, [], False
+def salvar_checkpoint(dia, pagina):
+    with open(ARQ_CHECKPOINT, 'w') as f:
+        json.dump({'dia': dia, 'pagina': pagina}, f)
 
-    mudancas_detalhadas = []
-    houve_mudanca = False
+def carregar_checkpoint():
+    if os.path.exists(ARQ_CHECKPOINT):
+        with open(ARQ_CHECKPOINT, 'r') as f:
+            return json.load(f)
+    return None
 
-    # 1. BUSCAR DADOS GERAIS ATUALIZADOS
-    dados_api = buscar_dados_licitacao(cnpj, ano, seq, session)
-    if not dados_api:
-        log_mensagem(f"   ⚠️ Não foi possível buscar dados atualizados de {lid}")
-        return None, [], False
+def extrair_dados_url_pncp(url):
+    """Extrai CNPJ, Ano, Sequencial da URL do PNCP"""
+    url = url.strip()
+    padrao = r'pncp\.gov\.br/app/editais/(\d+)/(\d+)/(\d+)'
+    match = re.search(padrao, url)
+    if match:
+        return match.group(1), match.group(2), match.group(3)
+    return None, None, None
 
-    # Preparar novo objeto
-    dados_novos = dados_antigos.copy()
+def processar_licitacao(lic, session, forcado=False):
+    id_ref = "DESCONHECIDO"
+    try:
+        if not isinstance(lic, dict):
+            return ('ERRO', {'msg': 'Formato JSON invalido da API principal'}, 0, 0)
 
-    # Atualizar situação global
-    sit_global_id = dados_api.get('situacaoCompraId', 1)
-    nova_sit_global = MAPA_SITUACAO_GLOBAL.get(sit_global_id, "DIVULGADA")
-    sit_global_antiga = dados_antigos.get('sit_global', 'DIVULGADA')
+        cnpj = lic.get('orgaoEntidade', {}).get('cnpj', '0000')
+        ano = lic.get('anoCompra', '0000')
+        seq = lic.get('sequencialCompra', '0000')
+        id_ref = f"{cnpj}/{ano}/{seq}"
 
-    if nova_sit_global != sit_global_antiga:
-        dados_novos['sit_global'] = nova_sit_global
-        houve_mudanca = True
-        log_mensagem(f"   🔄 Situação global alterada: {sit_global_antiga} → {nova_sit_global} ({lid})")
+        sit_global_id = lic.get('situacaoCompraId') or 1
+        sit_global_nome = MAPA_SITUACAO_GLOBAL.get(sit_global_id, "DIVULGADA")
 
-        # Se foi revogada/anulada, registrar no relatório
-        if nova_sit_global in ["REVOGADA", "ANULADA"]:
-            mudancas_detalhadas.append({
-                'tipo': 'SITUACAO_GLOBAL',
-                'data_atualizacao': datetime.now().strftime('%d/%m/%Y %H:%M'),
-                'id_processo': lid,
-                'edital': dados_antigos.get('edit'),
-                'orgao': dados_antigos.get('org'),
-                'campo_alterado': 'sit_global',
-                'valor_anterior': sit_global_antiga,
-                'valor_novo': nova_sit_global,
-                'item_num': None,
-                'descricao': None,
-                'valor_estimado': None,
-                'valor_homologado': None,
-                'fornecedor': None
-            })
+        uo = lic.get('unidadeOrgao', {})
+        uf = uo.get('ufSigla', '').upper()
 
-    # Atualizar valor total estimado (se mudou)
-    val_tot_api = float(dados_api.get('valorTotalEstimado') or 0.0)
-    val_tot_antigo = dados_antigos.get('val_tot', 0.0)
-    if val_tot_api != val_tot_antigo and val_tot_api > 0:
-        dados_novos['val_tot'] = val_tot_api
-        houve_mudanca = True
-        log_mensagem(f"   💰 Valor total atualizado: {val_tot_antigo} → {val_tot_api} ({lid})")
+        obj_raw = lic.get('objetoCompra') or "Sem Objeto"
+        dt_enc_str = lic.get('dataEncerramentoProposta') or datetime.now().isoformat()
 
-    # 2. BUSCAR ITENS ATUALIZADOS
-    itens_api = buscar_itens_api(cnpj, ano, seq, session)
-    if not itens_api:
-        log_mensagem(f"   ⚠️ Não foi possível buscar itens de {lid}")
-        return (dados_novos if houve_mudanca else None), mudancas_detalhadas, houve_mudanca
+        if not forcado:
+            try:
+                dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
+                if dt_enc < DATA_CORTE_FIXA:
+                    return ('IGNORADO', None, 0, 0)
+            except:
+                pass
 
-    # Criar mapa de itens antigos por número
-    itens_antigos_map = {it['n']: it for it in dados_antigos.get('itens', []) if 'n' in it}
+        url_itens = f'https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens'
+        itens_brutos = []
+        pagina_atual = 1
+        max_paginas = 50
 
-    # Processar cada item da API
-    itens_atualizados = []
+        while pagina_atual <= max_paginas:
+            try:
+                r_itens = session.get(url_itens, params={'pagina': pagina_atual, 'tamanhoPagina': 100}, timeout=20)
+                if r_itens.status_code != 200:
+                    if pagina_atual == 1:
+                        return ('ERRO', {'msg': f"HTTP {r_itens.status_code} em {url_itens}"}, 0, 0)
+                    else:
+                        break
 
-    for it_api in itens_api:
-        num_item = it_api.get('numeroItem')
-        if num_item is None:
+                resp_json = r_itens.json()
+                itens_raw = resp_json.get('data', []) if isinstance(resp_json, dict) else (resp_json if isinstance(resp_json, list) else [])
+
+                if not itens_raw:
+                    break
+
+                for it in itens_raw:
+                    if not isinstance(it, dict):
+                        continue
+                    desc = it.get('descricao', '')
+                    sit_id = int(it.get('situacaoCompraItem') or 1)
+                    sit_nome = MAPA_SITUACAO_ITEM.get(sit_id, "EM ANDAMENTO")
+                    benef_id = it.get('tipoBeneficioId')
+                    benef_nome_api = str(it.get('tipoBeneficioNome', '')).upper()
+                    benef_final = benef_id if benef_id in [1, 2, 3] else (1 if "EXCLUSIVA" in benef_nome_api else (3 if "COTA" in benef_nome_api else 4))
+
+                    itens_brutos.append({
+                        'n': it.get('numeroItem'),
+                        'd': desc,
+                        'q': safe_float(it.get('quantidade')),
+                        'u': it.get('unidadeMedida', 'UN'),
+                        'v_est': safe_float(it.get('valorUnitarioEstimado')),
+                        'benef': benef_final,
+                        'sit': sit_nome,
+                        'res_forn': None,
+                        'res_val': 0.0
+                    })
+
+                if len(itens_raw) < 100:
+                    break
+                pagina_atual += 1
+            except Exception as e:
+                print(f"   ⚠️ Erro ao buscar itens pagina {pagina_atual}: {e}")
+                break
+
+        if not itens_brutos and not forcado:
+            return ('IGNORADO', None, 0, 0)
+
+        status, motivo = veta_edital(obj_raw, uf, itens_brutos if not forcado else None)
+
+        if status == 'VETAR':
+            return ('VETADO', {'motivo': motivo}, 0, 0)
+        elif status == 'IGNORAR':
+            return ('IGNORADO', {'motivo': motivo}, 0, 0)
+
+        dados_finais = {
+            'id': f"{cnpj}{ano}{seq}",
+            'dt_enc': dt_enc_str,
+            'uf': uf,
+            'uasg': lic.get('unidadeOrgao', {}).get('codigoUnidade', '---'),
+            'org': lic.get('orgaoEntidade', {}).get('razaoSocial', '---'),
+            'unid_nome': lic.get('unidadeOrgao', {}).get('nomeUnidade', '---'),
+            'cid': lic.get('unidadeOrgao', {}).get('municipioNome', '---'),
+            'obj': obj_raw,
+            'edit': f"{str(lic.get('numeroCompra', '')).zfill(5)}/{ano}",
+            'link': f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
+            'val_tot': safe_float(lic.get('valorTotalEstimado')),
+            'itens': itens_brutos,
+            'sit_global': sit_global_nome,
+            'fonte': lic.get('nomeEntidadeIntegradora', 'PNCP Direto')
+        }
+        return ('CAPTURADO', dados_finais, len(itens_brutos), 0)
+
+    except Exception as e:
+        return ('ERRO', {'msg': f"Erro interno em {id_ref}: {str(e)}"}, 0, 0)
+
+def processar_links_manuais(session, banco):
+    """Processa links manuais do arquivo links_manuais.txt"""
+    if not os.path.exists(ARQ_MANUAL):
+        return {'processados': 0, 'erros': 0}
+
+    stats = {'processados': 0, 'erros': 0, 'adicionados': 0}
+
+    try:
+        with open(ARQ_MANUAL, 'r', encoding='utf-8') as f:
+            links = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+    except Exception as e:
+        print(f"   ⚠️ Erro ao ler links_manuais.txt: {e}")
+        return stats
+
+    if not links:
+        return stats
+
+    print(f"\n📎 Processando {len(links)} links manuais...")
+
+    for url in links:
+        cnpj, ano, seq = extrair_dados_url_pncp(url)
+        if not cnpj:
+            print(f"   ❌ URL invalida: {url}")
+            stats['erros'] += 1
             continue
 
-        # Dados básicos do item
-        sit_item_id = int(it_api.get('situacaoCompraItem') or 1)
-        sit_item_nome = MAPA_SITUACAO_ITEM.get(sit_item_id, "EM ANDAMENTO")
+        chave = f"{cnpj}{ano}_{str(seq).zfill(5)}/{ano}"
+        if chave in banco:
+            print(f"   ℹ️ Ja existe: {chave}")
+            continue
 
-        benef_id = it_api.get('tipoBeneficioId')
-        benef_nome_api = str(it_api.get('tipoBeneficioNome', '')).upper()
-        benef_final = benef_id if benef_id in [1, 2, 3] else (1 if "EXCLUSIVA" in benef_nome_api else (3 if "COTA" in benef_nome_api else 4))
+        url_api = f'https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}'
+        try:
+            r = session.get(url_api, timeout=30)
+            if r.status_code != 200:
+                print(f"   ❌ Erro HTTP {r.status_code} ao buscar {url}")
+                stats['erros'] += 1
+                continue
 
-        # Montar item base
-        item_novo = {
-            'n': num_item,
-            'd': it_api.get('descricao', ''),
-            'q': float(it_api.get('quantidade') or 0),
-            'u': it_api.get('unidadeMedida', 'UN'),
-            'v_est': float(it_api.get('valorUnitarioEstimado') or 0.0),
-            'benef': benef_final,
-            'sit': sit_item_nome,
-            'res_forn': None,
-            'res_val': 0.0
-        }
+            lic = r.json()
+            st, d, i_qtd, _ = processar_licitacao(lic, session, forcado=True)
 
-        # Buscar resultado/fornecedor se aplicável
-        if sit_item_nome in ["EM ANDAMENTO", "HOMOLOGADO"]:
-            res = buscar_resultado_item(cnpj, ano, seq, num_item, session)
-            if res:
-                nf = res.get('nomeRazaoSocialFornecedor') or res.get('razaoSocial')
-                ni = res.get('niFornecedor')
-                val_homol = float(res.get('valorUnitarioHomologado') or 0.0)
+            if st == 'CAPTURADO' and d:
+                banco[f"{d['id'][:14]}_{d['edit']}"] = d
+                stats['adicionados'] += 1
+                obj_resumo = d['obj'][:50] if len(d['obj']) > 50 else d['obj']
+                print(f"   ✅ Adicionado: {d['edit']} - {obj_resumo}...")
+            elif st == 'VETADO':
+                print(f"   🚫 Vetado: {url} - {d.get('motivo', '')}")
+            elif st == 'IGNORAR':
+                print(f"   ⚪ Ignorado: {url} - {d.get('motivo', '')}")
+            else:
+                print(f"   ❌ Erro ao processar: {url}")
+                stats['erros'] += 1
 
-                if nf:
-                    forn_completo = f"{nf} (CNPJ: {ni})" if ni else nf
-                    item_novo['res_forn'] = forn_completo
-                    item_novo['sit'] = "HOMOLOGADO"
-                    item_novo['res_val'] = val_homol
+        except Exception as e:
+            print(f"   ❌ Excecao ao processar {url}: {e}")
+            stats['erros'] += 1
 
-        # Comparar com item antigo para detectar mudanças
-        item_antigo = itens_antigos_map.get(num_item, {})
+    print(f"   📊 Links manuais: {stats['adicionados']} adicionados, {stats['erros']} erros")
+    return stats
 
-        # Detectar mudanças significativas
-        mudanca_sit = item_novo['sit'] != item_antigo.get('sit', 'EM ANDAMENTO')
-        mudanca_forn = item_novo.get('res_forn') != item_antigo.get('res_forn')
-        mudanca_val = abs(item_novo.get('res_val', 0) - item_antigo.get('res_val', 0)) > 0.01
+def buscar_periodo(session, banco, d_ini, d_fim):
+    stats = {'vetados': 0, 'capturados': 0, 'itens': 0, 'ignorados': 0, 'erros': 0}
+    checkpoint = carregar_checkpoint()
 
-        if mudanca_sit or mudanca_forn or mudanca_val:
-            houve_mudanca = True
+    delta = d_fim - d_ini
+    for i in range(delta.days + 1):
+        dia_obj = d_ini + timedelta(days=i)
+        dia = dia_obj.strftime('%Y%m%d')
 
-            # Registrar no relatório apenas se houve homologação nova
-            if item_novo.get('res_forn') and not item_antigo.get('res_forn'):
-                mudancas_detalhadas.append({
-                    'tipo': 'ITEM_HOMOLOGADO',
-                    'data_atualizacao': datetime.now().strftime('%d/%m/%Y %H:%M'),
-                    'id_processo': lid,
-                    'edital': dados_antigos.get('edit'),
-                    'orgao': dados_antigos.get('org'),
-                    'campo_alterado': 'res_forn/res_val',
-                    'valor_anterior': f"{item_antigo.get('sit')} - {item_antigo.get('res_forn', 'N/A')}",
-                    'valor_novo': f"{item_novo['sit']} - {item_novo['res_forn']}",
-                    'item_num': num_item,
-                    'descricao': item_novo['d'],
-                    'valor_estimado': item_novo['v_est'],
-                    'valor_homologado': item_novo['res_val'],
-                    'fornecedor': item_novo['res_forn']
-                })
-                log_mensagem(f"   ✅ Item {num_item} homologado: {item_novo['res_forn'][:30]}... ({lid})")
+        if checkpoint and dia < checkpoint['dia']:
+            continue
 
-        itens_atualizados.append(item_novo)
+        print(f"\n📅 DATA: {dia}")
+        url = 'https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao'
 
-    # Verificar se algum item foi removido ou adicionado
-    nums_api = {it['n'] for it in itens_atualizados if 'n' in it}
-    nums_antigos = set(itens_antigos_map.keys())
+        pag = checkpoint['pagina'] if checkpoint and dia == checkpoint['dia'] else 1
 
-    if nums_api != nums_antigos:
-        houve_mudanca = True
-        adicionados = nums_api - nums_antigos
-        removidos = nums_antigos - nums_api
-        if adicionados:
-            log_mensagem(f"   ➕ Itens adicionados: {adicionados} ({lid})")
-        if removidos:
-            log_mensagem(f"   ➖ Itens removidos: {removidos} ({lid})")
-
-    if houve_mudanca:
-        dados_novos['itens'] = itens_atualizados
-        return dados_novos, mudancas_detalhadas, True
-
-    return None, [], False
-
-if __name__ == '__main__':
-    if not os.path.exists(ARQDADOS):
-        log_mensagem(f"❌ Arquivo {ARQDADOS} não encontrado.")
-        exit(1)
-
-    log_mensagem("🔄 Iniciando atualização completa de licitações (Modo B: Itens + Situação Global)")
-
-    # Limpar log anterior
-    if os.path.exists(ARQ_LOG):
-        os.remove(ARQ_LOG)
-
-    with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
-        banco_raw = json.load(f)
-
-    log_mensagem(f"📦 Banco carregado: {len(banco_raw)} licitações")
-
-    banco_dict = {item['id']: item for item in banco_raw}
-    session = criar_sessao()
-
-    # Identificar licitações que precisam de atualização
-    alvos = [lid for lid, d in banco_dict.items() if precisa_atualizar(d)]
-
-    if not alvos:
-        log_mensagem("ℹ️ Não há licitações pendentes de atualização.")
-        exit(0)
-
-    log_mensagem(f"🔍 {len(alvos)} licitações selecionadas para atualização")
-
-    relatorio_final = []
-    lic_atualizadas = 0
-    itens_homologados = 0
-    situacoes_alteradas = 0
-
-    # Processamento paralelo
-    with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
-        futuros = {exe.submit(atualizar_licitacao_completa, lid, banco_dict[lid], session): lid for lid in alvos}
-
-        for f in concurrent.futures.as_completed(futuros):
-            lid = futuros[f]
+        while True:
             try:
-                res_dados, res_mudancas, houve_mudanca = f.result()
+                r = session.get(url, params={
+                    'dataInicial': dia,
+                    'dataFinal': dia,
+                    'codigoModalidadeContratacao': 6,
+                    'pagina': pag,
+                    'tamanhoPagina': 50
+                }, timeout=30)
 
-                if houve_mudanca and res_dados:
-                    banco_dict[res_dados['id']] = res_dados
-                    lic_atualizadas += 1
+                if r.status_code != 200:
+                    print(f"   ⚠️ Erro critico HTTP {r.status_code}. Salvando checkpoint.")
+                    salvar_checkpoint(dia, pag)
+                    break
 
-                    # Contar tipos de mudança
-                    for m in res_mudancas:
-                        if m['tipo'] == 'ITEM_HOMOLOGADO':
-                            itens_homologados += 1
-                        elif m['tipo'] == 'SITUACAO_GLOBAL':
-                            situacoes_alteradas += 1
+                dados = r.json()
+                lics = dados.get('data', [])
+                if not lics:
+                    break
 
-                    relatorio_final.extend(res_mudancas)
+                tot_pag = dados.get('totalPaginas', 1)
+                s_pag = {'vetados': 0, 'capturados': 0, 'itens': 0, 'ignorados': 0, 'erros': 0}
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
+                    futuros = [exe.submit(processar_licitacao, l, session) for l in lics]
+                    for f in concurrent.futures.as_completed(futuros):
+                        st, d, i_qtd, _ = f.result()
+                        if st == 'CAPTURADO' and d:
+                            s_pag['capturados'] += 1
+                            s_pag['itens'] += i_qtd
+                            banco[f"{d['id'][:14]}_{d['edit']}"] = d
+                        elif st == 'VETADO':
+                            s_pag['vetados'] += 1
+                        elif st == 'IGNORADO':
+                            s_pag['ignorados'] += 1
+                        elif st == 'ERRO':
+                            s_pag['erros'] += 1
+
+                for k in stats:
+                    stats[k] += s_pag[k]
+
+                print(f"   📄 Pag {pag}/{tot_pag}: 🎯 {s_pag['capturados']} Caps | 🚫 {s_pag['vetados']} Vets | ⚪ {s_pag['ignorados']} Ign | 🔥 {s_pag['erros']} Erros")
+
+                salvar_checkpoint(dia, pag + 1)
+
+                if pag >= tot_pag:
+                    salvar_checkpoint((dia_obj + timedelta(days=1)).strftime('%Y%m%d'), 1)
+                    break
+                pag += 1
 
             except Exception as e:
-                log_mensagem(f"   ❌ Falha no processamento de {lid}: {e}")
+                print(f"   ⚠️ Falha na pagina {pag}: {e}. Salvando checkpoint.")
+                salvar_checkpoint(dia, pag)
+                break
 
-    # Salvar banco atualizado
-    with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
-        json.dump(list(banco_dict.values()), f, ensure_ascii=False)
+    return stats
 
-    log_mensagem(f"💾 Banco salvo: {len(banco_dict)} licitações")
-    log_mensagem(f"📊 Resumo: {lic_atualizadas} licitações modificadas")
-    log_mensagem(f"   - {itens_homologados} itens homologados")
-    log_mensagem(f"   - {situacoes_alteradas} situações globais alteradas")
+if __name__ == '__main__':
+    if os.path.exists(ARQ_LOCK):
+        print("🔒 Execucao ja em andamento. Saindo.")
+        sys.exit(0)
 
-    # Gerar relatório CSV
-    if relatorio_final:
-        keys = relatorio_final[0].keys()
-        with open(ARQ_RELATORIO, 'w', newline='', encoding='utf-8-sig') as f:
-            dict_writer = csv.DictWriter(f, fieldnames=keys, delimiter=';')
-            dict_writer.writeheader()
-            dict_writer.writerows(relatorio_final)
-        log_mensagem(f"📁 Relatório CSV gerado: {ARQ_RELATORIO} ({len(relatorio_final)} registros)")
-    else:
-        log_mensagem("ℹ️ Nenhuma alteração significativa detectada.")
+    with open(ARQ_LOCK, 'w') as f:
+        f.write("lock")
 
-    log_mensagem("✅ Atualização concluída!")
+    try:
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--start', type=str)
+        parser.add_argument('--end', type=str)
+        args = parser.parse_args()
+
+        dt_start = datetime.strptime(args.start, '%Y-%m-%d').date() if args.start else date.today() - timedelta(days=15)
+        dt_end = datetime.strptime(args.end, '%Y-%m-%d').date() if args.end else date.today()
+
+        print(f"🚀 Sniper Pharma v22.2 - Periodo: {dt_start} a {dt_end}")
+
+        session = criar_sessao()
+        banco = {}
+
+        if os.path.exists(ARQDADOS):
+            try:
+                with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
+                    dados_existentes = json.load(f)
+                    for x in dados_existentes:
+                        chave = f"{x.get('id', '')[:14]}_{x.get('edit', '')}"
+                        banco[chave] = x
+                print(f"📦 Banco carregado: {len(banco)} licitacoes")
+            except Exception as e:
+                print(f"⚠️ Erro ao carregar banco: {e}")
+
+        stats = buscar_periodo(session, banco, dt_start, dt_end)
+        print(f"\n📊 Resumo busca: 🎯 {stats['capturados']} | 🚫 {stats['vetados']} | ⚪ {stats['ignorados']} | 🔥 {stats['erros']}")
+
+        stats_manual = processar_links_manuais(session, banco)
+
+        print("\n💾 Salvando banco de dados...")
+        with gzip.open(ARQ_TEMP, 'wt', encoding='utf-8') as f:
+            json.dump(list(banco.values()), f, ensure_ascii=False)
+
+        if os.path.exists(ARQ_TEMP):
+            os.replace(ARQ_TEMP, ARQDADOS)
+            if os.path.exists(ARQ_CHECKPOINT):
+                os.remove(ARQ_CHECKPOINT)
+            print(f"✅ Banco atualizado: {len(banco)} licitacoes totais")
+
+    finally:
+        if os.path.exists(ARQ_LOCK):
+            os.remove(ARQ_LOCK)
