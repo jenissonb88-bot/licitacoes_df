@@ -1,10 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-ATUALIZAÇÃO DE LICITAÇÕES PNCP
-Atualiza status e resultados de licitações já capturadas
-"""
-
 import requests
 import json
 import gzip
