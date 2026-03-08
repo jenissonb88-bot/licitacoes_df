@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+ATUALIZAÇÃO DE LICITAÇÕES PNCP
+Atualiza status e resultados de licitações já capturadas
+"""
+
 import requests
 import json
 import gzip
@@ -31,8 +38,7 @@ def log_mensagem(msg):
     linha = f"[{timestamp}] {msg}"
     print(linha)
     with open(ARQ_LOG, 'a', encoding='utf-8') as f:
-        f.write(linha + '
-')
+        f.write(linha + chr(10))  # chr(10) = \n
 
 def extrair_dados_do_id(lid):
     """
