@@ -1,99 +1,71 @@
-name: Sniper Pharma (Auditor de Resultados)
-
-concurrency:
-  group: banco-dados-pharma
-  cancel-in-progress: false
+name: Auditoria de Licitações
 
 on:
   schedule:
-    - cron: '0 15,21 * * *'  # 15:00 e 21:00 UTC (12:00 e 18:00 Brasília)
+    - cron: '0 */6 * * *'  # A cada 6 horas
   workflow_dispatch:
 
 jobs:
-  auditoria:
+  auditar:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      actions: write
+
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+    - name: Checkout
+      uses: actions/checkout@v4
 
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
-    - name: Install deps
+    - name: Instalar dependências
       run: |
-        pip install requests
-        pip install pandas  # NOVO: necessário para avalia_portfolio.py
+        pip install requests pandas rapidfuzz
 
-    - name: 🩺 Run Auditor (atualiza.py)
-      run: python atualiza.py
-
-    - name: 📊 Run Avaliação de Portfólio
-      if: always()  # Roda mesmo se atualiza.py falhar
-      run: python avalia_portfolio.py
-
-    - name: 💾 Commit Auditoria, Atualização e Avaliação
+    - name: Verificar integridade dos dados
       run: |
-        git config user.name "Sniper Pharma Auditor"
-        git config user.email "auditor@pharma.bot"
+        python -c "
+        import json
+        import gzip
+        from pathlib import Path
 
-        # Adiciona todos os arquivos de dados
-        git add pregacoes_pharma_limpos.json.gz || true
-        git add relatorio_atualizacoes.csv || true
-        git add relatorio_compatibilidade.csv || true
-        git add log_avaliacao.txt || true
-        git add log_atualizacao.txt || true
+        arquivos = list(Path('.').glob('licitacoes_*.json.gz'))
+        print(f'Arquivos encontrados: {len(arquivos)}')
 
-        # Só commita se houver mudanças
-        if ! git diff --staged --quiet; then
-          git commit -m "Auditoria: $(date +'%Y-%m-%d %H:%M') - Atualização e Avaliação de Portfólio"
-          git pull origin main --rebase -X theirs || true
-          git push origin main || true
-        else
-          echo "ℹ️ Nenhuma mudança para commitar"
-        fi
+        for arq in arquivos[-5:]:  # Últimos 5
+            try:
+                with gzip.open(arq, 'rt', encoding='utf-8') as f:
+                    dados = json.load(f)
+                print(f'✅ {arq}: {len(dados)} registros')
+            except Exception as e:
+                print(f'❌ {arq}: {e}')
+        "
 
-    - name: 📁 Upload Relatórios como Artefatos
-      if: always()
+    - name: Gerar estatísticas
+      run: |
+        python -c "
+        import pandas as pd
+        from pathlib import Path
+        import gzip
+        import json
+
+        # Carregar relatório mais recente
+        relatorios = sorted(Path('.').glob('relatorio_compatibilidade_v3_*.csv'))
+        if relatorios:
+            df = pd.read_csv(relatorios[-1])
+            print('\n📊 Estatísticas do último processamento:')
+            print(f'Total de matches: {len(df)}')
+            print(f'\nPor tipo de match:')
+            print(df['tipo_match'].value_counts())
+            print(f'\nTop 10 itens mais compatíveis:')
+            print(df.nlargest(10, 'score')[['item_portfolio_id', 'score']])
+        else:
+            print('Nenhum relatório v3 encontrado')
+        "
+
+    - name: Upload de artefatos
       uses: actions/upload-artifact@v4
       with:
-        name: relatorios-auditoria-${{ github.run_id }}
-        path: |
-          relatorio_atualizacoes.csv
-          relatorio_compatibilidade.csv
-          log_atualizacao.txt
-          log_avaliacao.txt
+        name: relatorios-compatibilidade
+        path: relatorio_compatibilidade_*.csv
         retention-days: 30
-        compression-level: 6
-
-    - name: 📋 Resumo da Execução
-      if: always()
-      run: |
-        echo "=========================================="
-        echo "  AUDITORIA E AVALIAÇÃO CONCLUÍDAS"
-        echo "=========================================="
-
-        # Resumo da atualização
-        if [ -f log_atualizacao.txt ]; then
-          echo ""
-          echo "🔄 ATUALIZAÇÃO:"
-          tail -n 5 log_atualizacao.txt
-        fi
-
-        # Resumo da avaliação
-        if [ -f log_avaliacao.txt ]; then
-          echo ""
-          echo "📊 AVALIAÇÃO DE PORTFÓLIO:"
-          tail -n 5 log_avaliacao.txt
-        fi
-
-        # Estatísticas dos relatórios
-        echo ""
-        echo "📁 ARQUIVOS GERADOS:"
-        [ -f relatorio_atualizacoes.csv ] && echo "   - Atualizações: $(wc -l < relatorio_atualizacoes.csv) linhas"
-        [ -f relatorio_compatibilidade.csv ] && echo "   - Compatibilidade: $(wc -l < relatorio_compatibilidade.csv) linhas"
