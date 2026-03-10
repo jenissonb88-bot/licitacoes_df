@@ -4,20 +4,21 @@ import os
 import sys
 import gzip
 import logging
+import csv  # ✅ ADICIONADO: Sempre necessário para relatório final
 from pathlib import Path
 from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from collections import defaultdict
 import numpy as np
 
-# Tentar importar pandas, senão usar csv nativo
+# Tentar importar pandas (opcional)
 try:
     import pandas as pd
     HAS_PANDAS = True
 except ImportError:
     HAS_PANDAS = False
-    import csv
 
+# Tentar importar rapidfuzz (opcional)  
 try:
     from rapidfuzz import fuzz, process
     HAS_RAPIDFUZZ = True
