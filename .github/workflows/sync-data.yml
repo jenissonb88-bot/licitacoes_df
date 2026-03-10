@@ -1,94 +1,117 @@
-name: Sincronização de Licitações PNCP
+name: Sniper Pharma (Captura)
+
+concurrency:
+  group: banco-dados-pharma
+  cancel-in-progress: false
 
 on:
   schedule:
-    - cron: '0 6 * * *'  # Executa diariamente às 6h
+    - cron: '0 9 * * *'  # Execução diária às 09:00 UTC (06:00 Brasília)
   workflow_dispatch:
     inputs:
-      data_inicio:
-        description: 'Data Inicial (YYYY-MM-DD) para varredura retroativa automática até hoje. Deixe em branco para rotina normal.'
+      mode:
+        description: 'Modo de Execução'
+        required: true
+        default: 'manual_loop'
+        type: choice
+        options:
+        - manual_loop
+        - single_run
+      target_date:
+        description: 'Data Alvo (YYYY-MM-DD)'
         required: false
-        type: string
-
-# GARANTIA CONTRA ATROPELAMENTO DE AÇÕES SIMULTÂNEAS
-concurrency:
-  group: "extracao-pncp"
-  cancel-in-progress: false # Espera a rotina atual terminar antes de iniciar outra
-
-env:
-  PYTHONUNBUFFERED: 1
+        default: '2026-01-01'
 
 jobs:
-  capturar-licitacoes:
+  extracao_e_limpeza:
     runs-on: ubuntu-latest
-    
     permissions:
       contents: write
-
+      actions: write
     steps:
-    - name: Checkout do código
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-        cache: 'pip'
 
-    - name: Instalar dependências
+    - name: Install deps
       run: |
-        python -m pip install --upgrade pip
-        pip install requests pandas rapidfuzz urllib3
+        pip install requests
+        pip install pandas  # NOVO: necessário para avalia_portfolio.py
 
-    - name: Configurar Git (Bot)
+    - name: Definir Datas e Modo
+      id: config
       run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-
-    - name: Executar Varredura (Automática e Retroativa)
-      env:
-        PNCP_API_TOKEN: ${{ secrets.PNCP_API_TOKEN }}
-      run: |
-        DATA_INICIO="${{ github.event.inputs.data_inicio }}"
-        
-        if [ -z "$DATA_INICIO" ]; then
-          echo "▶️ MODO PADRÃO: Iniciando a Execução Diária Automática"
-          
-          # Executa sem parâmetros de data (o app.py usará sua lógica padrão para o dia corrente)
-          python app.py
-          python limpeza.py
-          python avalia_portfolio.py
-          python atualiza.py
-          
-          git add -A
-          git diff --quiet && git diff --staged --quiet || git commit -m "Atualização diária: $(date +%Y-%m-%d)"
-          git push origin HEAD:main
-          
+        export TZ="America/Sao_Paulo"
+        TODAY=$(date +'%Y-%m-%d')
+        if [ "${{ github.event_name }}" == "schedule" ]; then
+            # Varredura automática: recua 6 dias para compensar atrasos do PNCP
+            echo "START_DATE=$(date -d '6 days ago' +'%Y-%m-%d')" >> $GITHUB_ENV
+            echo "END_DATE=$TODAY" >> $GITHUB_ENV
+            echo "MODE=single_run" >> $GITHUB_ENV
         else
-          echo "⏳ MODO RETROATIVO: Iniciando varredura em loop a partir de $DATA_INICIO até hoje"
-          DATA_ATUAL=$(date +%Y-%m-%d)
-          DATA_ALVO="$DATA_INICIO"
-          
-          # Loop: Roda um dia de cada vez, do início até à data atual
-          while [[ "$DATA_ALVO" < "$DATA_ATUAL" || "$DATA_ALVO" == "$DATA_ATUAL" ]]; do
-            echo "=========================================================="
-            echo "📅 Processando ciclo de dados exclusivo para a data: $DATA_ALVO"
-            echo "=========================================================="
-            
-            # Passa a data alvo tanto como início quanto como fim (isolando 24 horas)
-            python app.py --start "$DATA_ALVO" --end "$DATA_ALVO"
-            python limpeza.py
-            python avalia_portfolio.py
-            python atualiza.py
-            
-            # Commit individual apenas do dia processado
-            git add -A
-            git diff --quiet && git diff --staged --quiet || git commit -m "Varredura retroativa: $DATA_ALVO"
-            git push origin HEAD:main
-            
-            # Incrementa 1 dia para o próximo ciclo do loop
-            DATA_ALVO=$(date -I -d "$DATA_ALVO + 1 day")
-          done
-          
-          echo "✅ Varredura Retroativa em Loop Concluída com Sucesso!"
+            # Execução manual via interface
+            echo "START_DATE=${{ inputs.target_date }}" >> $GITHUB_ENV
+            echo "END_DATE=${{ inputs.target_date }}" >> $GITHUB_ENV
+            echo "MODE=${{ inputs.mode }}" >> $GITHUB_ENV
         fi
+
+    - name: 🚀 1. Run Core Crawler (app.py)
+      run: python app.py --start "$START_DATE" --end "$END_DATE"
+
+    - name: 🧹 2. Run Data Cleaner (limpeza.py)
+      run: python limpeza.py
+
+    - name: 📊 3. Run Avaliação de Portfólio (avalia_portfolio.py)
+      if: always()  # Roda mesmo se etapas anteriores falharem parcialmente
+      run: python avalia_portfolio.py
+
+    - name: 💾 Commit Extração, Limpeza e Avaliação
+      run: |
+        git config user.name "Sniper Pharma Bot"
+        git config user.email "sniper@pharma.bot"
+
+        # Adiciona todos os arquivos
+        git add dadosoportunidades.json.gz || true
+        git add pregacoes_pharma_limpos.json.gz || true
+        git add links_manuais.txt || true
+        git add relatorio_compatibilidade.csv || true
+        git add log_avaliacao.txt || true
+
+        # Só commita se houver mudanças
+        if ! git diff --staged --quiet; then
+          git commit -m "Captura, Limpeza e Avaliação: $START_DATE"
+          git pull origin main --rebase -X theirs || true
+          git push origin main || true
+        else
+          echo "ℹ️ Nenhuma mudança para commitar"
+        fi
+
+    - name: 🔁 Trigger Próximo Dia (Loop)
+      if: env.MODE == 'manual_loop'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        NEXT_DAY=$(date -d "$START_DATE + 1 day" +'%Y-%m-%d')
+        TODAY=$(date +'%Y-%m-%d')
+
+        if [[ "$NEXT_DAY" < "$TODAY" ]] || [[ "$NEXT_DAY" == "$TODAY" ]]; then
+           echo "🚀 Disparando o robô para o dia $NEXT_DAY..."
+           gh workflow run "Sniper Pharma (Captura)" -f mode="manual_loop" -f target_date="$NEXT_DAY"
+        else
+           echo "🏁 Loop finalizado. O robô alcançou o dia de hoje."
+        fi
+
+    - name: 📁 Upload Relatórios
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: captura-e-avaliacao-${{ github.run_id }}
+        path: |
+          relatorio_compatibilidade.csv
+          log_avaliacao.txt
+        retention-days: 30
