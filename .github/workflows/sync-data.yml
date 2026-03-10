@@ -3,7 +3,17 @@ name: Sincronização de Licitações PNCP
 on:
   schedule:
     - cron: '0 6 * * *'  # Executa diariamente às 6h
-  workflow_dispatch:  # Permite execução manual
+  workflow_dispatch:
+    inputs:
+      data_inicio:
+        description: 'Data Inicial (YYYY-MM-DD) para varredura retroativa. Deixe em branco para rotina normal.'
+        required: false
+        type: string
+
+# GARANTIA CONTRA ATROPELAMENTO DE AÇÕES
+concurrency:
+  group: "extracao-pncp"
+  cancel-in-progress: false # Espera a rotina atual terminar antes de iniciar outra
 
 env:
   PYTHONUNBUFFERED: 1
@@ -11,6 +21,9 @@ env:
 jobs:
   capturar-licitacoes:
     runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout do código
@@ -20,29 +33,61 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
+        cache: 'pip'
 
     - name: Instalar dependências
       run: |
-        pip install requests pandas rapidfuzz
+        python -m pip install --upgrade pip
+        pip install requests pandas rapidfuzz urllib3
 
-    - name: Executar captura (app.py)
-      run: python app.py
-      env:
-        PNCP_API_TOKEN: ${{ secrets.PNCP_API_TOKEN }}
-
-    - name: Executar limpeza
-      run: python limpeza.py
-
-    - name: Avaliar portfólio (v3 - Híbrido)
-      run: python avalia_portfolio.py
-
-    - name: Atualizar status
-      run: python atualiza.py
-
-    - name: Commit e push dos resultados
+    - name: Configurar Git (Bot)
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add -A
-        git diff --quiet && git diff --staged --quiet || git commit -m "Atualização diária: $(date +%Y-%m-%d)"
-        git push
+
+    - name: Executar Varredura (Rotina Dinâmica)
+      env:
+        PNCP_API_TOKEN: ${{ secrets.PNCP_API_TOKEN }}
+      run: |
+        DATA_INICIO="${{ github.event.inputs.data_inicio }}"
+        
+        if [ -z "$DATA_INICIO" ]; then
+          echo "▶️ MODO PADRÃO: Execução Diária"
+          # Executa sem parâmetros de data (o app.py usará sua lógica padrão)
+          python app.py
+          python limpeza.py
+          python avalia_portfolio.py
+          python atualiza.py
+          
+          git add -A
+          git diff --quiet && git diff --staged --quiet || git commit -m "Atualização diária: $(date +%Y-%m-%d)"
+          git push origin HEAD:main
+          
+        else
+          echo "⏳ MODO RETROATIVO: Iniciando varredura a partir de $DATA_INICIO"
+          DATA_ATUAL=$(date +%Y-%m-%d)
+          DATA_ALVO="$DATA_INICIO"
+          
+          # Loop: Roda um dia de cada vez, do início até hoje
+          while [[ "$DATA_ALVO" < "$DATA_ATUAL" || "$DATA_ALVO" == "$DATA_ATUAL" ]]; do
+            echo "=========================================================="
+            echo "📅 Processando ciclo de dados para a data: $DATA_ALVO"
+            echo "=========================================================="
+            
+            # Passa a data específica para o app.py (ajuste as flags se o seu script usar nomes diferentes)
+            python app.py --start "$DATA_ALVO" --end "$DATA_ALVO"
+            python limpeza.py
+            python avalia_portfolio.py
+            python atualiza.py
+            
+            # Commit individual do dia processado
+            git add -A
+            git diff --quiet && git diff --staged --quiet || git commit -m "Varredura retroativa: $DATA_ALVO"
+            git push origin HEAD:main
+            
+            # Soma 1 dia à data alvo para o próximo ciclo do loop
+            DATA_ALVO=$(date -I -d "$DATA_ALVO + 1 day")
+          done
+          
+          echo "✅ Varredura Retroativa Concluída com Sucesso!"
+        fi
