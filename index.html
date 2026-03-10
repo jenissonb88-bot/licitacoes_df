@@ -5,11 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sniper Pharma - Painel de Licitações</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
     <style>
         :root { --blue-df: #004a99; --green-df: #198754; --red-df: #dc3545; --yellow-df: #ffc107; }
         body { background-color: #f0f2f5; font-family: 'Segoe UI', system-ui, sans-serif; color: #333; font-size: 0.92rem; }
-
+        
         .header-card { 
             background: linear-gradient(90deg, #002d5a 0%, #004a99 100%); 
             color: white; padding: 12px 20px; border-radius: 10px 10px 0 0; font-size: 1.05rem;
@@ -18,19 +17,55 @@
         .header-bold { font-weight: 700; }
         .badge-uf-header { background-color: #000; color: #fff; font-weight: 800; padding: 2px 8px; border-radius: 4px; margin-right: 5px; }
 
-        .card-licitacao { border-radius: 10px; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; overflow: hidden; background: white; }
+        .compat-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            margin-right: 8px;
+            border: 1px solid rgba(255,255,255,0.4);
+        }
+        .compat-alta { background: #28a745; color: white; }
+        .compat-media { background: #ffc107; color: #212529; }
+        .compat-baixa { background: #dc3545; color: white; }
+        .compat-na { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.6); }
+
+        .item-compativel {
+            background-color: #d4edda !important;
+            font-weight: 700 !important;
+            border-left: 4px solid #28a745 !important;
+        }
+        .item-compativel td { color: #155724 !important; font-weight: 700 !important; }
+
+        .benef-sim { color: var(--red-df) !important; font-weight: bold !important; }
+        .benef-nao { color: var(--green-df) !important; font-weight: bold !important; }
+
+        .badge-tipo { font-weight: 800; padding: 5px 10px; border-radius: 4px; font-size: 0.75rem; letter-spacing: 0.5px; display: inline-flex; align-items: center; }
+        .badge-amplo { background-color: var(--green-df); color: white; }
+        .badge-exclusivo { background-color: var(--red-df); color: white; }
+        .badge-parcial { background-color: var(--yellow-df); color: #212529; }
+
+        .card-licitacao { border-radius: 10px; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; overflow: hidden; }
         .filter-box { background: white; padding: 15px; border-radius: 10px; border: 1px solid #e0e6ed; margin-bottom: 20px; }
         .filter-label { font-size: 0.65rem; font-weight: 800; color: var(--blue-df); margin-bottom: 2px; display: block; text-transform: uppercase; }
-
-        .table-itens { font-size: 0.82em; margin-bottom: 0; }
+        
+        .table-itens { font-size: 0.82em; }
+        .val-estimado { background-color: #fffdf2; }
+        .val-homologado { background-color: #f2f7ff; }
         .header-fornecedor { background-color: #f8f9fa; color: var(--blue-df); font-weight: bold; }
         .header-status-andamento { background-color: #fff9db; font-weight: bold; color: #856404; text-align: center; }
         .header-status-deserto { background-color: #f8d7da; font-weight: bold; color: #721c24; text-align: center; }
         .header-status-cancelado { background-color: #e2e3e5; font-weight: bold; color: #383d41; text-align: center; }
-
+        
         .pagination-container { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 20px; padding-bottom: 40px; flex-wrap: wrap; }
-        .page-info-text { font-size: 0.875rem; color: #666; font-weight: 600; }
-
+        .page-input { width: 60px; text-align: center; padding: 4px 8px; border: 1px solid #004a99; border-radius: 4px; font-size: 0.875rem; font-weight: 600; }
+        .btn-go { background: #004a99; color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 0.875rem; font-weight: 600; cursor: pointer; }
+        .btn-go:hover { background: #003366; }
+        .page-info-text { font-size: 0.875rem; color: #666; }
+        
         .btn-excluir { font-size: 0.7rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 2px 8px; border-radius: 4px; cursor: pointer; }
         .btn-excluir:hover { background: var(--red-df); border-color: var(--red-df); }
     </style>
@@ -45,10 +80,14 @@
         </div>
         <button class="btn btn-success fw-bold" onclick="abrirInclusaoManual()">+ Inclusão Manual (PNCP)</button>
     </div>
-
+    
     <div class="filter-box shadow-sm">
         <div class="row g-2">
             <div class="col-md-2">
+                <label class="filter-label">DATA ENCERRAMENTO</label>
+                <input type="date" id="filterData" class="form-control form-control-sm" onchange="filtrar()">
+            </div>
+            <div class="col-md-1">
                 <label class="filter-label">UF</label>
                 <input type="text" id="filterUF" class="form-control form-control-sm" placeholder="Ex: PE" oninput="filtrar()">
             </div>
@@ -60,309 +99,449 @@
                 <label class="filter-label">ÓRGÃO / CÓDIGO</label>
                 <input type="text" id="filterOrgao" class="form-control form-control-sm" placeholder="Nome ou UASG" oninput="filtrar()">
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="filter-label">Nº EDITAL</label>
                 <input type="text" id="filterEdital" class="form-control form-control-sm" placeholder="00000/2026" oninput="filtrar()">
             </div>
-            <div class="col-md-2 d-flex align-items-end gap-2">
-                <button class="btn btn-sm btn-primary w-100 fw-bold" onclick="filtrar()">BUSCAR</button>
-                <button class="btn btn-sm btn-outline-secondary w-100 fw-bold" onclick="limparFiltros()">LIMPAR</button>
+            <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-sm btn-outline-secondary w-100 fw-bold" onclick="limparFiltros()">LIMPAR FILTROS</button>
             </div>
         </div>
     </div>
 
-    <div id="loading" class="text-center py-4" style="display: none;">
-        <div class="spinner-border text-primary" role="status"></div>
-        <div class="mt-2 fw-bold text-primary">A carregar oportunidades...</div>
+    <div id="monitor-content">
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Carregando...</span>
+            </div>
+            <p class="mt-2 text-muted">Carregando licitações...</p>
+        </div>
     </div>
-    
-    <div id="monitorContainer"></div>
 
-    <div class="pagination-container" id="pagination">
-        <button class="btn btn-outline-primary btn-sm fw-bold" onclick="mudarPagina(-1)">Anterior</button>
-        <span class="page-info-text" id="pageInfo">Página 1 de 1</span>
-        <button class="btn btn-outline-primary btn-sm fw-bold" onclick="mudarPagina(1)">Próxima</button>
+    <div class="pagination-container">
+        <button class="btn btn-sm btn-outline-primary px-3" id="prevPage">Anterior</button>
+        <span class="page-info-text">Página</span>
+        <input type="number" id="pageInput" class="page-input" min="1" value="1" onkeypress="if(event.key==='Enter')irParaPagina()">
+        <span class="page-info-text">de <span id="totalPages">1</span></span>
+        <button class="btn-go" onclick="irParaPagina()">Ir</button>
+        <button class="btn btn-sm btn-outline-primary px-3" id="nextPage">Próxima</button>
     </div>
 </div>
 
-<script>
-    let dadosCompletos = [];
-    let dadosFiltrados = [];
-    let compatibilidadeData = {};
-    let paginaAtual = 1;
-    const itensPorPagina = 20;
+<div class="modal fade" id="modalDetalhes" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
+            <div class="modal-header header-card py-2">
+                <h6 class="modal-title fw-bold" id="modalTitle">Itens da Licitação</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3" id="modalBody"></div>
+            <div class="modal-footer bg-light border-0 py-2">
+                <a id="linkPncp" href="#" target="_blank" class="btn btn-sm btn-primary px-4 fw-bold">VER NO PNCP</a>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">FECHAR</button>
+            </div>
+        </div>
+    </div>
+</div>
 
-    // --- MÓDULO DE COMPATIBILIDADE PORTFÓLIO ---
-    async function carregarCompatibilidade() {
-        try {
-            const response = await fetch('compatibilidade_latest.csv');
-            if (!response.ok) {
-                console.warn('CSV de compatibilidade não encontrado.');
-                return;
-            }
-            const csvText = await response.text();
-            
-            Papa.parse(csvText, {
-                header: true,
-                skipEmptyLines: true,
-                complete: function(results) {
-                    results.data.forEach(row => {
-                        const id = row.licitacao_id;
-                        if (!compatibilidadeData[id]) {
-                            compatibilidadeData[id] = [];
-                        }
-                        compatibilidadeData[id].push(row);
-                    });
-                    console.log("✅ Compatibilidade Carregada. Matches encontrados:", Object.keys(compatibilidadeData).length);
-                }
-            });
-        } catch (error) {
-            console.warn("⚠️ Módulo de compatibilidade ignorado:", error.message);
-        }
-    }
-
-    function gerarHtmlCompatibilidade(licitacaoId) {
-        const matches = compatibilidadeData[licitacaoId];
-        if (!matches || matches.length === 0) return ''; 
-
-        let html = `<div class="mt-3 p-3 border rounded shadow-sm" style="background-color: #eaf4fb; border-color: #b8daff !important;">
-                        <h6 class="text-primary mb-2 fw-bold">🎯 Oportunidades Encontradas no Portfólio</h6>
-                        <div class="table-responsive">
-                            <table class="table table-sm table-bordered mb-0 bg-white text-center align-middle" style="font-size: 0.85rem;">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Cód. Produto</th>
-                                        <th class="text-start">Descrição no Catálogo</th>
-                                        <th>Grau de Match</th>
-                                        <th>Classificação</th>
-                                    </tr>
-                                </thead>
-                                <tbody>`;
-        
-        matches.forEach(m => {
-            let badgeClass = m.tipo_match === 'ALTO' ? 'bg-success' : 'bg-warning text-dark';
-            html += `<tr>
-                        <td><strong>${m.item_portfolio_id}</strong></td>
-                        <td class="text-start text-dark fw-semibold">${m.descricao_portfolio}</td>
-                        <td><strong>${m.score}</strong></td>
-                        <td><span class="badge ${badgeClass}">${m.tipo_match}</span></td>
-                     </tr>`;
-        });
-
-        html += `       </tbody>
-                    </table>
-                    </div>
-                </div>`;
-        return html;
-    }
-
-    // --- MÓDULO DE CARREGAMENTO E RENDERIZAÇÃO ---
-    async function iniciarPainel() {
-        document.getElementById('loading').style.display = 'block';
-        document.getElementById('monitorContainer').style.display = 'none';
-
-        await carregarCompatibilidade();
-
-        try {
-            // Busca o JSON da sua automação (Ajuste o nome do ficheiro se necessário)
-            const response = await fetch('dados_painel_final_latest.json');
-            if (response.ok) {
-                const json = await response.json();
-                dadosCompletos = json.licitacoes || json; // Aceita tanto array direto quanto objeto aninhado
-            } else {
-                console.warn("A usar ficheiro de fallback (pregacoes_pharma_limpos)...");
-                // Fallback para o ficheiro limpo
-                const fallbackResponse = await fetch('pregacoes_pharma_limpos.json');
-                dadosCompletos = await fallbackResponse.json();
-            }
-        } catch (error) {
-            console.error("Erro ao carregar dados:", error);
-            document.getElementById('monitorContainer').innerHTML = `<div class="alert alert-danger">Falha ao carregar os dados. Verifique se os ficheiros JSON existem.</div>`;
-        }
-
-        document.getElementById('loading').style.display = 'none';
-        document.getElementById('monitorContainer').style.display = 'block';
-        limparFiltros(); // Inicializa a filtragem e a renderização
-    }
-
-    function renderizarTabelaItens(itens) {
-        if (!itens || itens.length === 0) return `<div class="text-muted small mt-2">Nenhum item detalhado disponível.</div>`;
-
-        const andamento = [], desertos = [], cancelados = [], gruposHomologados = {};
-
-        itens.forEach(it => {
-            if (it.status_item === "HOMOLOGADO" && it.fornecedor_vencedor) {
-                if (!gruposHomologados[it.fornecedor_vencedor]) gruposHomologados[it.fornecedor_vencedor] = [];
-                gruposHomologados[it.fornecedor_vencedor].push(it);
-            } else if (it.status_item === "CANCELADO" || it.status_item === "ANULADO") {
-                cancelados.push(it);
-            } else if (it.status_item === "DESERTO" || it.status_item === "FRACASSADO") {
-                desertos.push(it);
-            } else {
-                andamento.push(it);
-            }
-        });
-
-        let html = `<div class="table-responsive mt-3"><table class="table table-sm table-bordered table-itens">`;
-        html += `<thead class="table-dark text-center"><tr><th>Item</th><th class="text-start">Descrição</th><th>Situação</th><th>Valor Final</th></tr></thead><tbody>`;
-
-        // Itens Homologados Agrupados por Fornecedor
-        for (const [fornecedor, lista] of Object.entries(gruposHomologados)) {
-            html += `<tr><td colspan="4" class="header-fornecedor">🏆 Fornecedor: ${fornecedor}</td></tr>`;
-            lista.forEach(it => {
-                html += `<tr>
-                    <td class="text-center"><strong>${it.numero_item}</strong></td>
-                    <td>${it.descricao || '---'}</td>
-                    <td class="text-center"><span class="badge bg-success">HOMOLOGADO</span></td>
-                    <td class="text-center text-success fw-bold">R$ ${it.valor_final || '---'}</td>
-                </tr>`;
-            });
-        }
-
-        // Itens em Andamento
-        if (andamento.length > 0) {
-            html += `<tr><td colspan="4" class="header-status-andamento">⏳ Em Andamento / Divulgado</td></tr>`;
-            andamento.forEach(it => html += renderLinhaPadrao(it, "bg-warning text-dark", "ANDAMENTO"));
-        }
-
-        // Itens Desertos
-        if (desertos.length > 0) {
-            html += `<tr><td colspan="4" class="header-status-deserto">⚠️ Desertos / Fracassados</td></tr>`;
-            desertos.forEach(it => html += renderLinhaPadrao(it, "bg-danger", "DESERTO"));
-        }
-
-        // Itens Cancelados
-        if (cancelados.length > 0) {
-            html += `<tr><td colspan="4" class="header-status-cancelado">🚫 Cancelados / Anulados</td></tr>`;
-            cancelados.forEach(it => html += renderLinhaPadrao(it, "bg-secondary", "CANCELADO"));
-        }
-
-        html += `</tbody></table></div>`;
-        return html;
-    }
-
-    function renderLinhaPadrao(it, badgeClass, label) {
-        return `<tr>
-            <td class="text-center"><strong>${it.numero_item || it.numeroItem || '-'}</strong></td>
-            <td>${it.descricao || '---'}</td>
-            <td class="text-center"><span class="badge ${badgeClass}">${label}</span></td>
-            <td class="text-center text-muted">Est. R$ ${it.valor_estimado || '---'}</td>
-        </tr>`;
-    }
-
-    function renderizarPainel() {
-        const container = document.getElementById('monitorContainer');
-        container.innerHTML = '';
-
-        const inicio = (paginaAtual - 1) * itensPorPagina;
-        const fim = inicio + itensPorPagina;
-        const paginaDados = dadosFiltrados.slice(inicio, fim);
-
-        if (paginaDados.length === 0) {
-            container.innerHTML = `<div class="alert alert-info text-center mt-4">Nenhuma licitação encontrada para os filtros atuais.</div>`;
-            document.getElementById('pageInfo').innerText = `Página 0 de 0`;
-            return;
-        }
-
-        paginaDados.forEach(lic => {
-            // Compatibilidade com chaves diferentes (dados brutos vs dados do atualiza.py)
-            const idLicitacao = lic.chave || (lic.id + '_' + lic.edit);
-            
-            const card = document.createElement('div');
-            card.className = 'card-licitacao';
-            
-            card.innerHTML = `
-                <div class="header-card"> 
-                    <div> 
-                        <span class="badge-uf-header">${lic.uf || 'BR'}</span> 
-                        <span class="header-bold">${lic.org || lic.orgao_nome || 'Órgão não informado'}</span> 
-                        <span class="ms-2 opacity-75 small">| Edital: ${lic.edit || lic.numero_edital || idLicitacao}</span> 
-                    </div> 
-                    <button class="btn-excluir" onclick="excluirLicitacao('${idLicitacao}')">Ocultar</button> 
-                </div> 
-                <div class="card-body py-3 px-4"> 
-                    <div class="row"> 
-                        <div class="col-md-12"> 
-                            <small class="text-muted d-block mb-1">${lic.cid || lic.municipio || '---'} | Status Global: <span class="fw-bold">${lic.status_global || '---'}</span></small> 
-                            <h6 class="fw-bold mb-1" style="color: #212529;">${lic.obj || lic.objeto || 'Sem descrição do objeto'}</h6> 
-                            <div class="d-flex gap-2 mt-2"> 
-                                <span class="badge bg-secondary">Criado/Enc: ${lic.data_publicacao || lic.dt_enc || '---'}</span> 
-                                <span class="badge bg-light text-dark border">Valor Estimado: R$ ${lic.valor_total_estimado || lic.valor_estimado || '---'}</span> 
-                                ${lic.link_pncp ? `<a href="${lic.link_pncp}" target="_blank" class="badge bg-primary text-decoration-none">Ver no PNCP ↗</a>` : ''}
-                            </div> 
-                            
-                            ${gerarHtmlCompatibilidade(idLicitacao)}
-
-                            ${renderizarTabelaItens(lic.itens_atualizados || lic.itens)}
-                        </div> 
-                    </div> 
+<div class="modal fade" id="modalInclusao" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-dark text-white py-2">
+                <h6 class="modal-title fw-bold">➕ Incluir Novo Link no Repositório</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="filter-label">URL DA LICITAÇÃO NO PNCP</label>
+                    <input type="text" id="inputLinkPncp" class="form-control shadow-sm" placeholder="https://pncp.gov.br/app/editais/...">
                 </div>
-            `;
-            container.appendChild(card);
-        });
-
-        const totalPaginas = Math.ceil(dadosFiltrados.length / itensPorPagina);
-        document.getElementById('pageInfo').innerText = `Página ${paginaAtual} de ${totalPaginas}`;
-    }
-
-    // --- MÓDULOS DE CONTROLE E FILTROS ---
-    function filtrar() {
-        const uf = document.getElementById('filterUF').value.toUpperCase();
-        const cid = document.getElementById('filterCidade').value.toUpperCase();
-        const org = document.getElementById('filterOrgao').value.toUpperCase();
-        const edi = document.getElementById('filterEdital').value.toUpperCase();
-
-        dadosFiltrados = dadosCompletos.filter(lic => {
-            const matchUF = !(uf) || (lic.uf || '').toUpperCase().includes(uf);
-            const matchCid = !(cid) || (lic.cid || lic.municipio || '').toUpperCase().includes(cid);
-            const matchOrg = !(org) || (lic.org || lic.orgao_nome || '').toUpperCase().includes(org);
-            const matchEdi = !(edi) || (lic.edit || lic.numero_edital || '').toUpperCase().includes(edi);
-            
-            return matchUF && matchCid && matchOrg && matchEdi;
-        });
-
-        paginaAtual = 1;
-        renderizarPainel();
-    }
-
-    function limparFiltros() {
-        document.getElementById('filterUF').value = '';
-        document.getElementById('filterCidade').value = '';
-        document.getElementById('filterOrgao').value = '';
-        document.getElementById('filterEdital').value = '';
-        filtrar();
-    }
-
-    function mudarPagina(delta) {
-        const totalPaginas = Math.ceil(dadosFiltrados.length / itensPorPagina);
-        const novaPagina = paginaAtual + delta;
-        
-        if (novaPagina >= 1 && novaPagina <= totalPaginas) {
-            paginaAtual = novaPagina;
-            renderizarPainel();
-            window.scrollTo(0, 0);
-        }
-    }
-
-    function excluirLicitacao(id) {
-        if(confirm("Deseja realmente ocultar esta licitação?")) {
-            dadosCompletos = dadosCompletos.filter(lic => (lic.chave || lic.id + '_' + lic.edit) !== id);
-            filtrar();
-        }
-    }
-
-    function abrirInclusaoManual() {
-        const url = prompt("Cole aqui o link do PNCP da licitação que deseja incluir manualmente:");
-        if(url) {
-            alert("Aviso: O link foi registado. Na próxima execução do robô (GitHub Actions), esta licitação será puxada e aparecerá aqui no painel.");
-            // Aqui você pode adicionar a lógica de enviar o link para o github, caso tenha o token no front
-        }
-    }
-
-    // Boot
-    window.onload = iniciarPainel;
-</script>
+                <div class="mb-3">
+                    <label class="filter-label">GITHUB PERSONAL ACCESS TOKEN (PAT)</label>
+                    <input type="password" id="inputGithubToken" class="form-control shadow-sm" placeholder="ghp_xxxxxxxxxxxx">
+                    <div class="mt-1" style="font-size: 0.65rem; color: #666;">
+                        Necessário permissão 'repo' para salvar no arquivo <b>links_manuais.txt</b>.
+                    </div>
+                </div>
+                <div id="statusInclusao" class="mt-3 text-center fw-bold" style="font-size: 0.8rem;"></div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-success fw-bold px-4" onclick="processarInclusaoManual()">SALVAR NO GITHUB</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+let allData = [];
+let filteredData = [];
+let compatData = {};
+let currentPage = 1;
+let totalPages = 1;
+const itemsPerPage = 20;
+
+const GITHUB_OWNER = 'jenissonb88-bot';
+const GITHUB_REPO = 'licitacoes_df';
+const GITHUB_FILE_PATH = 'links_manuais.txt';
+
+const modalObj = new bootstrap.Modal(document.getElementById('modalDetalhes'));
+const modalInclusaoObj = new bootstrap.Modal(document.getElementById('modalInclusao'));
+
+async function loadCompatData() {
+    try {
+        const response = await fetch('relatorio_compatibilidade.csv');
+        if (!response.ok) return;
+        
+        const csvText = await response.text();
+        const lines = csvText.trim().split('\n');
+        if (lines.length < 2) return;
+        
+        const headers = lines[0].split(';').map(h => h.trim().replace(/^\uFEFF/, ''));
+        const colId = headers.indexOf('id');
+        const colPercentual = headers.indexOf('percentual');
+        const colConfianca = headers.indexOf('confianca');
+        const colMatches = headers.indexOf('principais_matches');
+        
+        for (let i = 1; i < lines.length; i++) {
+            const cols = lines[i].split(';');
+            if (cols.length >= 4) {
+                const id = colId >= 0 ? cols[colId] : cols[0];
+                const percentual = parseFloat(colPercentual >= 0 ? cols[colPercentual] : cols[3]) || 0;
+                const confianca = (colConfianca >= 0 ? cols[colConfianca] : cols[4]) || 'INCOMPATIVEL';
+                const matches = (colMatches >= 0 ? cols[colMatches] : '').split('|').filter(m => m);
+                
+                if (id) compatData[id] = { percentual, confianca: confianca.toUpperCase(), matches };
+            }
+        }
+    } catch (e) {
+        console.log('Erro compatibilidade:', e);
+    }
+}
+
+function getCompatBadgeHTML(licId) {
+    const compat = compatData[licId];
+    if (!compat || compat.percentual < 5) return '<span class="compat-badge compat-na">⚪ N/A</span>';
+    
+    const pct = compat.percentual.toFixed(1);
+    if (compat.percentual >= 60) return `<span class="compat-badge compat-alta">🟢 ${pct}%</span>`;
+    if (compat.percentual >= 20) return `<span class="compat-badge compat-media">🟡 ${pct}%</span>`;
+    return `<span class="compat-badge compat-baixa">🔴 ${pct}%</span>`;
+}
+
+async function loadData() {
+    try {
+        await loadCompatData();
+        
+        const response = await fetch('pregacoes_pharma_limpos.json.gz');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        if (typeof DecompressionStream === 'undefined') {
+            const fallbackResponse = await fetch('pregacoes_pharma_limpos.json');
+            if (fallbackResponse.ok) {
+                const text = await fallbackResponse.text();
+                allData = JSON.parse(text);
+            } else {
+                throw new Error('Browser não suporta descompressão e arquivo fallback não encontrado');
+            }
+        } else {
+            const ds = new DecompressionStream('gzip');
+            const decompressedStream = response.body.pipeThrough(ds);
+            const text = await new Response(decompressedStream).text();
+            allData = JSON.parse(text);
+        }
+        
+        if (!Array.isArray(allData)) {
+            const temp = [];
+            for (const orgao in allData) {
+                for (const edital in allData[orgao]) {
+                    const item = allData[orgao][edital];
+                    item.orgao = orgao;
+                    item.edital = edital;
+                    temp.push(item);
+                }
+            }
+            allData = temp;
+        }
+        
+        allData.sort((a, b) => new Date(b.dt_enc || 0) - new Date(a.dt_enc || 0));
+        
+        filteredData = [...allData];
+        renderMonitor();
+        
+    } catch (e) {
+        console.error('Erro:', e);
+        document.getElementById('monitor-content').innerHTML = `
+            <div class="alert alert-danger m-4">
+                <h4>❌ Erro ao carregar dados</h4>
+                <p>${e.message}</p>
+                <button class="btn btn-primary mt-2" onclick="location.reload()">🔄 Tentar Novamente</button>
+            </div>
+        `;
+    }
+}
+
+function renderMonitor() {
+    const container = document.getElementById('monitor-content');
+    container.innerHTML = '';
+    
+    const start = (currentPage - 1) * itemsPerPage;
+    const end = start + itemsPerPage;
+    const pageItems = filteredData.slice(start, end);
+
+    if (pageItems.length === 0) {
+        container.innerHTML = '<div class="text-center py-5 text-muted">Nenhuma licitação encontrada.</div>';
+        return;
+    }
+
+    pageItems.forEach(lic => {
+        const div = document.createElement('div');
+        div.className = 'card card-licitacao';
+        
+        const valorTotal = lic.val_tot > 0 
+            ? `R$ ${lic.val_tot.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` 
+            : 'Sigiloso/Não inf.';
+
+        let tipoLic = "AMPLO", cssTipo = "badge-amplo";
+        if (lic.itens?.length > 0) {
+            const todosExclusivos = lic.itens.every(it => [1, 2, 3].includes(parseInt(it.benef)));
+            const algumExclusivo = lic.itens.some(it => [1, 2, 3].includes(parseInt(it.benef)));
+            if (todosExclusivos) { tipoLic = "EXCLUSIVO"; cssTipo = "badge-exclusivo"; } 
+            else if (algumExclusivo) { tipoLic = "PARCIAL"; cssTipo = "badge-parcial"; }
+        }
+
+        let alertaGlobalHtml = '';
+        if (["REVOGADA", "ANULADA", "SUSPENSA"].includes(lic.sit_global)) {
+            alertaGlobalHtml = `<div style="color: #dc3545; font-weight: 900; font-size: 0.85rem; margin-top: 5px; text-transform: uppercase; border: 1px solid #dc3545; border-radius: 4px; padding: 2px;">⚠️ PROCESSO ${lic.sit_global}</div>`;
+        }
+
+        const compatBadge = getCompatBadgeHTML(lic.id);
+
+        div.innerHTML = ` 
+            <div class="header-card">
+                <div>
+                    <span class="badge-uf-header">${lic.uf || '??'}</span>
+                    <span class="header-bold">${lic.org || '---'}</span>
+                    <span class="ms-2 opacity-75 small">| Edital: ${lic.edit || lic.id || '---'}</span>
+                    ${compatBadge}
+                </div>
+                <button class="btn-excluir" onclick="excluirLicitacao('${lic.id}')">Excluir</button>
+            </div>
+            <div class="card-body py-3">
+                <div class="row align-items-center">
+                    <div class="col-md-8 border-end">
+                        <small class="text-muted d-block mb-1">${lic.cid || '---'} - ${lic.unid_nome || '---'}</small>
+                        <h6 class="fw-bold mb-2">${lic.obj || 'Sem descrição'}</h6>
+                        <div class="d-flex gap-2 mt-2">
+                            <span class="badge bg-secondary">UASG: ${lic.uasg || 'N/A'}</span>
+                            <span class="badge bg-info text-dark">Venc: ${lic.dt_enc ? new Date(lic.dt_enc).toLocaleString('pt-BR') : 'N/A'}</span>
+                            <span class="badge-tipo ${cssTipo}">${tipoLic}</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <small class="text-muted">VALOR ESTIMADO TOTAL</small>
+                        <h5 class="fw-bold text-primary mb-0">${valorTotal}</h5>
+                        ${alertaGlobalHtml}
+                        <div class="mt-3">
+                            <span class="badge bg-dark me-2">${lic.fonte || 'PNCP'}</span>
+                            <button class="btn btn-sm btn-primary px-4 fw-bold" onclick="abrirItens('${lic.id}')">DETALHAR ${lic.itens?.length || 0} ITENS</button>
+                        </div>
+                    </div>
+                </div>
+             </div>`;
+        container.appendChild(div);
+    });
+
+    totalPages = Math.ceil(filteredData.length / itemsPerPage) || 1;
+    document.getElementById('totalPages').textContent = totalPages;
+    document.getElementById('pageInput').value = currentPage;
+    document.getElementById('pageInput').max = totalPages;
+    
+    document.getElementById('prevPage').disabled = currentPage <= 1;
+    document.getElementById('nextPage').disabled = currentPage >= totalPages;
+}
+
+function irParaPagina() {
+    const input = document.getElementById('pageInput');
+    let pagina = parseInt(input.value) || 1;
+    if (pagina < 1) pagina = 1;
+    if (pagina > totalPages) pagina = totalPages;
+    
+    currentPage = pagina;
+    renderMonitor();
+    window.scrollTo(0, 0);
+}
+
+function filtrar() {
+    const dataEnc = document.getElementById('filterData').value;
+    const uf = document.getElementById('filterUF').value.toUpperCase();
+    const cid = document.getElementById('filterCidade').value.toUpperCase();
+    const org = document.getElementById('filterOrgao').value.toUpperCase();
+    const edt = document.getElementById('filterEdital').value.toUpperCase();
+
+    filteredData = allData.filter(lic => {
+        const dataLic = lic.dt_enc ? lic.dt_enc.split('T')[0] : '';
+        return (!dataEnc || dataLic === dataEnc) &&
+               (!uf || (lic.uf || '').toUpperCase().includes(uf)) &&
+               (!cid || (lic.cid || '').toUpperCase().includes(cid)) &&
+               (!org || (lic.org || '').toUpperCase().includes(org) || (lic.uasg || '').includes(org)) &&
+               (!edt || (lic.edit || lic.id || '').toUpperCase().includes(edt));
+    });
+    
+    currentPage = 1;
+    renderMonitor();
+}
+
+function limparFiltros() {
+    document.querySelectorAll('input').forEach(i => i.value = '');
+    filteredData = [...allData];
+    currentPage = 1;
+    renderMonitor();
+}
+
+function abrirItens(id) {
+    const lic = allData.find(x => x.id === id);
+    if (!lic) return;
+    
+    document.getElementById('modalTitle').innerText = `Itens: ${lic.org || '---'} (Edital ${lic.edit || '---'})`;
+    document.getElementById('linkPncp').href = lic.link || '#';
+
+    const grupos = {}, andamento = [], desertos = [], cancelados = [];
+
+    (lic.itens || []).forEach(it => {
+        if (it.sit === "HOMOLOGADO" && it.res_forn) {
+            if (!grupos[it.res_forn]) grupos[it.res_forn] = [];
+            grupos[it.res_forn].push(it);
+        } else if (it.sit === "CANCELADO") cancelados.push(it);
+        else if (it.sit === "DESERTO" || it.sit === "FRACASSADO") desertos.push(it);
+        else andamento.push(it);
+    });
+
+    let html = `<div class="table-responsive"><table class="table table-sm table-bordered table-itens"><thead class="table-dark"> 
+        <tr><th>#</th><th>Descrição</th><th>ME/EPP</th><th>Qtd/Un</th><th>Est. Unit.</th><th>Final Unit.</th><th>Total</th></tr></thead><tbody>`;
+
+    if (andamento.length > 0) {
+        html += `<tr><td colspan="7" class="header-status-andamento">ITENS EM ANDAMENTO (${andamento.length})</td></tr>`;
+        andamento.forEach(it => html += renderLinhaItem(it, lic.id));
+    }
+    if (desertos.length > 0) {
+        html += `<tr><td colspan="7" class="header-status-deserto">ITENS DESERTOS (${desertos.length})</td></tr>`;
+        desertos.forEach(it => html += renderLinhaItem(it, lic.id));
+    }
+    if (cancelados.length > 0) {
+        html += `<tr><td colspan="7" class="header-status-cancelado">ITENS CANCELADOS (${cancelados.length})</td></tr>`;
+        cancelados.forEach(it => html += renderLinhaItem(it, lic.id));
+    }
+    
+    Object.keys(grupos).forEach(forn => {
+        html += `<tr class="header-fornecedor"><td colspan="7">Fornecedor: ${forn} (${grupos[forn].length} itens)</td></tr>`;
+        grupos[forn].forEach(it => html += renderLinhaItem(it, lic.id));
+    });
+
+    html += '</tbody></table></div>';
+    document.getElementById('modalBody').innerHTML = html;
+    modalObj.show();
+}
+
+function renderLinhaItem(it, licId) {
+    const isMeEpp = [1, 2, 3].includes(parseInt(it.benef));
+    const meEppHtml = isMeEpp ? '<span class="benef-sim">SIM</span>' : '<span class="benef-nao">NÃO</span>';
+    const valFinal = it.res_val || 0;
+    const valEstimado = it.v_est || 0;
+    const valorTotal = valFinal > 0 ? (valFinal * it.q) : (valEstimado * it.q);
+
+    let compatClass = '';
+    let compatIcon = '';
+    const compat = compatData[licId];
+    
+    if (compat?.matches?.length > 0) {
+        const descNorm = (it.d || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const isCompat = compat.matches.some(match => {
+            if (!match) return false;
+            return descNorm.includes(match.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+        });
+        if (isCompat) {
+            compatClass = 'item-compativel';
+            compatIcon = '✓ ';
+        }
+    }
+
+    return `<tr class="${compatClass}">
+            <td class="text-center fw-bold">${it.n || '?'}</td>
+            <td>${compatIcon}${it.d || 'Sem descrição'}</td>
+            <td class="text-center">${meEppHtml}</td>
+            <td class="text-center">${it.q || 0} ${it.u || ''}</td>
+            <td class="text-center val-estimado">R$ ${valEstimado.toFixed(4)}</td>
+            <td class="text-center val-homologado">${valFinal > 0 ? 'R$ ' + valFinal.toFixed(4) : '---'}</td>
+            <td class="text-center fw-bold">R$ ${valorTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+             </tr>`;
+}
+
+function excluirLicitacao(id) {
+    if(confirm("Deseja remover esta licitação?")) {
+        allData = allData.filter(x => x.id !== id);
+        filtrar();
+    }
+}
+
+function abrirInclusaoManual() { 
+    document.getElementById('inputLinkPncp').value = '';
+    document.getElementById('inputGithubToken').value = '';
+    document.getElementById('statusInclusao').innerHTML = '';
+    modalInclusaoObj.show(); 
+}
+
+async function processarInclusaoManual() {
+    const link = document.getElementById('inputLinkPncp').value.trim();
+    const token = document.getElementById('inputGithubToken').value.trim();
+    const statusDiv = document.getElementById('statusInclusao');
+
+    if (!link || !token) {
+        statusDiv.innerHTML = '<span class="text-danger">Preencha link e token.</span>';
+        return;
+    }
+
+    statusDiv.innerHTML = '<span class="text-primary">Conectando...</span>';
+
+    try {
+        const urlFile = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE_PATH}`;
+        const resGet = await fetch(urlFile, { headers: { 'Authorization': `token ${token}` } });
+
+        let sha = "", currentContent = "";
+        if (resGet.ok) {
+            const data = await resGet.json();
+            sha = data.sha;
+            currentContent = decodeURIComponent(escape(atob(data.content)));
+        }
+
+        const newContent = currentContent + (currentContent.endsWith('\n') ? "" : "\n") + link + "\n";
+        
+        const resPut = await fetch(urlFile, {
+            method: 'PUT',
+            headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: "Inclusão manual via Sniper Pharma",
+                content: btoa(unescape(encodeURIComponent(newContent))),
+                sha: sha
+            })
+        });
+
+        statusDiv.innerHTML = resPut.ok 
+            ? '<span class="text-success">✅ Salvo com sucesso!</span>' 
+            : '<span class="text-danger">Erro ao salvar</span>';
+            
+        if (resPut.ok) setTimeout(() => modalInclusaoObj.hide(), 2000);
+    } catch (e) {
+        statusDiv.innerHTML = `<span class="text-danger">Erro: ${e.message}</span>`;
+    }
+}
+
+document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
+document.getElementById('nextPage').onclick = () => { if(currentPage < totalPages) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
+
+// Inicializa
+loadData();
+</script>
 </body>
 </html>
