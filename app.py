@@ -1,619 +1,357 @@
 import requests
 import json
-import gzip
 import os
+import unicodedata
+import gzip
+import argparse
+import sys
 import csv
-import concurrent.futures
 import re
-import time
-from datetime import datetime
+import concurrent.futures
+from datetime import datetime, timedelta, date
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 # --- CONFIGURAÇÕES ---
-ARQDADOS = 'pregacoes_pharma_limpos.json.gz'
-ARQ_RELATORIO = 'relatorio_atualizacoes.csv'
-ARQ_LOG = 'log_atualizacao.txt'
-MAXWORKERS = 10
+ARQDADOS = 'dadosoportunidades.json.gz'
+ARQ_TEMP = ARQDADOS + '.tmp'
+ARQ_CHECKPOINT = 'checkpoint.json'
+ARQ_LOCK = 'execucao.lock'
+ARQ_CATALOGO = 'Exportar Dados.csv'
+ARQ_MANUAL = 'links_manuais.txt'
+MAXWORKERS = 15
+DATA_CORTE_FIXA = datetime(2025, 12, 1)
 
-# Mapas de situação (sincronizados com app.py)
+# --- NOVOS ENDPOINTS API DADOS ABERTOS (2026) ---
+# Endpoint de consulta pública (mantido - funciona)
+URL_CONSULTA_PUBLICA = 'https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao'
+# ✅ NOVO: Endpoint de dados abertos para itens (resolve HTTP 301)
+URL_DADOS_ABERTOS = 'https://dadosabertos.compras.gov.br/modulo-contratacoes'
+ENDPOINT_ITENS = f"{URL_DADOS_ABERTOS}/2_consultarItensContratacoes_PNCP_14133"
+
+# --- GEOGRAFIA E MAPAS ---
+NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
+ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
+UFS_PERMITIDAS_MMH = NE_ESTADOS + ['DF', '']
+
 MAPA_SITUACAO_ITEM = {1: "EM ANDAMENTO", 2: "HOMOLOGADO", 3: "CANCELADO", 4: "DESERTO", 5: "FRACASSADO"}
 MAPA_SITUACAO_GLOBAL = {1: "DIVULGADA", 2: "REVOGADA", 3: "ANULADA", 4: "SUSPENSA"}
 
-# URLs base alternativas (fallback)
-URL_BASE_INTEGRACAO = "https://pncp.gov.br/api/pncp/v1"
-URL_BASE_CONSULTA = "https://pncp.gov.br/api/consulta/v1"
+def normalize(t):
+    if not t: return ""
+    return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
+
+# --- CARREGAMENTO DO CATÁLOGO ---
+CATALOGO_TERMOS = set()
+if os.path.exists(ARQ_CATALOGO):
+    try:
+        for enc in ['utf-8', 'latin-1', 'cp1252']:
+            try:
+                with open(ARQ_CATALOGO, 'r', encoding=enc) as f:
+                    leitor = csv.reader(f, delimiter=';')
+                    next(leitor, None)
+                    for row in leitor:
+                        if len(row) > 1:
+                            termos = [row[0], row[1]] if len(row) > 1 else [row[0]]
+                            for t in termos:
+                                norm = normalize(t)
+                                if len(norm) > 4: CATALOGO_TERMOS.add(norm)
+                print(f"📚 Catálogo carregado: {len(CATALOGO_TERMOS)} termos.")
+                break
+            except: continue
+    except: pass
+
+VETOS_ALIMENTACAO = [normalize(x) for x in ["ALIMENTACAO ESCOLAR", "GENEROS ALIMENTICIOS", "MERENDA", "PNAE", "PERECIVEIS", "HORTIFRUTI", "CARNES", "PANIFICACAO", "CESTAS BASICAS", "LANCHE", "REFEICOES", "COFFEE BREAK", "BUFFET", "COZINHA", "AÇOUGUE", "POLPA DE FRUTA", "ESTIAGEM"]]
+VETOS_EDUCACAO = [normalize(x) for x in ["MATERIAL ESCOLAR", "PEDAGOGICO", "DIDATICO", "BRINQUEDOS", "LIVROS", "TRANSPORTE ESCOLAR", "KIT ALUNO", "REDE MUNICIPAL DE ENSINO", "SECRETARIA DE EDUCACAO"]]
+VETOS_OPERACIONAL = [normalize(x) for x in ["OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "REFORMA", "MANUTENCAO PREDIAL", "MANUTENCAO DE EQUIPAMENTOS", "LIMPEZA URBANA", "RESIDUOS SOLIDOS", "LOCACAO DE VEICULOS", "TRANSPORTE", "COMBUSTIVEL", "DIESEL", "GASOLINA", "PNEUS", "PECAS AUTOMOTIVAS", "OFICINA", "VIGILANCIA", "SEGURANCA", "BOMBEIRO", "SALVAMENTO", "RESGATE", "VIATURA", "FARDAMENTO", "VESTUARIO", "INFORMATICA", "COMPUTADORES", "IMPRESSAO", "EVENTOS", "REPARO", "CORRETIVA", "VEICULO", "AMBULANCIA", "MOTOCICLETA", "MECANICA", "FERRO FUNDIDO", "CONTRATACAO DE SERVICO", "EQUIPAMENTO E MATERIA PERMANENTE", "RECARGA", "ASFATIC", "CONFECCAO"]]
+VETOS_ADM = [normalize(x) for x in ["ADESAO", "INTENCAO", "IRP", "CREDENCIAMENTO", "LEILAO", "ALIENACAO"]]
+TODOS_VETOS = VETOS_ALIMENTACAO + VETOS_EDUCACAO + VETOS_OPERACIONAL + VETOS_ADM
+
+WL_MEDICAMENTOS = [normalize(x) for x in ["MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOAL", "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA", "ANTIBIOTICO", "ACETILCISTEINA", "ACETILSALICILICO", "ACICLOVIR", "ADENOSINA", "ADRENALINA", "ALBENDAZOL", "ALENDRONATO", "ALFAEPOETINA", "ALFAINTERFERONA", "ALFAST", "ALOPURINOL", "ALPRAZOLAM", "AMBROXOL", "AMBROXOL XPE", "AMINOFILINA", "AMIODARONA", "AMITRIPTILINA", "AMOXICILINA", "AMPICILINA", "ANASTROZOL", "ANFOTERICINA", "ANLODIPINO", "ARIPIPRAZOL", "ARIPIPRAZOL.", "ATENOLOL", "ATORVASTANTINA", "ATORVASTATINA", "ATORVASTATINA CALCICA", "ATRACURIO", "ATROPINA", "AZITROMICINA", "AZTREONAM", "BACLOFENO", "BAMIFILINA", "BENZILPENICILINA", "BENZOATO", "BETAMETASONA", "BEZAFIBRATO", "BIMATOPROSTA", "BISACODIL", "BISSULFATO", "BOPRIV", "BROMOPRIDA", "BUDESONIDA", "BUPROPIONA", "BUTILBROMETO", "CABERGOLINA", "CALCITRIOL", "CANDESARTANA", "CAPTOPRIL", "CARBAMAZEPINA", "CARBONATO", "CARVEDILOL", "CAVERDILOL", "CEFALEXINA", "CEFALOTINA", "CEFAZOLINA", "CEFEPIMA", "CEFOTAXIMA", "CEFOXITINA", "CEFTAZIDIMA", "CEFTRIAXONA", "CEFUROXIMA", "CETOCONAZOL", "CETOPROFENO", "CETOROLACO", "CICLOBENZAPRINA", "CICLOSPORINA", "CILOSTAZOL", "CIMETIDINA", "CIPROFLOXACINO", "CIPROFLOXACINA", "CITALOPRAM", "CLARITROMICINA", "CLINDAMICINA", "CLOBETASOL", "CLOMIPRAMINA", "CLONAZEPAM", "CLONIDINA", "CLOPIDOGREL", "CLORETO", "CLORIDRATO", "CLORIDRATO DE CIPROFLOXACINO", "CLORPROMAZINA", "CLORTALIDONA", "CLOTRIMAZOL", "CLOZAPINA", "CODEINA", "COLCHICINA", "COLECALCIFEROL", "COLISTIMETATO", "COMPLEXO B", "DACARBZINA", "DAPAGLIFLOZINA", "DAPAGLIFLOZINA.", "DAPSONA", "DAPTOMICINA", "DARBEPOETINA", "DESLANOSIDEO", "DESLORATADINA", "DEXAMETASONA", "DEXCLORFENIRAMINA", "DEXPANTENOL", "DIAZEPAM", "DIETILAMONIO", "DICLOFENACO", "DIGOXINA", "DILTIAZEM", "DIMETICONA", "DIOSMINA", "DIPIRONA", "DOBUTAMINA", "DOMPERIDONA", "DONEPEZILA", "DOPAMINA", "DOXAZOSINA", "DOXICICLINA", "DROPERIDOL", "DULAGLUTIDA", "DULOXETINA", "DUTASTERIDA", "ECONAZOL", "EMULSAO", "ENALAPRIL", "ENOXAPARINA", "ENTACAPONA", "EPINEFRINA", "ERITROMICINA", "ESCITALOPRAM", "ESOMEPRAZOL", "ESPIRONOLACTONA", "ESTRADIOL", "ESTRIOL", "ESTROGENIOS", "ETANERCEPTE", "ETILEFRINA", "ETOMIDATO", "ETOPOSIDEO", "EZETIMIBA", "FAMOTIDINA", "FENITOINA", "FENOBARBITAL", "FENOTEROL", "FENTANILA", "FERRO", "FIBRINOGENIO", "FILGRASTIM", "FINASTERIDA", "FITOMENADIONA", "FLUCONAZOL", "FLUDROCORTISONA", "FLUMAZENIL", "FLUNARIZINA", "FLUOXETINA", "FLUTICASONA", "FOLATO", "FONDAPARINUX", "FORMOTEROL", "FOSFATO", "FUROSEMIDA", "GABAPENTINA", "GANCICLOVIR", "GELADEIRA", "GENCITABINA", "GENTAMICINA", "GLIBENCLAMIDA", "GLICEROL", "GLICLAZIDA", "GLICOSE", "GLIMEPIRIDA", "GLUCAGON", "HALOPERIDOL", "HEPARINA", "HIDRALAZINA", "HIDROCLOROTIAZIDA", "HIDROCORTISONA", "HIDROTALCITA", "HIDROXIDOPROGESTERONA", "HIDROXIDO", "HIDROXIPROGESTERONA", "HIDROXIUREIA", "HIOSCINA", "HIPROMELOSE", "IBUPROFENO", "IMIPENEM", "IMIPRAMINA", "INDAPAMIDA", "INSULINA", "IOIMBINA", "IPRATROPIO", "IRBESARTANA", "IRINOTECANO", "ISOSSORBIDA", "ISOTRETINOINA", "ITRACONAZOL", "IVERMECTINA", "LACTULOSE", "LAMOTRIGINA", "LANSOPRAZOL", "LATANOPROSTA", "LEFLUNOMIDA", "LERCANIDIPINO", "LETROZOL", "LEVODOPA", "LEVOFLOXACINO", "LEVOMEPROMAZINA", "LEVONORGESTREL", "LEVOTIROXINA", "LIDOCAINA", "LINEZOLIDA", "LINOGLIPTINA", "LIPIDICA", "LISINOPRIL", "LITIO", "LOPERAMIDA", "LORATADINA", "LORAZEPAM", "LOSARTANA", "LOVASTATINA", "MAGNESIO", "MANITOL", "MEBENDAZOL", "MEDROXIPROGESTERONA", "MEMANTINA", "MEROPENEM", "MESALAZINA", "METILDOPA", "METILPREDNISOLONA", "METOCLOPRAMIDA", "METOPROLOL", "METOTREXATO", "METRONIDAZOL", "MICOFENOLATO", "MIDAZOLAM", "MIRTAZAPINA", "MISOPROSTOL", "MORFINA", "MUPIROCINA", "NARATRIPTANA", "NEOMICINA", "NEOSTIGMINA", "NIFEDIPINO", "NIMESULIDA", "NIMODIPINO", "NISTATINA", "NITROFURANTOINA", "NITROGLICERINA", "NITROPRUSSIATO", "NORETISTERONA", "NORFLOXACINO", "NORTRIPTILINA", "OCTREOTIDA", "OLANZAPINA", "OLMESARTANA", "OMEPRAZOL", "ONDANSETRONA", "OXALIPLATINA", "OXCARBAZEPINA", "OXIBUTININA", "PACLITAXEL", "PALONOSETRONA", "PANTOPRAZOL", "PARACETAMOL", "PAROXETINA", "PENICILINA", "PERICIAZINA", "PERMETRINA", "PETIDINA", "PIRAZINAMIDA", "PIRIDOSTIGMINA", "PIRIDOXINA", "POLIMIXINA", "POLIVITAMINICO", "POTASSIO", "PRAMIPEXOL", "PRAVASTATINA", "PREDNISOLONA", "PREDNISONA", "PREGABALINA", "PROMETAZINA", "PROPATILNITRATO", "PROPOFOL", "PROPRANOLOL", "PROSTIGMINA", "QUETIAPINA", "RAMIPRIL", "RANITIDINA", "RESERPINA", "RIFAMPICINA", "RISPERIDONA", "RITONAVIR", "RIVAROXABANA", "ROCURONIO", "ROSUVASTATINA", "SACARATO", "SALBUTAMOL", "SECAM", "SERTRALINA", "SEVELAMER", "SINVASTATINA", "SODIO", "SUCCINILCOLINA", "SUCRALFATO", "SULFADIAZINA", "SULFAMETOXAZOL", "SULFATO", "SULPIRIDA", "SUXAMETONIO", "TAMOXIFENO", "TANSULOSINA", "TEMOZOLAMIDA", "TEMOZOLOMIDA", "TENOXICAN", "TERBUTALINA", "TIAMINA", "TIGECICLINA", "TIOPENTAL", "TIORIDAZINA", "TOBRAMICINA", "TOPIRAMATO", "TRAMADOL", "TRAVOPROSTA", "TRIMETOPRIMA", "TROMETAMOL", "TROPICAMIDA", "VALSARTANA", "VANCOMICINA", "VARFARINA", "VASELINA","AQUISICAO DE MEDICAMENTO"]]
+WL_NUTRI_CLINICA = [normalize(x) for x in ["NUTRICAO ENTERAL", "FORMULA INFANTIL", "SUPLEMENTO ALIMENTAR", "DIETA ENTERAL", "DIETA PARENTERAL", "NUTRICAO CLINICA", "ENTERAL", "PARENTERA","ENTERA"]]
+WL_MATERIAIS_NE = [normalize(x) for x in ["MATERIAL MEDIC", "INSUMO HOSPITALAR", "MMH", "SERINGA", "AGULHA", "GAZE", "ATADURA", "SONDA", "CATETER", "EQUIPO", "LUVAS DE PROCEDIMENTO", "MASCARA", "MASCARA CIRURGICA", "PENSO", "MATERIAL PENSO", "MATERIAL-MEDICO", "MATERIAIS-MEDICO", "FRALDA", "ABSORVENTE", "MEDICO-HOSPITALAR", "CURATIV", "CURATIVO", "CURATIVOS", "LUVA DE PROCEDIMENTO", "COMPRESSA GAZE", "AVENTAL DESCARTAVEL", "GESSADA", "CAMPO OPERATORIO", "CLOREXIDINA", "COLETOR PERFURO", "ESPARADRAPO", "FITA MICROPORE", "GLUTARALDEIDO", "SONDA NASO", "TOUCA DESCARTAVEL", "TUBO ASPIRACAO", "CORRELATO", "AGULHAS", "SERINGAS"]]
 
 def criar_sessao():
-    """Cria sessão HTTP com retries e configurações robustas"""
     s = requests.Session()
     s.headers.update({
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'User-Agent': 'Mozilla/5.0 (compatible; Sniper Pharma/22.1; Automated Data Collection)',
-        'Connection': 'keep-alive',
-        'Referer': 'https://pncp.gov.br/'
+        'Accept': 'application/json',
+        'User-Agent': 'Sniper Pharma/22.1',
+        'Accept-Encoding': 'gzip, deflate, br'
     })
-    
-    # Configuração de retry mais robusta
-    retry = Retry(
-        total=5,
-        backoff_factor=1.0,
-        status_forcelist=[429, 500, 502, 503, 504],
-        allowed_methods=["HEAD", "GET", "OPTIONS"]
-    )
-    adapter = HTTPAdapter(max_retries=retry, pool_connections=10, pool_maxsize=20)
-    s.mount('https://', adapter)
-    s.mount('http://', adapter)
+    retry = Retry(total=5, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
+    s.mount('https://', HTTPAdapter(max_retries=retry))
     return s
 
-def log_mensagem(msg):
-    """Salva log em arquivo e imprime no console com flush imediato"""
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    linha = f"[{timestamp}] {msg}"
-    print(linha, flush=True)
-    with open(ARQ_LOG, 'a', encoding='utf-8') as f:
-        f.write(linha + '\n')
+def veta_edital(obj_raw, uf):
+    obj = normalize(obj_raw)
+    palavras_magicas = ["MEDICAMENTO", "MEDICAMENTOS", "AQUISICAO DE MEDICAMENTOS"]
+    if any(p in obj for p in palavras_magicas): return False
+    for v in TODOS_VETOS:
+        if v in obj:
+            if "NUTRICAO" in v or "ALIMENT" in v:
+                if any(bom in obj for bom in WL_NUTRI_CLINICA) and "ESCOLAR" not in obj: return False
+            return True
+    return False
 
-def extrair_dados_do_id(lid):
-    """
-    Extrai CNPJ, Ano e Sequencial do ID.
-    
-    Suporta múltiplos formatos:
-    - Formato concatenado: {cnpj14}{ano4}{sequencialN} (ex: 46374500000194202512627)
-    - Formato PNCP oficial: {cnpj14}-1-{sequencial6}/{ano4} (ex: 46374500000194-1-000126/2025)
-    - Formato com hífen: {cnpj14}-{ano4}-{sequencial} (ex: 46374500000194-2025-12627)
-    
-    Retorna: (cnpj, ano, seq) ou (None, None, None) se inválido
-    """
-    if not lid or not isinstance(lid, str):
-        return None, None, None
-    
-    lid = str(lid).strip()
-    lid_original = lid
-    
-    # Tentar formato PNCP oficial primeiro: CNPJ-1-SEQUENCIAL/ANO
-    padrao_pncp = r'^(\d{14})-1-(\d{1,6})/(\d{4})$'
-    match = re.match(padrao_pncp, lid)
-    if match:
-        cnpj, seq, ano = match.groups()
-        return cnpj, ano, str(int(seq))  # Remove zeros à esquerda
-    
-    # Tentar formato com hífen: CNPJ-ANO-SEQUENCIAL
-    padrao_hifen = r'^(\d{14})-(\d{4})-(\d+)$'
-    match = re.match(padrao_hifen, lid)
-    if match:
-        return match.groups()
-    
-    # Formato concatenado simples: CNPJ(14) + ANO(4) + SEQUENCIAL(variável)
-    if lid.isdigit():
-        if len(lid) >= 18:  # Mínimo: 14 (CNPJ) + 4 (ano)
-            cnpj = lid[:14]
-            ano = lid[14:18]
-            seq = lid[18:]
-            
-            # Validar ano (2020-2030 como heurística)
-            ano_int = int(ano)
-            if 2020 <= ano_int <= 2030:
-                # Sequencial pode ter zeros à esquerda - manter como está para URL
-                # mas retornar também sem zeros para logging
-                return cnpj, ano, seq
-    
-    log_mensagem(f"   ⚠️ ID em formato não reconhecido: {lid_original} (len={len(lid_original)})")
-    return None, None, None
+def safe_float(val):
+    try: return float(val) if val is not None else 0.0
+    except: return 0.0
 
-def validar_resposta_api(response, url):
-    """
-    Valida se a resposta da API é JSON válido e retorna os dados ou None
-    """
-    # Verificar se houve redirecionamento
-    if response.status_code in (301, 302, 307, 308):
-        location = response.headers.get('Location', '')
-        log_mensagem(f"   ⚠️ Redirect {response.status_code} detectado para: {location[:100]}...")
-        return None
-    
-    content_type = response.headers.get('Content-Type', '').lower()
-    
-    # Verificar se é realmente JSON ou texto
-    if 'application/json' not in content_type and 'text/plain' not in content_type:
-        # Algumas APIs retornam text/plain mesmo com JSON no corpo
-        if not response.text.strip().startswith(('{', '[')):
-            log_mensagem(f"   ⚠️ Resposta não-JSON recebida ({content_type}) de {url[:80]}...")
-            return None
-    
-    try:
-        return response.json()
-    except json.JSONDecodeError as e:
-        log_mensagem(f"   ⚠️ Erro ao decodificar JSON de {url[:80]}...: {e}")
-        return None
+# --- SEGURANÇA: CONTROLE DE CHECKPOINT ---
+def salvar_checkpoint(dia, pagina):
+    with open(ARQ_CHECKPOINT, 'w') as f:
+        json.dump({'dia': dia, 'pagina': pagina}, f)
 
-def precisa_atualizar(lic):
-    """
-    Verifica se há itens sem fornecedor homologado
-    OU se a situação global/itens podem ter mudado
-    """
-    itens = lic.get('itens', [])
-
-    # Verifica itens pendentes
-    tem_itens_pendentes = any(
-        not it.get('res_forn') and it.get('sit') in ["EM ANDAMENTO", "HOMOLOGADO"]
-        for it in itens if isinstance(it, dict)
-    )
-
-    # Verifica se situação global não é final (DIVULGADA ou SUSPENSA podem mudar)
-    sit_global = lic.get('sit_global', 'DIVULGADA')
-    sit_nao_final = sit_global in ["DIVULGADA", "SUSPENSA"]
-
-    return tem_itens_pendentes or sit_nao_final
-
-def tentar_endpoint_alternativo(cnpj, ano, seq, session):
-    """
-    Tenta diferentes variações de endpoint se o principal falhar com 301
-    """
-    endpoints = [
-        # Padrão
-        f"{URL_BASE_INTEGRACAO}/orgaos/{cnpj}/compras/{ano}/{seq}",
-        # Com barra no final
-        f"{URL_BASE_INTEGRACAO}/orgaos/{cnpj}/compras/{ano}/{seq}/",
-        # Usando numeroCompra em vez de sequencial
-        f"{URL_BASE_INTEGRACAO}/orgaos/{cnpj}/compras/{ano}/{int(seq)}",
-        # Endpoint de consulta pública
-        f"{URL_BASE_CONSULTA}/orgaos/{cnpj}/compras/{ano}/{seq}",
-    ]
-    
-    for i, url in enumerate(endpoints):
-        try:
-            r = session.get(url, timeout=(10, 30), allow_redirects=True)
-            
-            if r.status_code == 200:
-                dados = validar_resposta_api(r, url)
-                if dados:
-                    if i > 0:
-                        log_mensagem(f"   ✅ Endpoint alternativo {i+1} funcionou: {url[:80]}...")
-                    return dados
-            elif r.status_code in (301, 302, 307, 308):
-                # Seguir redirect manualmente se necessário
-                location = r.headers.get('Location')
-                if location and not location.startswith('http'):
-                    # URL relativa
-                    from urllib.parse import urljoin
-                    location = urljoin(url, location)
-                
-                if location and i == 0:  # Apenas tentar uma vez
-                    r2 = session.get(location, timeout=(10, 30))
-                    if r2.status_code == 200:
-                        dados = validar_resposta_api(r2, location)
-                        if dados:
-                            log_mensagem(f"   ✅ Seguiu redirect para: {location[:80]}...")
-                            return dados
-                        
-        except Exception as e:
-            continue
-    
+def carregar_checkpoint():
+    if os.path.exists(ARQ_CHECKPOINT):
+        with open(ARQ_CHECKPOINT, 'r') as f:
+            return json.load(f)
     return None
 
-def buscar_dados_licitacao(cnpj, ano, seq, session):
-    """Busca dados gerais da licitação na API com tratamento robusto de erros"""
-    url = f"{URL_BASE_INTEGRACAO}/orgaos/{cnpj}/compras/{ano}/{seq}"
-    
-    try:
-        r = session.get(url, timeout=(10, 30), allow_redirects=True)
-        
-        # Se der 301, tentar endpoints alternativos
-        if r.status_code in (301, 302, 307, 308):
-            log_mensagem(f"   ⚠️ HTTP {r.status_code} no endpoint principal, tentando alternativas...")
-            return tentar_endpoint_alternativo(cnpj, ano, seq, session)
-        
-        if r.status_code != 200:
-            log_mensagem(f"   ⚠️ HTTP {r.status_code} ao buscar dados da licitação {cnpj}/{ano}/{seq}")
-            return None
-
-        dados = validar_resposta_api(r, url)
-        return dados
-        
-    except requests.exceptions.Timeout as e:
-        log_mensagem(f"   ❌ Timeout ao buscar dados da licitação {cnpj}/{ano}/{seq}: {e}")
-        return None
-    except requests.exceptions.ConnectionError as e:
-        log_mensagem(f"   ❌ Erro de conexão ao buscar {cnpj}/{ano}/{seq}: {e}")
-        return None
-    except Exception as e:
-        log_mensagem(f"   ❌ Erro inesperado ao buscar dados da licitação {cnpj}/{ano}/{seq}: {type(e).__name__}: {e}")
-        return None
-
-def buscar_itens_api(cnpj, ano, seq, session):
-    """Busca todos os itens atualizados da licitação com paginação robusta"""
-    url_base = f"{URL_BASE_INTEGRACAO}/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
-    itens_api = []
+# ✅ NOVO: Busca itens via API de dados abertos (resolve HTTP 301)
+def buscar_itens_dados_abertos(cnpj, ano, seq, session):
+    """
+    Busca itens usando a API de dados abertos (nova URL).
+    Resolve o problema de HTTP 301 do endpoint antigo.
+    """
+    itens_brutos = []
     pagina = 1
-    max_paginas = 100  # Aumentado para licitações grandes
-
+    max_paginas = 100  # Segurança
+    
     while pagina <= max_paginas:
+        params = {
+            'orgaoEntidadeCnpj': cnpj,
+            'anoCompraPncp': ano,
+            'sequencialCompraPncp': seq,
+            'pagina': pagina,
+            'tamanhoPagina': 500  # Máximo permitido
+        }
+        
         try:
-            r = session.get(
-                url_base, 
-                params={'pagina': pagina, 'tamanhoPagina': 100}, 
-                timeout=(10, 30),
-                allow_redirects=True
-            )
+            r = session.get(ENDPOINT_ITENS, params=params, timeout=30)
             
-            if r.status_code in (301, 302, 307, 308):
-                log_mensagem(f"   ⚠️ Redirect na página {pagina} de itens")
-                break
-
             if r.status_code != 200:
-                log_mensagem(f"   ⚠️ HTTP {r.status_code} ao buscar itens página {pagina} de {cnpj}/{ano}/{seq}")
+                if pagina == 1:
+                    print(f"   ⚠️ HTTP {r.status_code} ao buscar itens {cnpj}/{ano}/{seq}")
                 break
-
-            dados = validar_resposta_api(r, url_base)
-            if dados is None:
+            
+            # A nova API retorna lista direta ou dict com 'data'
+            data = r.json()
+            if isinstance(data, dict):
+                itens_pagina = data.get('data', []) or data.get('itens', [])
+            elif isinstance(data, list):
+                itens_pagina = data
+            else:
                 break
-
-            # Extrair array de itens de diferentes formatos possíveis
-            itens_pagina = []
-            if isinstance(dados, dict):
-                itens_pagina = dados.get('data', []) or dados.get('itens', []) or dados.get('resultado', []) or []
-            elif isinstance(dados, list):
-                itens_pagina = dados
-
+            
             if not itens_pagina:
                 break
-
-            # Validar e adicionar apenas itens válidos
+            
+            # Mapear itens para formato interno
             for it in itens_pagina:
-                if isinstance(it, dict) and 'numeroItem' in it:
-                    itens_api.append(it)
-
-            # Verificar se há mais páginas
-            if len(itens_pagina) < 100:
-                break
+                if not isinstance(it, dict):
+                    continue
                 
-            pagina += 1
-            # Pequeno delay para não sobrecarregar a API
-            if pagina % 10 == 0:
-                time.sleep(0.1)
-
-        except requests.exceptions.Timeout:
-            log_mensagem(f"   ⚠️ Timeout ao buscar itens página {pagina} de {cnpj}/{ano}/{seq}")
-            break
-        except Exception as e:
-            log_mensagem(f"   ⚠️ Erro ao buscar itens página {pagina}: {type(e).__name__}: {e}")
-            break
-
-    return itens_api
-
-def buscar_resultado_item(cnpj, ano, seq, num_item, session):
-    """Busca resultado de um item específico com tratamento de erros"""
-    url = f"{URL_BASE_INTEGRACAO}/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num_item}/resultados"
-    try:
-        r = session.get(url, timeout=(5, 15), allow_redirects=True)
-        
-        if r.status_code in (301, 302, 307, 308):
-            return None
-            
-        if r.status_code == 200:
-            dados = validar_resposta_api(r, url)
-            if dados is None:
-                return None
+                desc = it.get('descricao', '')
+                sit_id = int(it.get('situacaoCompraItem') or 1)
+                sit_nome = MAPA_SITUACAO_ITEM.get(sit_id, "EM ANDAMENTO")
                 
-            # Extrair primeiro resultado de diferentes formatos
-            if isinstance(dados, list) and len(dados) > 0:
-                return dados[0]
-            elif isinstance(dados, dict):
-                return dados
-        elif r.status_code == 404:
-            # Item sem resultado ainda - normal para itens em andamento
-            return None
-        else:
-            log_mensagem(f"   ⚠️ HTTP {r.status_code} ao buscar resultado do item {num_item}")
-            
-        return None
-    except requests.exceptions.Timeout:
-        return None
-    except Exception as e:
-        log_mensagem(f"   ⚠️ Erro ao buscar resultado item {num_item}: {type(e).__name__}")
-        return None
-
-def atualizar_licitacao_completa(lid, dados_antigos, session):
-    """
-    Atualiza licitação completa: dados gerais + todos os itens
-    Retorna: (dados_atualizados, mudancas_detalhadas, houve_mudanca)
-    """
-    cnpj, ano, seq = extrair_dados_do_id(lid)
-    if not cnpj:
-        log_mensagem(f"   ❌ ID inválido ou não reconhecido: {lid}")
-        return None, [], False
-
-    mudancas_detalhadas = []
-    houve_mudanca = False
-
-    # 1. BUSCAR DADOS GERAIS ATUALIZADOS
-    dados_api = buscar_dados_licitacao(cnpj, ano, seq, session)
-    if not dados_api:
-        log_mensagem(f"   ⚠️ Não foi possível buscar dados atualizados de {lid} ({cnpj}/{ano}/{seq})")
-        return None, [], False
-
-    # Preparar novo objeto
-    dados_novos = dados_antigos.copy()
-
-    # Atualizar situação global
-    sit_global_id = dados_api.get('situacaoCompraId', 1)
-    nova_sit_global = MAPA_SITUACAO_GLOBAL.get(sit_global_id, "DIVULGADA")
-    sit_global_antiga = dados_antigos.get('sit_global', 'DIVULGADA')
-
-    if nova_sit_global != sit_global_antiga:
-        dados_novos['sit_global'] = nova_sit_global
-        houve_mudanca = True
-        log_mensagem(f"   🔄 Situação global alterada: {sit_global_antiga} → {nova_sit_global} ({lid})")
-
-        # Se foi revogada/anulada, registrar no relatório
-        if nova_sit_global in ["REVOGADA", "ANULADA"]:
-            mudancas_detalhadas.append({
-                'tipo': 'SITUACAO_GLOBAL',
-                'data_atualizacao': datetime.now().strftime('%d/%m/%Y %H:%M'),
-                'id_processo': lid,
-                'edital': dados_antigos.get('edit'),
-                'orgao': dados_antigos.get('org'),
-                'campo_alterado': 'sit_global',
-                'valor_anterior': sit_global_antiga,
-                'valor_novo': nova_sit_global,
-                'item_num': None,
-                'descricao': None,
-                'valor_estimado': None,
-                'valor_homologado': None,
-                'fornecedor': None
-            })
-
-    # Atualizar valor total estimado (se mudou)
-    val_tot_api = float(dados_api.get('valorTotalEstimado') or 0.0)
-    val_tot_antigo = dados_antigos.get('val_tot', 0.0)
-    if abs(val_tot_api - val_tot_antigo) > 0.01 and val_tot_api > 0:  # Tolerância para floats
-        dados_novos['val_tot'] = val_tot_api
-        houve_mudanca = True
-        log_mensagem(f"   💰 Valor total atualizado: R$ {val_tot_antigo:,.2f} → R$ {val_tot_api:,.2f} ({lid})")
-
-    # 2. BUSCAR ITENS ATUALIZADOS
-    itens_api = buscar_itens_api(cnpj, ano, seq, session)
-    if not itens_api:
-        log_mensagem(f"   ⚠️ Não foi possível buscar itens de {lid} ou licitação sem itens")
-        # Retornar dados mesmo sem itens se houve mudança na situação global
-        return (dados_novos if houve_mudanca else None), mudancas_detalhadas, houve_mudanca
-
-    # Criar mapa de itens antigos por número
-    itens_antigos_map = {it['n']: it for it in dados_antigos.get('itens', []) if isinstance(it, dict) and 'n' in it}
-
-    # Processar cada item da API
-    itens_atualizados = []
-
-    for it_api in itens_api:
-        num_item = it_api.get('numeroItem')
-        if num_item is None:
-            continue
-
-        # Dados básicos do item
-        sit_item_id = int(it_api.get('situacaoCompraItem') or 1)
-        sit_item_nome = MAPA_SITUACAO_ITEM.get(sit_item_id, "EM ANDAMENTO")
-
-        benef_id = it_api.get('tipoBeneficioId')
-        benef_nome_api = str(it_api.get('tipoBeneficioNome', '')).upper()
-        
-        # Mapear benefício com fallback mais robusto
-        if benef_id in [1, 2, 3]:
-            benef_final = benef_id
-        elif "EXCLUSIVA" in benef_nome_api:
-            benef_final = 1
-        elif "COTA" in benef_nome_api:
-            benef_final = 3
-        else:
-            benef_final = 4
-
-        # Montar item base
-        item_novo = {
-            'n': num_item,
-            'd': str(it_api.get('descricao', '')).strip(),
-            'q': float(it_api.get('quantidade') or 0),
-            'u': str(it_api.get('unidadeMedida', 'UN')).strip(),
-            'v_est': float(it_api.get('valorUnitarioEstimado') or 0.0),
-            'benef': benef_final,
-            'sit': sit_item_nome,
-            'res_forn': None,
-            'res_val': 0.0
-        }
-
-        # Buscar resultado/fornecedor se aplicável
-        if sit_item_nome in ["EM ANDAMENTO", "HOMOLOGADO"]:
-            res = buscar_resultado_item(cnpj, ano, seq, num_item, session)
-            if res:
-                nf = res.get('nomeRazaoSocialFornecedor') or res.get('razaoSocial')
-                ni = res.get('niFornecedor')
-                val_homol = float(res.get('valorUnitarioHomologado') or 0.0)
-
-                if nf:
-                    forn_completo = f"{nf} (CNPJ: {ni})" if ni else str(nf)
-                    item_novo['res_forn'] = forn_completo
-                    item_novo['sit'] = "HOMOLOGADO"
-                    item_novo['res_val'] = val_homol
-
-        # Comparar com item antigo para detectar mudanças
-        item_antigo = itens_antigos_map.get(num_item, {})
-
-        # Detectar mudanças significativas
-        mudanca_sit = item_novo['sit'] != item_antigo.get('sit', 'EM ANDAMENTO')
-        mudanca_forn = item_novo.get('res_forn') != item_antigo.get('res_forn')
-        mudanca_val = abs(item_novo.get('res_val', 0) - item_antigo.get('res_val', 0)) > 0.01
-
-        if mudanca_sit or mudanca_forn or mudanca_val:
-            houve_mudanca = True
-
-            # Registrar no relatório apenas se houve homologação nova
-            if item_novo.get('res_forn') and not item_antigo.get('res_forn'):
-                mudancas_detalhadas.append({
-                    'tipo': 'ITEM_HOMOLOGADO',
-                    'data_atualizacao': datetime.now().strftime('%d/%m/%Y %H:%M'),
-                    'id_processo': lid,
-                    'edital': dados_antigos.get('edit'),
-                    'orgao': dados_antigos.get('org'),
-                    'campo_alterado': 'res_forn/res_val',
-                    'valor_anterior': f"{item_antigo.get('sit', 'N/A')} - {item_antigo.get('res_forn', 'N/A')}",
-                    'valor_novo': f"{item_novo['sit']} - {item_novo['res_forn']}",
-                    'item_num': num_item,
-                    'descricao': item_novo['d'][:100],  # Limitar tamanho
-                    'valor_estimado': item_novo['v_est'],
-                    'valor_homologado': item_novo['res_val'],
-                    'fornecedor': item_novo['res_forn']
+                # Mapear benefício
+                benef_id = it.get('tipoBeneficioId')
+                benef_nome_api = str(it.get('tipoBeneficioNome', '')).upper()
+                if benef_id in [1, 2, 3]:
+                    benef_final = benef_id
+                elif "EXCLUSIVA" in benef_nome_api:
+                    benef_final = 1
+                elif "COTA" in benef_nome_api:
+                    benef_final = 3
+                else:
+                    benef_final = 4
+                
+                itens_brutos.append({
+                    'n': it.get('numeroItem'),
+                    'd': desc,
+                    'q': safe_float(it.get('quantidade')),
+                    'u': it.get('unidadeMedida', 'UN'),
+                    'v_est': safe_float(it.get('valorUnitarioEstimado')),
+                    'benef': benef_final,
+                    'sit': sit_nome,
+                    'res_forn': None,
+                    'res_val': 0.0
                 })
-                log_mensagem(f"   ✅ Item {num_item} homologado: {str(item_novo['res_forn'])[:40]}... ({lid})")
+            
+            if len(itens_pagina) < 500:
+                break
+            
+            pagina += 1
+            
+        except Exception as e:
+            print(f"   ⚠️ Erro ao buscar itens página {pagina}: {e}")
+            break
+    
+    return itens_brutos
 
-        itens_atualizados.append(item_novo)
+def processar_licitacao(lic, session, forcado=False):
+    id_ref = "DESCONHECIDO"
+    try:
+        if not isinstance(lic, dict): return ('ERRO', {'msg': 'Formato JSON inválido da API principal'}, 0, 0)
+        
+        cnpj = lic.get('orgaoEntidade', {}).get('cnpj', '0000')
+        ano = lic.get('anoCompra', '0000')
+        seq = lic.get('sequencialCompra', '0000')
+        id_ref = f"{cnpj}/{ano}/{seq}"
+        
+        sit_global_id = lic.get('situacaoCompraId') or 1
+        sit_global_nome = MAPA_SITUACAO_GLOBAL.get(sit_global_id, "DIVULGADA")
+        
+        uo = lic.get('unidadeOrgao', {})
+        uf = uo.get('ufSigla', '').upper()
+        obj_raw = lic.get('objetoCompra') or "Sem Objeto"
+        obj_norm = normalize(obj_raw)
+        dt_enc_str = lic.get('dataEncerramentoProposta') or datetime.now().isoformat()
+        
+        if not forcado:
+            if uf and uf in ESTADOS_BLOQUEADOS: return ('IGNORADO', None, 0, 0)
+            dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
+            if dt_enc < DATA_CORTE_FIXA: return ('IGNORADO', None, 0, 0)
+            if veta_edital(obj_raw, uf): return ('VETADO', None, 0, 0)
+            
+            palavras_magicas = ["MEDICAMENTO", "MEDICAMENTOS", "AQUISICAO DE MEDICAMENTOS"]
+            tem_super_passe = any(p in obj_norm for p in palavras_magicas)
+            tem_med = any(t in obj_norm for t in WL_MEDICAMENTOS)
+            tem_mmh_nutri = any(t in obj_norm for t in WL_MATERIAIS_NE + WL_NUTRI_CLINICA)
+            tem_termo_amplo = any(x in obj_norm for x in ["SAUDE", "HOSPITAL"])
+            
+            if tem_super_passe or tem_med: tem_interesse = True
+            elif tem_mmh_nutri and (uf in UFS_PERMITIDAS_MMH): tem_interesse = True
+            elif tem_termo_amplo and (uf in UFS_PERMITIDAS_MMH): tem_interesse = True
+            else: tem_interesse = False
+            
+            if not tem_interesse: return ('IGNORADO', None, 0, 0)
 
-    # Verificar se algum item foi removido ou adicionado
-    nums_api = {it['n'] for it in itens_atualizados if 'n' in it}
-    nums_antigos = set(itens_antigos_map.keys())
+        # ✅ USA NOVA API DE DADOS ABERTOS PARA ITENS
+        itens_brutos = buscar_itens_dados_abertos(cnpj, ano, seq, session)
+        
+        if not itens_brutos: return ('IGNORADO', None, 0, 0)
+        
+        dados_finais = {
+            'id': f"{cnpj}{ano}{seq}",
+            'dt_enc': dt_enc_str,
+            'uf': uf,
+            'uasg': lic.get('unidadeOrgao', {}).get('codigoUnidade', '---'),
+            'org': lic.get('orgaoEntidade', {}).get('razaoSocial', '---'),
+            'unid_nome': lic.get('unidadeOrgao', {}).get('nomeUnidade', '---'),
+            'cid': lic.get('unidadeOrgao', {}).get('municipioNome', '---'),
+            'obj': obj_raw,
+            'edit': f"{str(lic.get('numeroCompra', '')).zfill(5)}/{ano}",
+            'link': f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
+            'val_tot': safe_float(lic.get('valorTotalEstimado')),
+            'itens': itens_brutos,
+            'sit_global': sit_global_nome,
+            'fonte': lic.get('nomeEntidadeIntegradora', 'PNCP Direto')
+        }
+        return ('CAPTURADO', dados_finais, len(itens_brutos), 0)
+        
+    except Exception as e:
+        return ('ERRO', {'msg': f"Erro interno em {id_ref}: {str(e)}"}, 0, 0)
 
-    if nums_api != nums_antigos:
-        houve_mudanca = True
-        adicionados = nums_api - nums_antigos
-        removidos = nums_antigos - nums_api
-        if adicionados:
-            log_mensagem(f"   ➕ Itens adicionados: {sorted(adicionados)} ({lid})")
-        if removidos:
-            log_mensagem(f"   ➖ Itens removidos: {sorted(removidos)} ({lid})")
+def buscar_periodo(session, banco, d_ini, d_fim):
+    stats = {'vetados': 0, 'capturados': 0, 'itens': 0, 'ignorados': 0, 'erros': 0}
+    checkpoint = carregar_checkpoint()
+    
+    delta = d_fim - d_ini
+    for i in range(delta.days + 1):
+        dia_obj = d_ini + timedelta(days=i)
+        dia = dia_obj.strftime('%Y%m%d')
+        
+        if checkpoint and dia < checkpoint['dia']: continue
 
-    if houve_mudanca:
-        dados_novos['itens'] = itens_atualizados
-        return dados_novos, mudancas_detalhadas, True
+        print(f"\n📅 DATA: {dia}")
+        
+        # Endpoint de consulta pública (mantido - funciona)
+        pag = checkpoint['pagina'] if checkpoint and dia == checkpoint['dia'] else 1
+        
+        while True:
+            try:
+                r = session.get(
+                    URL_CONSULTA_PUBLICA,
+                    params={
+                        'dataInicial': dia,
+                        'dataFinal': dia,
+                        'codigoModalidadeContratacao': 6,  # Pregão Eletrônico
+                        'pagina': pag,
+                        'tamanhoPagina': 50
+                    },
+                    timeout=30
+                )
+                
+                if r.status_code != 200:
+                    print(f"   ⚠️ Erro crítico HTTP {r.status_code}. Abortando para segurança.")
+                    break
+                
+                dados = r.json()
+                lics = dados.get('data', [])
+                if not lics: break
+                
+                tot_pag = dados.get('totalPaginas', 1)
+                s_pag = {'vetados': 0, 'capturados': 0, 'itens': 0, 'ignorados': 0, 'erros': 0}
 
-    return None, [], False
+                with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
+                    futuros = [exe.submit(processar_licitacao, l, session) for l in lics]
+                    for f in concurrent.futures.as_completed(futuros):
+                        st, d, i_qtd, h = f.result()
+                        if st == 'CAPTURADO' and d:
+                            s_pag['capturados'] += 1
+                            s_pag['itens'] += i_qtd
+                            banco[f"{d['id'][:14]}_{d['edit']}"] = d
+                        elif st == 'VETADO': s_pag['vetados'] += 1
+                        elif st == 'IGNORADO': s_pag['ignorados'] += 1
+                        elif st == 'ERRO': s_pag['erros'] += 1
+
+                for k in stats: stats[k] += s_pag[k]
+                print(f"   📄 Pág {pag}/{tot_pag}: 🎯 {s_pag['capturados']} Caps | 🔥 {s_pag['erros']} Erros")
+                
+                salvar_checkpoint(dia, pag + 1)
+                
+                if pag >= tot_pag:
+                    salvar_checkpoint((dia_obj + timedelta(days=1)).strftime('%Y%m%d'), 1)
+                    break
+                pag += 1
+                
+            except Exception as e:
+                print(f"   ⚠️ Falha na página {pag}: {e}. O robô tentará novamente na próxima execução via checkpoint.")
+                break
 
 if __name__ == '__main__':
-    if not os.path.exists(ARQDADOS):
-        log_mensagem(f"❌ Arquivo {ARQDADOS} não encontrado.")
-        exit(1)
-
-    log_mensagem("🔄 Iniciando atualização completa de licitações (Modo B: Itens + Situação Global)")
-
-    # Limpar log anterior
-    if os.path.exists(ARQ_LOG):
-        os.remove(ARQ_LOG)
-
+    if os.path.exists(ARQ_LOCK): sys.exit(0)
+    with open(ARQ_LOCK, 'w') as f: f.write("lock")
     try:
-        with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
-            banco_raw = json.load(f)
-    except json.JSONDecodeError as e:
-        log_mensagem(f"❌ Erro ao decodificar JSON do banco de dados: {e}")
-        exit(1)
-    except Exception as e:
-        log_mensagem(f"❌ Erro ao carregar banco de dados: {type(e).__name__}: {e}")
-        exit(1)
-
-    log_mensagem(f"📦 Banco carregado: {len(banco_raw)} licitações")
-
-    # Validar estrutura do banco
-    if not isinstance(banco_raw, list):
-        log_mensagem("❌ Erro: Banco de dados deve ser uma lista (array JSON)")
-        exit(1)
-
-    # Criar dicionário indexado por ID
-    banco_dict = {}
-    ids_problematicos = []
-    for idx, item in enumerate(banco_raw):
-        if not isinstance(item, dict):
-            log_mensagem(f"   ⚠️ Item {idx} ignorado: não é um objeto válido")
-            continue
-        item_id = item.get('id')
-        if not item_id:
-            log_mensagem(f"   ⚠️ Item {idx} ignorado: sem campo 'id'")
-            continue
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--start', type=str)
+        parser.add_argument('--end', type=str)
+        args = parser.parse_args()
         
-        # Testar se o ID é parseável
-        cnpj, ano, seq = extrair_dados_do_id(str(item_id))
-        if not cnpj:
-            ids_problematicos.append(str(item_id))
-            if len(ids_problematicos) <= 5:  # Log apenas os primeiros 5
-                log_mensagem(f"   ⚠️ ID não reconhecido: {item_id}")
+        dt_start = datetime.strptime(args.start, '%Y-%m-%d').date() if args.start else date.today() - timedelta(days=15)
+        dt_end = datetime.strptime(args.end, '%Y-%m-%d').date() if args.end else date.today()
         
-        banco_dict[str(item_id)] = item
-
-    if ids_problematicos:
-        log_mensagem(f"   ⚠️ Total de IDs não reconhecidos: {len(ids_problematicos)}")
-
-    log_mensagem(f"📊 {len(banco_dict)} licitações válidas indexadas")
-
-    session = criar_sessao()
-
-    # Identificar licitações que precisam de atualização
-    alvos = [lid for lid, d in banco_dict.items() if precisa_atualizar(d)]
-
-    if not alvos:
-        log_mensagem("ℹ️ Não há licitações pendentes de atualização.")
-        exit(0)
-
-    log_mensagem(f"🔍 {len(alvos)} licitações selecionadas para atualização")
-
-    relatorio_final = []
-    lic_atualizadas = 0
-    itens_homologados = 0
-    situacoes_alteradas = 0
-    erros_processamento = 0
-    erros_301 = 0
-
-    # Processamento paralelo com tratamento de exceções melhorado
-    with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
-        futuros = {exe.submit(atualizar_licitacao_completa, lid, banco_dict[lid], session): lid for lid in alvos}
-
-        for f in concurrent.futures.as_completed(futuros):
-            lid = futuros[f]
+        session = criar_sessao()
+        banco = {}
+        if os.path.exists(ARQDADOS):
             try:
-                res_dados, res_mudancas, houve_mudanca = f.result()
+                with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
+                    for x in json.load(f): banco[f"{x.get('id', '')[:14]}_{x.get('edit', '')}"] = x
+            except Exception as e: print(f"Erro ao carregar banco: {e}")
 
-                if houve_mudanca and res_dados:
-                    banco_dict[res_dados['id']] = res_dados
-                    lic_atualizadas += 1
+        buscar_periodo(session, banco, dt_start, dt_end)
+        
+        print("\n💾 Salvando banco de dados com segurança...")
+        with gzip.open(ARQ_TEMP, 'wt', encoding='utf-8') as f:
+            json.dump(list(banco.values()), f, ensure_ascii=False)
+        
+        if os.path.exists(ARQ_TEMP):
+            os.replace(ARQ_TEMP, ARQDADOS)
+            if os.path.exists(ARQ_CHECKPOINT): os.remove(ARQ_CHECKPOINT)
+            print("✅ Banco de dados atualizado com sucesso!")
 
-                    # Contar tipos de mudança
-                    for m in res_mudancas:
-                        if m['tipo'] == 'ITEM_HOMOLOGADO':
-                            itens_homologados += 1
-                        elif m['tipo'] == 'SITUACAO_GLOBAL':
-                            situacoes_alteradas += 1
-
-                    relatorio_final.extend(res_mudancas)
-                elif not houve_mudanca and not res_dados:
-                    # Possível erro 301 ou outro problema
-                    erros_301 += 1
-
-            except Exception as e:
-                erros_processamento += 1
-                log_mensagem(f"   ❌ Falha no processamento de {lid}: {type(e).__name__}: {str(e)[:100]}")
-
-    # Salvar banco atualizado
-    try:
-        with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
-            json.dump(list(banco_dict.values()), f, ensure_ascii=False, indent=2)
-        log_mensagem(f"💾 Banco salvo: {len(banco_dict)} licitações")
-    except Exception as e:
-        log_mensagem(f"❌ Erro ao salvar banco de dados: {type(e).__name__}: {e}")
-        exit(1)
-
-    log_mensagem(f"📊 Resumo da atualização:")
-    log_mensagem(f"   - Licitações modificadas: {lic_atualizadas}")
-    log_mensagem(f"   - Itens homologados: {itens_homologados}")
-    log_mensagem(f"   - Situações globais alteradas: {situacoes_alteradas}")
-    log_mensagem(f"   - Possíveis erros 301/redirect: {erros_301}")
-    log_mensagem(f"   - Erros de processamento: {erros_processamento}")
-
-    # Gerar relatório CSV
-    if relatorio_final:
-        try:
-            keys = relatorio_final[0].keys()
-            with open(ARQ_RELATORIO, 'w', newline='', encoding='utf-8-sig') as f:
-                dict_writer = csv.DictWriter(f, fieldnames=keys, delimiter=';', quoting=csv.QUOTE_MINIMAL)
-                dict_writer.writeheader()
-                dict_writer.writerows(relatorio_final)
-            log_mensagem(f"📁 Relatório CSV gerado: {ARQ_RELATORIO} ({len(relatorio_final)} registros)")
-        except Exception as e:
-            log_mensagem(f"❌ Erro ao gerar relatório CSV: {type(e).__name__}: {e}")
-    else:
-        log_mensagem("ℹ️ Nenhuma alteração significativa detectada.")
-
-    log_mensagem("✅ Atualização concluída!")
+    finally:
+        if os.path.exists(ARQ_LOCK): os.remove(ARQ_LOCK)
