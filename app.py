@@ -5,6 +5,7 @@ import os
 import csv
 import concurrent.futures
 import re
+import time
 from datetime import datetime
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -19,21 +20,27 @@ MAXWORKERS = 10
 MAPA_SITUACAO_ITEM = {1: "EM ANDAMENTO", 2: "HOMOLOGADO", 3: "CANCELADO", 4: "DESERTO", 5: "FRACASSADO"}
 MAPA_SITUACAO_GLOBAL = {1: "DIVULGADA", 2: "REVOGADA", 3: "ANULADA", 4: "SUSPENSA"}
 
+# URLs base alternativas (fallback)
+URL_BASE_INTEGRACAO = "https://pncp.gov.br/api/pncp/v1"
+URL_BASE_CONSULTA = "https://pncp.gov.br/api/consulta/v1"
+
 def criar_sessao():
     """Cria sessão HTTP com retries e configurações robustas"""
     s = requests.Session()
     s.headers.update({
         'Accept': 'application/json, text/plain, */*',
-        'User-Agent': 'Sniper Pharma/22.1 (Automated Data Collection)',
         'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive'
+        'User-Agent': 'Mozilla/5.0 (compatible; Sniper Pharma/22.1; Automated Data Collection)',
+        'Connection': 'keep-alive',
+        'Referer': 'https://pncp.gov.br/'
     })
+    
     # Configuração de retry mais robusta
     retry = Retry(
         total=5,
-        backoff_factor=1.0,  # Aumentado para dar mais tempo entre tentativas
+        backoff_factor=1.0,
         status_forcelist=[429, 500, 502, 503, 504],
-        allowed_methods=["HEAD", "GET", "OPTIONS", "POST"]  # Permitir retry em GET
+        allowed_methods=["HEAD", "GET", "OPTIONS"]
     )
     adapter = HTTPAdapter(max_retries=retry, pool_connections=10, pool_maxsize=20)
     s.mount('https://', adapter)
@@ -63,13 +70,14 @@ def extrair_dados_do_id(lid):
         return None, None, None
     
     lid = str(lid).strip()
+    lid_original = lid
     
     # Tentar formato PNCP oficial primeiro: CNPJ-1-SEQUENCIAL/ANO
     padrao_pncp = r'^(\d{14})-1-(\d{1,6})/(\d{4})$'
     match = re.match(padrao_pncp, lid)
     if match:
         cnpj, seq, ano = match.groups()
-        return cnpj, ano, str(int(seq))  # Remove zeros à esquerda do sequencial
+        return cnpj, ano, str(int(seq))  # Remove zeros à esquerda
     
     # Tentar formato com hífen: CNPJ-ANO-SEQUENCIAL
     padrao_hifen = r'^(\d{14})-(\d{4})-(\d+)$'
@@ -86,31 +94,37 @@ def extrair_dados_do_id(lid):
             
             # Validar ano (2020-2030 como heurística)
             ano_int = int(ano)
-            if 2020 <= ano_int <= 2030 and seq.isdigit():
+            if 2020 <= ano_int <= 2030:
+                # Sequencial pode ter zeros à esquerda - manter como está para URL
+                # mas retornar também sem zeros para logging
                 return cnpj, ano, seq
     
-    log_mensagem(f"   ⚠️ ID em formato não reconhecido: {lid} (len={len(lid)})")
+    log_mensagem(f"   ⚠️ ID em formato não reconhecido: {lid_original} (len={len(lid_original)})")
     return None, None, None
 
 def validar_resposta_api(response, url):
     """
     Valida se a resposta da API é JSON válido e retorna os dados ou None
     """
+    # Verificar se houve redirecionamento
+    if response.status_code in (301, 302, 307, 308):
+        location = response.headers.get('Location', '')
+        log_mensagem(f"   ⚠️ Redirect {response.status_code} detectado para: {location[:100]}...")
+        return None
+    
     content_type = response.headers.get('Content-Type', '').lower()
     
-    # Verificar se é realmente JSON
-    if 'application/json' not in content_type:
+    # Verificar se é realmente JSON ou texto
+    if 'application/json' not in content_type and 'text/plain' not in content_type:
         # Algumas APIs retornam text/plain mesmo com JSON no corpo
-        if response.text.strip().startswith(('{', '[')):
-            pass  # Pode ser JSON mesmo sem header correto
-        else:
-            log_mensagem(f"   ⚠️ Resposta não-JSON recebida ({content_type}) de {url[:60]}...")
+        if not response.text.strip().startswith(('{', '[')):
+            log_mensagem(f"   ⚠️ Resposta não-JSON recebida ({content_type}) de {url[:80]}...")
             return None
     
     try:
         return response.json()
     except json.JSONDecodeError as e:
-        log_mensagem(f"   ⚠️ Erro ao decodificar JSON de {url[:60]}...: {e}")
+        log_mensagem(f"   ⚠️ Erro ao decodificar JSON de {url[:80]}...: {e}")
         return None
 
 def precisa_atualizar(lic):
@@ -123,7 +137,7 @@ def precisa_atualizar(lic):
     # Verifica itens pendentes
     tem_itens_pendentes = any(
         not it.get('res_forn') and it.get('sit') in ["EM ANDAMENTO", "HOMOLOGADO"]
-        for it in itens
+        for it in itens if isinstance(it, dict)
     )
 
     # Verifica se situação global não é final (DIVULGADA ou SUSPENSA podem mudar)
@@ -132,21 +146,68 @@ def precisa_atualizar(lic):
 
     return tem_itens_pendentes or sit_nao_final
 
+def tentar_endpoint_alternativo(cnpj, ano, seq, session):
+    """
+    Tenta diferentes variações de endpoint se o principal falhar com 301
+    """
+    endpoints = [
+        # Padrão
+        f"{URL_BASE_INTEGRACAO}/orgaos/{cnpj}/compras/{ano}/{seq}",
+        # Com barra no final
+        f"{URL_BASE_INTEGRACAO}/orgaos/{cnpj}/compras/{ano}/{seq}/",
+        # Usando numeroCompra em vez de sequencial
+        f"{URL_BASE_INTEGRACAO}/orgaos/{cnpj}/compras/{ano}/{int(seq)}",
+        # Endpoint de consulta pública
+        f"{URL_BASE_CONSULTA}/orgaos/{cnpj}/compras/{ano}/{seq}",
+    ]
+    
+    for i, url in enumerate(endpoints):
+        try:
+            r = session.get(url, timeout=(10, 30), allow_redirects=True)
+            
+            if r.status_code == 200:
+                dados = validar_resposta_api(r, url)
+                if dados:
+                    if i > 0:
+                        log_mensagem(f"   ✅ Endpoint alternativo {i+1} funcionou: {url[:80]}...")
+                    return dados
+            elif r.status_code in (301, 302, 307, 308):
+                # Seguir redirect manualmente se necessário
+                location = r.headers.get('Location')
+                if location and not location.startswith('http'):
+                    # URL relativa
+                    from urllib.parse import urljoin
+                    location = urljoin(url, location)
+                
+                if location and i == 0:  # Apenas tentar uma vez
+                    r2 = session.get(location, timeout=(10, 30))
+                    if r2.status_code == 200:
+                        dados = validar_resposta_api(r2, location)
+                        if dados:
+                            log_mensagem(f"   ✅ Seguiu redirect para: {location[:80]}...")
+                            return dados
+                        
+        except Exception as e:
+            continue
+    
+    return None
+
 def buscar_dados_licitacao(cnpj, ano, seq, session):
     """Busca dados gerais da licitação na API com tratamento robusto de erros"""
-    url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}"
+    url = f"{URL_BASE_INTEGRACAO}/orgaos/{cnpj}/compras/{ano}/{seq}"
     
     try:
-        # Usar allow_redirects=True (padrão) mas com timeout maior
-        r = session.get(url, timeout=(10, 30))  # (connect timeout, read timeout)
+        r = session.get(url, timeout=(10, 30), allow_redirects=True)
         
-        # Log de debug para status não-200
+        # Se der 301, tentar endpoints alternativos
+        if r.status_code in (301, 302, 307, 308):
+            log_mensagem(f"   ⚠️ HTTP {r.status_code} no endpoint principal, tentando alternativas...")
+            return tentar_endpoint_alternativo(cnpj, ano, seq, session)
+        
         if r.status_code != 200:
             log_mensagem(f"   ⚠️ HTTP {r.status_code} ao buscar dados da licitação {cnpj}/{ano}/{seq}")
-            if r.status_code in (301, 302, 307, 308):
-                log_mensagem(f"      ↳ Redirect para: {r.headers.get('Location', 'desconhecido')}")
             return None
-        
+
         dados = validar_resposta_api(r, url)
         return dados
         
@@ -162,7 +223,7 @@ def buscar_dados_licitacao(cnpj, ano, seq, session):
 
 def buscar_itens_api(cnpj, ano, seq, session):
     """Busca todos os itens atualizados da licitação com paginação robusta"""
-    url_base = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
+    url_base = f"{URL_BASE_INTEGRACAO}/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
     itens_api = []
     pagina = 1
     max_paginas = 100  # Aumentado para licitações grandes
@@ -172,9 +233,14 @@ def buscar_itens_api(cnpj, ano, seq, session):
             r = session.get(
                 url_base, 
                 params={'pagina': pagina, 'tamanhoPagina': 100}, 
-                timeout=(10, 30)
+                timeout=(10, 30),
+                allow_redirects=True
             )
             
+            if r.status_code in (301, 302, 307, 308):
+                log_mensagem(f"   ⚠️ Redirect na página {pagina} de itens")
+                break
+
             if r.status_code != 200:
                 log_mensagem(f"   ⚠️ HTTP {r.status_code} ao buscar itens página {pagina} de {cnpj}/{ano}/{seq}")
                 break
@@ -186,7 +252,7 @@ def buscar_itens_api(cnpj, ano, seq, session):
             # Extrair array de itens de diferentes formatos possíveis
             itens_pagina = []
             if isinstance(dados, dict):
-                itens_pagina = dados.get('data', []) or dados.get('itens', []) or dados.get('resultado', [])
+                itens_pagina = dados.get('data', []) or dados.get('itens', []) or dados.get('resultado', []) or []
             elif isinstance(dados, list):
                 itens_pagina = dados
 
@@ -203,6 +269,9 @@ def buscar_itens_api(cnpj, ano, seq, session):
                 break
                 
             pagina += 1
+            # Pequeno delay para não sobrecarregar a API
+            if pagina % 10 == 0:
+                time.sleep(0.1)
 
         except requests.exceptions.Timeout:
             log_mensagem(f"   ⚠️ Timeout ao buscar itens página {pagina} de {cnpj}/{ano}/{seq}")
@@ -215,9 +284,13 @@ def buscar_itens_api(cnpj, ano, seq, session):
 
 def buscar_resultado_item(cnpj, ano, seq, num_item, session):
     """Busca resultado de um item específico com tratamento de erros"""
-    url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num_item}/resultados"
+    url = f"{URL_BASE_INTEGRACAO}/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num_item}/resultados"
     try:
-        r = session.get(url, timeout=(5, 15))
+        r = session.get(url, timeout=(5, 15), allow_redirects=True)
+        
+        if r.status_code in (301, 302, 307, 308):
+            return None
+            
         if r.status_code == 200:
             dados = validar_resposta_api(r, url)
             if dados is None:
@@ -442,6 +515,7 @@ if __name__ == '__main__':
 
     # Criar dicionário indexado por ID
     banco_dict = {}
+    ids_problematicos = []
     for idx, item in enumerate(banco_raw):
         if not isinstance(item, dict):
             log_mensagem(f"   ⚠️ Item {idx} ignorado: não é um objeto válido")
@@ -450,7 +524,18 @@ if __name__ == '__main__':
         if not item_id:
             log_mensagem(f"   ⚠️ Item {idx} ignorado: sem campo 'id'")
             continue
+        
+        # Testar se o ID é parseável
+        cnpj, ano, seq = extrair_dados_do_id(str(item_id))
+        if not cnpj:
+            ids_problematicos.append(str(item_id))
+            if len(ids_problematicos) <= 5:  # Log apenas os primeiros 5
+                log_mensagem(f"   ⚠️ ID não reconhecido: {item_id}")
+        
         banco_dict[str(item_id)] = item
+
+    if ids_problematicos:
+        log_mensagem(f"   ⚠️ Total de IDs não reconhecidos: {len(ids_problematicos)}")
 
     log_mensagem(f"📊 {len(banco_dict)} licitações válidas indexadas")
 
@@ -470,6 +555,7 @@ if __name__ == '__main__':
     itens_homologados = 0
     situacoes_alteradas = 0
     erros_processamento = 0
+    erros_301 = 0
 
     # Processamento paralelo com tratamento de exceções melhorado
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
@@ -492,6 +578,9 @@ if __name__ == '__main__':
                             situacoes_alteradas += 1
 
                     relatorio_final.extend(res_mudancas)
+                elif not houve_mudanca and not res_dados:
+                    # Possível erro 301 ou outro problema
+                    erros_301 += 1
 
             except Exception as e:
                 erros_processamento += 1
@@ -510,6 +599,7 @@ if __name__ == '__main__':
     log_mensagem(f"   - Licitações modificadas: {lic_atualizadas}")
     log_mensagem(f"   - Itens homologados: {itens_homologados}")
     log_mensagem(f"   - Situações globais alteradas: {situacoes_alteradas}")
+    log_mensagem(f"   - Possíveis erros 301/redirect: {erros_301}")
     log_mensagem(f"   - Erros de processamento: {erros_processamento}")
 
     # Gerar relatório CSV
