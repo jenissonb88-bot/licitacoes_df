@@ -1,23 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-avalia_portfolio_v3.py - Matcher Farmacêutico Híbrido
-Versão 3.0: Indexação + Regras de Negócio Rigorous
-
-Arquitetura:
-  1. INDEXAÇÃO: Encontra candidatos em O(1) por componente
-  2. SCORING DETALHADO: Fuzzy matching + similaridade de cosseno
-  3. REGRAS DE NEGÓCIO: Validações que indexação pura não captura
-     - Penalidade para match parcial de combos
-     - Validação de concentração
-     - Bonificação para matches completos
-
-Resolve problemas da v2:
-  - Falso positivo: edital combo vs item simples
-  - Ignorância de concentração na indexação
-  - Over-matching de itens genéricos
-"""
-
 import json
 import re
 import os
