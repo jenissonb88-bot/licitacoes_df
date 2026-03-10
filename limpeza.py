@@ -2,205 +2,194 @@ import json
 import gzip
 import os
 import unicodedata
-import csv
+import re
 import sys
 import concurrent.futures
 from datetime import datetime
 
-ARQDADOS = 'dadosoportunidades.json.gz'
-ARQLIMPO = 'pregacoes_pharma_limpos.json.gz'
-ARQ_CATALOGO = 'Exportar Dados.csv'
-DATA_CORTE_2026 = datetime(2026, 1, 1)
+class LimpadorPNCP:
+    def __init__(self):
+        # Configurações de Ficheiros
+        self.arq_dados = 'dadosoportunidades.json.gz' # Certifique-se que o app.py gera este nome
+        self.arq_limpo = 'pregacoes_pharma_limpos.json.gz'
+        self.data_corte = datetime(2026, 1, 1)
 
-# --- GEOGRAFIA ---
-NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
-ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
-UFS_PERMITIDAS_MMH = NE_ESTADOS  # Apenas Nordeste
+        # Geografia
+        self.ne_estados = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
+        self.estados_bloqueados = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
+        self.ufs_permitidas_mmh = self.ne_estados 
 
-# --- VETOS ABSOLUTOS ---
-VETOS_ABSOLUTOS = [
-    "INTENCAO DE REGISTRO DE PRECO",
-    "INTENCAO REGISTRO DE PRECO",
-    "CREDENCIAMENTO",
-    "ADESAO",
-    "IRP",
-    "LEILAO",
-    "ALIENACAO"
-]
+        # Regras de Negócio (Já normalizadas na inicialização)
+        self.vetos_absolutos = self._normalizar_lista([
+            "INTENCAO DE REGISTRO DE PRECO", "INTENCAO REGISTRO DE PRECO",
+            "CREDENCIAMENTO", "ADESAO", "IRP", "LEILAO", "ALIENACAO"
+        ])
 
-# --- VETOS OPERACIONAIS (com variações) ---
-VETOS_IMEDIATOS_BASE = [
-    "PRESTACAO DE SERVICO", "SERVICO ESPECIALIZADO", "LOCACAO", "INSTALACAO",
-    "ASFALTICO", "ASFALTO", "MANUTENCAO PREDIAL", "MANUTENCAO DE EQUIPAMENTOS",
-    "MANUTENCAO PREVENTIVA", "MANUTENCAO CORRETIVA", "UNIFORME", "TEXTIL",
-    "REFORMA", "GASES MEDICINAIS", "CILINDRO", "LIMPEZA PREDIAL", "LAVANDERIA",
-    "IMPRESSAO", "OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "LIMPEZA URBANA",
-    "RESIDUOS SOLIDOS", "LOCACAO DE VEICULOS", "TRANSPORTE", "COMBUSTIVEL",
-    "DIESEL", "GASOLINA", "PNEUS", "PECAS AUTOMOTIVAS", "OFICINA", "VIGILANCIA",
-    "SEGURANCA", "BOMBEIRO", "SALVAMENTO", "RESGATE", "VIATURA", "FARDAMENTO",
-    "VESTUARIO", "INFORMATICA", "COMPUTADORES", "EVENTOS", "REPARO",
-    "CORRETIVA", "GERADOR", "VEICULO", "AMBULANCIA", "MOTOCICLETA",
-    "MECANICA", "FERRO FUNDIDO", "CONTRATACAO DE SERVICO",
-    "EQUIPAMENTO E MATERIA PERMANENTE", "RECARGA", "CONFECCAO",
-    "EQUIPAMENTOS PERMANENTES", "MATERIAIS PERMANENTES"
-]
+        self.vetos_imediatos = self._gerar_vetos_imediatos([
+            "PRESTACAO DE SERVICO", "SERVICO ESPECIALIZADO", "LOCACAO", "INSTALACAO",
+            "ASFALTICO", "ASFALTO", "MANUTENCAO PREDIAL", "MANUTENCAO DE EQUIPAMENTOS",
+            "MANUTENCAO PREVENTIVA", "MANUTENCAO CORRETIVA", "UNIFORME", "TEXTIL",
+            "REFORMA", "GASES MEDICINAIS", "CILINDRO", "LIMPEZA PREDIAL", "LAVANDERIA",
+            "IMPRESSAO", "OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "LIMPEZA URBANA",
+            "RESIDUOS SOLIDOS", "LOCACAO DE VEICULOS", "TRANSPORTE", "COMBUSTIVEL",
+            "DIESEL", "GASOLINA", "PNEUS", "PECAS AUTOMOTIVAS", "OFICINA", "VIGILANCIA",
+            "SEGURANCA", "BOMBEIRO", "SALVAMENTO", "RESGATE", "VIATURA", "FARDAMENTO",
+            "VESTUARIO", "INFORMATICA", "COMPUTADORES", "EVENTOS", "REPARO",
+            "CORRETIVA", "GERADOR", "VEICULO", "AMBULANCIA", "MOTOCICLETA",
+            "MECANICA", "FERRO FUNDIDO", "CONTRATACAO DE SERVICO",
+            "EQUIPAMENTO E MATERIA PERMANENTE", "RECARGA", "CONFECCAO",
+            "EQUIPAMENTOS PERMANENTES", "MATERIAIS PERMANENTES"
+        ])
 
-TERMOS_NE_MMH_NUTRI = [
-    "MATERIAL MEDIC", "INSUMO HOSPITALAR", "MMH", "SERINGA", "AGULHA",
-    "GAZE", "ATADURA", "SONDA", "CATETER", "EQUIPO", "LUVAS DE PROCEDIMENTO",
-    "MASCARA", "MASCARA CIRURGICA", "PENSO", "MATERIAL PENSO",
-    "MATERIAL-MEDICO", "MATERIAIS-MEDICO", "FRALDA", "ABSORVENTE",
-    "MEDICO-HOSPITALAR", "CURATIV", "CURATIVO", "CURATIVOS",
-    "LUVA DE PROCEDIMENTO", "COMPRESSA GAZE", "AVENTAL DESCARTAVEL",
-    "GESSADA", "CAMPO OPERATORIO", "CLOREXIDINA", "COLETOR PERFURO",
-    "ESPARADRAPO", "FITA MICROPORE", "GLUTARALDEIDO", "SONDA NASO",
-    "TOUCA DESCARTAVEL", "TUBO ASPIRACAO", "NUTRICAO ENTERAL",
-    "FORMULA INFANTIL", "SUPLEMENTO ALIMENTAR", "DIETA ENTERAL",
-    "DIETA PARENTERAL", "NUTRICAO CLINICA", "ENTERAL", "FORMULA ESPECIA",
-    "AGULHAS", "SERINGAS", "PARENTERA", "ENTERAL"
-]
+        self.termos_ne_mmh_nutri = self._normalizar_lista([
+            "MATERIAL MEDIC", "INSUMO HOSPITALAR", "MMH", "SERINGA", "AGULHA",
+            "GAZE", "ATADURA", "SONDA", "CATETER", "EQUIPO", "LUVAS DE PROCEDIMENTO",
+            "MASCARA", "MASCARA CIRURGICA", "PENSO", "MATERIAL PENSO",
+            "MATERIAL-MEDICO", "MATERIAIS-MEDICO", "FRALDA", "ABSORVENTE",
+            "MEDICO-HOSPITALAR", "CURATIV", "CURATIVO", "CURATIVOS",
+            "LUVA DE PROCEDIMENTO", "COMPRESSA GAZE", "AVENTAL DESCARTAVEL",
+            "GESSADA", "CAMPO OPERATORIO", "CLOREXIDINA", "COLETOR PERFURO",
+            "ESPARADRAPO", "FITA MICROPORE", "GLUTARALDEIDO", "SONDA NASO",
+            "TOUCA DESCARTAVEL", "TUBO ASPIRACAO", "NUTRICAO ENTERAL",
+            "FORMULA INFANTIL", "SUPLEMENTO ALIMENTAR", "DIETA ENTERAL",
+            "DIETA PARENTERAL", "NUTRICAO CLINICA", "ENTERAL", "FORMULA ESPECIA",
+            "AGULHAS", "SERINGAS", "PARENTERA", "ENTERAL"
+        ])
 
-TERMOS_SALVAMENTO = [
-    "MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOLA",
-    "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA", "ANTIBIOTICO",
-    "AQUISICAO DE MEDICAMENTO", "AQUISICAO DE MEDICAMENTOS"
-]
+        self.termos_salvamento = self._normalizar_lista([
+            "MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOLA",
+            "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA", "ANTIBIOTICO",
+            "AQUISICAO DE MEDICAMENTO", "AQUISICAO DE MEDICAMENTOS"
+        ])
 
-def normalize(t):
-    if not t:
-        return ""
-    return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
+    def _normalizar_texto(self, texto):
+        if not texto:
+            return ""
+        # Remove acentos e converte para maiúsculas
+        texto = ''.join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn')
+        return texto.upper()
 
-# Normalizar listas
-VETOS_ABSOLUTOS = [normalize(x) for x in VETOS_ABSOLUTOS]
-VETOS_IMEDIATOS = []
-for termo in VETOS_IMEDIATOS_BASE:
-    n = normalize(termo)
-    VETOS_IMEDIATOS.append(n)
-    if not n.endswith('S') and not n.endswith('ES'):
-        VETOS_IMEDIATOS.append(n + 'S')
-VETOS_IMEDIATOS = list(set(VETOS_IMEDIATOS))
+    def _normalizar_lista(self, lista):
+        return [self._normalizar_texto(item) for item in lista]
 
-TERMOS_NE_MMH_NUTRI = [normalize(x) for x in TERMOS_NE_MMH_NUTRI]
-TERMOS_SALVAMENTO = [normalize(x) for x in TERMOS_SALVAMENTO]
+    def _gerar_vetos_imediatos(self, lista_base):
+        vetos = set()
+        for termo in lista_base:
+            norm = self._normalizar_texto(termo)
+            vetos.add(norm)
+            # Adiciona plural simples de forma mais segura
+            if not norm.endswith('S'):
+                vetos.add(norm + 'S')
+        return list(vetos)
 
-def tem_medicamento_no_texto(texto):
-    """Verifica se há termos de medicamentos no texto"""
-    if not texto:
+    def _contem_termo_exato(self, termo, texto):
+        """Usa RegEx para procurar a palavra inteira, evitando falsos positivos."""
+        padrao = r'\b' + re.escape(termo) + r'\b'
+        return re.search(padrao, texto) is not None
+
+    def _tem_medicamento(self, texto_norm):
+        return any(termo in texto_norm for termo in self.termos_salvamento)
+
+    def analisar_pertinencia(self, obj_norm, uf, itens=None):
+        # 1. VETOS ABSOLUTOS
+        if any(veto in obj_norm for veto in self.vetos_absolutos):
+            return False
+
+        # 2. SUPER PASSE (Medicamentos)
+        tem_med = self._tem_medicamento(obj_norm)
+        if not tem_med and itens:
+            for item in itens:
+                desc = item.get('d', '') # Assume que a chave da descrição do item é 'd'
+                if self._tem_medicamento(self._normalizar_texto(desc)):
+                    tem_med = True
+                    break
+
+        if tem_med:
+            return uf not in self.estados_bloqueados
+
+        # 3. VETOS IMEDIATOS (Com proteção de falsos positivos via RegEx)
+        for veto in self.vetos_imediatos:
+            if self._contem_termo_exato(veto, obj_norm):
+                return False
+
+        # 4. MMH/NUTRIÇÃO - Apenas Nordeste
+        if any(t in obj_norm for t in self.termos_ne_mmh_nutri):
+            return uf in self.ufs_permitidas_mmh
+
         return False
-    texto_norm = normalize(texto)
-    return any(p in texto_norm for p in TERMOS_SALVAMENTO)
 
-def analisar_pertinencia(obj_norm, uf, itens=None):
-    """
-    Retorna True se deve manter, False se deve descartar
-    """
-    # 1. VETOS ABSOLUTOS (sempre vetam)
-    for veto in VETOS_ABSOLUTOS:
-        if veto in obj_norm:
-            return False
-
-    # 2. SUPER PASSE (medicamentos)
-    tem_med_objeto = tem_medicamento_no_texto(obj_norm)
-    tem_med_itens = False
-    if not tem_med_objeto and itens:
-        for item in itens:
-            desc = item.get('d', '')
-            if tem_medicamento_no_texto(desc):
-                tem_med_itens = True
-                break
-
-    if tem_med_objeto or tem_med_itens:
-        # Super passe libera, mas mantém bloqueio de estados bloqueados
-        if uf in ESTADOS_BLOQUEADOS:
-            return False
-        return True
-
-    # 3. VETOS IMEDIATOS
-    for veto in VETOS_IMEDIATOS:
-        if veto in obj_norm:
-            return False
-
-    # 4. MMH/NUTRIÇÃO - Apenas Nordeste
-    tem_mmh_nutri = any(t in obj_norm for t in TERMOS_NE_MMH_NUTRI)
-    if tem_mmh_nutri:
-        return uf in UFS_PERMITIDAS_MMH
-
-    return False
-
-def processar_licitacao_limpeza(licitacao):
-    if not licitacao:
-        return None
-
-    uf = licitacao.get('uf', '').upper()
-    obj_bruto = licitacao.get('obj', '')
-    obj_norm = normalize(obj_bruto)
-    itens = licitacao.get('itens', [])
-
-    # Validação de Pertinência
-    if not analisar_pertinencia(obj_norm, uf, itens):
-        return None
-
-    # Validação de Data
-    dt_enc_str = licitacao.get('dt_enc')
-    if not dt_enc_str:
-        return None
-
-    try:
-        dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
-        if dt_enc < DATA_CORTE_2026:
+    def processar_licitacao(self, licitacao):
+        if not licitacao:
             return None
-    except:
-        return None
 
-    # Chave única para deduplicação
-    chave_unica = f"{licitacao.get('id', '')[:14]}_{licitacao.get('edit', '')}"
-    qtd_itens = len(itens)
+        uf = str(licitacao.get('uf', '')).upper()
+        obj_norm = self._normalizar_texto(licitacao.get('obj', ''))
+        itens = licitacao.get('itens', [])
 
-    return (chave_unica, licitacao, dt_enc, qtd_itens)
+        # Validação de Pertinência
+        if not self.analisar_pertinencia(obj_norm, uf, itens):
+            return None
 
-if __name__ == '__main__':
-    if not os.path.exists(ARQDADOS):
-        print(f"Arquivo {ARQDADOS} não encontrado. Execute o app.py primeiro.")
-        sys.exit(1)
+        # Validação de Data
+        dt_enc_str = licitacao.get('dt_enc')
+        if not dt_enc_str:
+            return None
 
-    print("🧹 Iniciando limpeza de dados...")
+        try:
+            dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
+            if dt_enc < self.data_corte:
+                return None
+        except ValueError:
+            return None
 
-    with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
-        banco_bruto = json.load(f)
+        # Chave única: Assume que o identificador tem pelo menos 14 caracteres (CNPJ)
+        chave_unica = f"{str(licitacao.get('id', ''))[:14]}_{licitacao.get('edit', '')}"
+        
+        return (chave_unica, licitacao, dt_enc, len(itens))
 
-    print(f"📊 Total no banco bruto: {len(banco_bruto)} licitações")
+    def executar(self):
+        if not os.path.exists(self.arq_dados):
+            print(f"[!] Ficheiro {self.arq_dados} não encontrado. Execute o extrator primeiro.")
+            sys.exit(1)
 
-    banco_deduplicado = {}
+        print("🧹 A iniciar limpeza e padronização de dados...")
 
-    # Processamento paralelo
-    with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
-        resultados = executor.map(processar_licitacao_limpeza, banco_bruto)
+        with gzip.open(self.arq_dados, 'rt', encoding='utf-8') as f:
+            banco_bruto = json.load(f)
 
-    for res in resultados:
-        if res is None:
-            continue
+        print(f"📊 Total de registos no banco bruto: {len(banco_bruto)}")
 
-        chave, card, dt_novo, qtd_itens_novo = res
+        banco_deduplicado = {}
 
-        if chave not in banco_deduplicado:
-            banco_deduplicado[chave] = {'card': card, 'dt': dt_novo, 'qtd': qtd_itens_novo}
-        else:
-            # Mantém a versão com mais itens, ou data mais recente se igual
-            qtd_itens_antigo = banco_deduplicado[chave]['qtd']
-            if qtd_itens_novo > qtd_itens_antigo:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
+            resultados = executor.map(self.processar_licitacao, banco_bruto)
+
+        for res in resultados:
+            if res is None:
+                continue
+
+            chave, card, dt_novo, qtd_itens_novo = res
+
+            if chave not in banco_deduplicado:
                 banco_deduplicado[chave] = {'card': card, 'dt': dt_novo, 'qtd': qtd_itens_novo}
-            elif qtd_itens_novo == qtd_itens_antigo:
-                if dt_novo > banco_deduplicado[chave]['dt']:
+            else:
+                qtd_antiga = banco_deduplicado[chave]['qtd']
+                dt_antiga = banco_deduplicado[chave]['dt']
+                
+                if qtd_itens_novo > qtd_antiga or (qtd_itens_novo == qtd_antiga and dt_novo > dt_antiga):
                     banco_deduplicado[chave] = {'card': card, 'dt': dt_novo, 'qtd': qtd_itens_novo}
 
-    # Gera lista final
-    lista_final = [item['card'] for item in banco_deduplicado.values()]
+        lista_final = [item['card'] for item in banco_deduplicado.values()]
 
-    print(f"💾 Salvando {len(lista_final)} licitações limpas...")
+        print(f"💾 A guardar {len(lista_final)} licitações processadas e limpas...")
 
-    with gzip.open(ARQLIMPO, 'wt', encoding='utf-8') as f:
-        json.dump(lista_final, f, ensure_ascii=False)
+        with gzip.open(self.arq_limpo, 'wt', encoding='utf-8') as f:
+            json.dump(lista_final, f, ensure_ascii=False)
 
-    print(f"✅ Concluído! {len(lista_final)} licitações validadas e prontas para o Dashboard.")
-    print(f"   📉 Rejeitadas: {len(banco_bruto) - len(lista_final)} licitações")
+        rejeitadas = len(banco_bruto) - len(lista_final)
+        print(f"✅ Concluído! {len(lista_final)} oportunidades validadas e prontas para o Dashboard.")
+        print(f"📉 Rejeitadas pelo algoritmo de negócio: {rejeitadas}")
+
+if __name__ == '__main__':
+    limpador = LimpadorPNCP()
+    limpador.executar()
