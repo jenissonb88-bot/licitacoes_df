@@ -40,6 +40,10 @@ THRESHOLD_BAIXO = 0.30     # 30-49% = BAIXO
 MAX_WORKERS = 4
 CHECKPOINT_FILE = "checkpoint_avaliacao_v3.json"
 
+# ✅ NOME FIXO DO ARQUIVO DE ENTRADA (do limpeza.py)
+ARQ_LICITACOES = 'pregacoes_pharma_limpos.json.gz'
+ARQ_PORTFOLIO = 'Exportar Dados.csv'
+
 # Dicionário de sinônimos farmacêuticos (expansível)
 SINONIMOS_FARMACOS = {
     "ESCOPOLAMINA": ["HIOSCINA", "BUSCOPAN", "BUTILBROMETO DE ESCOPOLAMINA", "ESCOPOLAMINA BUTILBROMETO"],
@@ -68,7 +72,7 @@ class PortfolioIndexado:
         self.items_completos = {}  # id -> dados completos
         self.sinonimos_expandidos = {}  # componente -> [sinônimos]
 
-    def carregar_portfolio(self, csv_path='Exportar Dados.csv'):
+    def carregar_portfolio(self, csv_path=ARQ_PORTFOLIO):
         """Carrega e indexa o portfólio com enriquecimento."""
         logger.info(f"📂 Carregando portfólio: {csv_path}")
 
@@ -171,7 +175,7 @@ class PortfolioIndexado:
             # Limpar: remover doses, unidades, textos entre parênteses
             limpo = re.sub(r'\d+[\d.,/\s]*\s*(MG|ML|G|UI|MCG|UNIDADES?)', '', parte, flags=re.I)
             limpo = re.sub(r'\(.*?\)', '', limpo)
-            limpo = re.sub(r'(C/|COM|X|DE|DA|DO|DOS|DAS)', '', limpo, flags=re.I)
+            limpo = re.sub(r'\b(C/|COM|X|DE|DA|DO|DOS|DAS)\b', '', limpo, flags=re.I)
             limpo = limpo.strip()
 
             if len(limpo) > 2:
@@ -528,10 +532,33 @@ def main():
     # 1. Carregar e indexar portfólio
     portfolio = PortfolioIndexado().carregar_portfolio()
 
-    # 2. Carregar licitações
+    # 2. ✅ CARREGAR LICITAÇÕES DO ARQUIVO CORRETO
     licitacoes = []
-    arquivos_licitacoes = list(Path('.').glob('licitacoes_*.json*'))
+    
+    # Procura arquivo específico do limpeza.py
+    padroes = [
+        ARQ_LICITACOES,                      # ✅ Padrão atual: pregacoes_pharma_limpos.json.gz
+        'pregacoes_pharma_limpos_*.json.gz', # Fallback com timestamp
+        'licitacoes_*.json*'                 # Padrão antigo (compatibilidade)
+    ]
+    
+    arquivos_licitacoes = []
+    for padrao in padroes:
+        encontrados = list(Path('.').glob(padrao))
+        if encontrados:
+            arquivos_licitacoes = encontrados
+            logger.info(f"📂 Encontrado padrão '{padrao}': {len(encontrados)} arquivo(s)")
+            for arq in encontrados:
+                logger.info(f"   📄 {arq.name}")
+            break
+    
+    if not arquivos_licitacoes:
+        logger.error(f"❌ Nenhum arquivo de licitações encontrado!")
+        logger.info(f"   📁 Diretório atual: {os.getcwd()}")
+        logger.info(f"   📁 Arquivos disponíveis: {[f for f in os.listdir('.') if '.json' in f or '.gz' in f]}")
+        return
 
+    # Carregar licitações dos arquivos encontrados
     for arquivo in arquivos_licitacoes:
         try:
             if str(arquivo).endswith('.gz'):
@@ -543,15 +570,18 @@ def main():
 
             if isinstance(dados, list):
                 licitacoes.extend(dados)
+                logger.info(f"✅ {arquivo.name}: {len(dados)} licitações")
             else:
                 licitacoes.append(dados)
-        except Exception as e:
-            logger.error(f"Erro ao carregar {arquivo}: {e}")
+                logger.info(f"✅ {arquivo.name}: 1 licitação (dict)")
 
-    logger.info(f"📋 {len(licitacoes)} licitações carregadas")
+        except Exception as e:
+            logger.error(f"❌ Erro ao carregar {arquivo}: {e}")
+
+    logger.info(f"📋 Total: {len(licitacoes)} licitações para avaliar")
 
     if not licitacoes:
-        logger.warning("Nenhuma licitação encontrada para avaliar")
+        logger.warning("⚠️ Nenhuma licitação encontrada para avaliar")
         return
 
     # 3. Processar licitações
@@ -592,11 +622,11 @@ def main():
                             'matches': matches
                         })
                 except Exception as e:
-                    logger.error(f"Erro processando licitação {idx}: {e}")
+                    logger.error(f"❌ Erro processando licitação {idx}: {e}")
 
     # 4. Gerar relatório
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    arquivo_saida = f"relatorio_compatibilidade_v3_{timestamp}.csv"
+    arquivo_saida = f"relatorio_compatibilidade_{timestamp}.csv"
 
     # CSV
     with open(arquivo_saida, 'w', encoding='utf-8', newline='') as f:
@@ -620,7 +650,15 @@ def main():
                 ])
 
     logger.info(f"✅ Relatório gerado: {arquivo_saida}")
-    logger.info(f"📊 Total de licitações com matches: {len(resultados_finais)}")
+    logger.info(f"📊 Licitações com matches: {len(resultados_finais)}/{len(licitacoes)}")
+    
+    # Resumo por tipo de match
+    resumo = {'ALTO': 0, 'MEDIO': 0, 'BAIXO': 0}
+    for r in resultados_finais:
+        for m in r['matches']:
+            resumo[m['tipo_match']] = resumo.get(m['tipo_match'], 0) + 1
+    
+    logger.info(f"📈 Matches: ALTO={resumo['ALTO']}, MEDIO={resumo['MEDIO']}, BAIXO={resumo['BAIXO']}")
 
 
 if __name__ == "__main__":
