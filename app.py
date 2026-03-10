@@ -8,6 +8,7 @@ import sys
 import csv
 import re
 import concurrent.futures
+import time
 from datetime import datetime, timedelta, date
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -22,12 +23,16 @@ ARQ_MANUAL = 'links_manuais.txt'
 MAXWORKERS = 15
 DATA_CORTE_FIXA = datetime(2025, 12, 1)
 
-# --- NOVOS ENDPOINTS API DADOS ABERTOS (2026) ---
-# Endpoint de consulta pública (mantido - funciona)
+# --- ENDPOINTS ---
+# API de Consulta Pública (mantida - funciona)
 URL_CONSULTA_PUBLICA = 'https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao'
-# ✅ NOVO: Endpoint de dados abertos para itens (resolve HTTP 301)
+
+# API de Dados Abertos (nova)
 URL_DADOS_ABERTOS = 'https://dadosabertos.compras.gov.br/modulo-contratacoes'
-ENDPOINT_ITENS = f"{URL_DADOS_ABERTOS}/2_consultarItensContratacoes_PNCP_14133"
+ENDPOINT_ITENS_DA = f"{URL_DADOS_ABERTOS}/2_consultarItensContratacoes_PNCP_14133"
+
+# API Antiga (fallback para quando dados abertos der 404)
+URL_API_ANTIGA = 'https://pncp.gov.br/api/pncp/v1'
 
 # --- GEOGRAFIA E MAPAS ---
 NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
@@ -41,26 +46,7 @@ def normalize(t):
     if not t: return ""
     return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
 
-# --- CARREGAMENTO DO CATÁLOGO ---
-CATALOGO_TERMOS = set()
-if os.path.exists(ARQ_CATALOGO):
-    try:
-        for enc in ['utf-8', 'latin-1', 'cp1252']:
-            try:
-                with open(ARQ_CATALOGO, 'r', encoding=enc) as f:
-                    leitor = csv.reader(f, delimiter=';')
-                    next(leitor, None)
-                    for row in leitor:
-                        if len(row) > 1:
-                            termos = [row[0], row[1]] if len(row) > 1 else [row[0]]
-                            for t in termos:
-                                norm = normalize(t)
-                                if len(norm) > 4: CATALOGO_TERMOS.add(norm)
-                print(f"📚 Catálogo carregado: {len(CATALOGO_TERMOS)} termos.")
-                break
-            except: continue
-    except: pass
-
+# --- CATÁLOGOS (mantidos) ---
 VETOS_ALIMENTACAO = [normalize(x) for x in ["ALIMENTACAO ESCOLAR", "GENEROS ALIMENTICIOS", "MERENDA", "PNAE", "PERECIVEIS", "HORTIFRUTI", "CARNES", "PANIFICACAO", "CESTAS BASICAS", "LANCHE", "REFEICOES", "COFFEE BREAK", "BUFFET", "COZINHA", "AÇOUGUE", "POLPA DE FRUTA", "ESTIAGEM"]]
 VETOS_EDUCACAO = [normalize(x) for x in ["MATERIAL ESCOLAR", "PEDAGOGICO", "DIDATICO", "BRINQUEDOS", "LIVROS", "TRANSPORTE ESCOLAR", "KIT ALUNO", "REDE MUNICIPAL DE ENSINO", "SECRETARIA DE EDUCACAO"]]
 VETOS_OPERACIONAL = [normalize(x) for x in ["OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "REFORMA", "MANUTENCAO PREDIAL", "MANUTENCAO DE EQUIPAMENTOS", "LIMPEZA URBANA", "RESIDUOS SOLIDOS", "LOCACAO DE VEICULOS", "TRANSPORTE", "COMBUSTIVEL", "DIESEL", "GASOLINA", "PNEUS", "PECAS AUTOMOTIVAS", "OFICINA", "VIGILANCIA", "SEGURANCA", "BOMBEIRO", "SALVAMENTO", "RESGATE", "VIATURA", "FARDAMENTO", "VESTUARIO", "INFORMATICA", "COMPUTADORES", "IMPRESSAO", "EVENTOS", "REPARO", "CORRETIVA", "VEICULO", "AMBULANCIA", "MOTOCICLETA", "MECANICA", "FERRO FUNDIDO", "CONTRATACAO DE SERVICO", "EQUIPAMENTO E MATERIA PERMANENTE", "RECARGA", "ASFATIC", "CONFECCAO"]]
@@ -97,7 +83,6 @@ def safe_float(val):
     try: return float(val) if val is not None else 0.0
     except: return 0.0
 
-# --- SEGURANÇA: CONTROLE DE CHECKPOINT ---
 def salvar_checkpoint(dia, pagina):
     with open(ARQ_CHECKPOINT, 'w') as f:
         json.dump({'dia': dia, 'pagina': pagina}, f)
@@ -108,97 +93,94 @@ def carregar_checkpoint():
             return json.load(f)
     return None
 
-# ✅ NOVO: Busca itens via API de dados abertos (resolve HTTP 301)
-def buscar_itens_dados_abertos(cnpj, ano, seq, session):
+# ✅ NOVO: Busca itens com fallback para API antiga
+def buscar_itens_com_fallback(cnpj, ano, seq, session):
     """
-    Busca itens usando a API de dados abertos (nova URL).
-    Resolve o problema de HTTP 301 do endpoint antigo.
+    Tenta buscar itens na API de dados abertos.
+    Se der 404, faz fallback para API antiga.
     """
-    itens_brutos = []
-    pagina = 1
-    max_paginas = 100  # Segurança
+    # Tentativa 1: API de Dados Abertos (nova)
+    params = {
+        'orgaoEntidadeCnpj': cnpj,
+        'anoCompraPncp': int(ano),  # Converter para int
+        'sequencialCompraPncp': int(seq),  # Converter para int
+        'pagina': 1,
+        'tamanhoPagina': 500
+    }
     
-    while pagina <= max_paginas:
-        params = {
-            'orgaoEntidadeCnpj': cnpj,
-            'anoCompraPncp': ano,
-            'sequencialCompraPncp': seq,
-            'pagina': pagina,
-            'tamanhoPagina': 500  # Máximo permitido
-        }
+    try:
+        r = session.get(ENDPOINT_ITENS_DA, params=params, timeout=30)
         
-        try:
-            r = session.get(ENDPOINT_ITENS, params=params, timeout=30)
+        if r.status_code == 200:
+            data = r.json()
+            if isinstance(data, dict):
+                itens = data.get('data', []) or data.get('itens', []) or data.get('resultado', [])
+            elif isinstance(data, list):
+                itens = data
+            else:
+                itens = []
+            
+            if itens:
+                print(f"   ✅ Dados Abertos: {len(itens)} itens")
+                return itens, 'dados_abertos'
+        
+        elif r.status_code == 404:
+            print(f"   ⚠️ Dados Abertos 404, tentando API antiga...")
+        else:
+            print(f"   ⚠️ Dados Abertos HTTP {r.status_code}")
+            
+    except Exception as e:
+        print(f"   ⚠️ Erro Dados Abertos: {e}")
+    
+    # Tentativa 2: API Antiga (fallback)
+    url_antiga = f'{URL_API_ANTIGA}/orgaos/{cnpj}/compras/{ano}/{seq}/itens'
+    try:
+        pagina = 1
+        itens_totais = []
+        
+        while True:
+            r = session.get(
+                url_antiga, 
+                params={'pagina': pagina, 'tamanhoPagina': 100}, 
+                timeout=20
+            )
             
             if r.status_code != 200:
                 if pagina == 1:
-                    print(f"   ⚠️ HTTP {r.status_code} ao buscar itens {cnpj}/{ano}/{seq}")
+                    print(f"   ❌ API Antiga HTTP {r.status_code}")
+                    return None, 'falha'
                 break
             
-            # A nova API retorna lista direta ou dict com 'data'
             data = r.json()
-            if isinstance(data, dict):
-                itens_pagina = data.get('data', []) or data.get('itens', [])
-            elif isinstance(data, list):
-                itens_pagina = data
-            else:
-                break
+            itens_pagina = data.get('data', []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
             
             if not itens_pagina:
                 break
             
-            # Mapear itens para formato interno
-            for it in itens_pagina:
-                if not isinstance(it, dict):
-                    continue
-                
-                desc = it.get('descricao', '')
-                sit_id = int(it.get('situacaoCompraItem') or 1)
-                sit_nome = MAPA_SITUACAO_ITEM.get(sit_id, "EM ANDAMENTO")
-                
-                # Mapear benefício
-                benef_id = it.get('tipoBeneficioId')
-                benef_nome_api = str(it.get('tipoBeneficioNome', '')).upper()
-                if benef_id in [1, 2, 3]:
-                    benef_final = benef_id
-                elif "EXCLUSIVA" in benef_nome_api:
-                    benef_final = 1
-                elif "COTA" in benef_nome_api:
-                    benef_final = 3
-                else:
-                    benef_final = 4
-                
-                itens_brutos.append({
-                    'n': it.get('numeroItem'),
-                    'd': desc,
-                    'q': safe_float(it.get('quantidade')),
-                    'u': it.get('unidadeMedida', 'UN'),
-                    'v_est': safe_float(it.get('valorUnitarioEstimado')),
-                    'benef': benef_final,
-                    'sit': sit_nome,
-                    'res_forn': None,
-                    'res_val': 0.0
-                })
+            itens_totais.extend(itens_pagina)
             
-            if len(itens_pagina) < 500:
+            if len(itens_pagina) < 100:
                 break
             
             pagina += 1
+        
+        if itens_totais:
+            print(f"   ✅ API Antiga: {len(itens_totais)} itens")
+            return itens_totais, 'api_antiga'
             
-        except Exception as e:
-            print(f"   ⚠️ Erro ao buscar itens página {pagina}: {e}")
-            break
+    except Exception as e:
+        print(f"   ❌ Erro API Antiga: {e}")
     
-    return itens_brutos
+    return None, 'falha'
 
 def processar_licitacao(lic, session, forcado=False):
     id_ref = "DESCONHECIDO"
     try:
-        if not isinstance(lic, dict): return ('ERRO', {'msg': 'Formato JSON inválido da API principal'}, 0, 0)
+        if not isinstance(lic, dict): return ('ERRO', {'msg': 'Formato JSON inválido'}, 0, 0)
         
         cnpj = lic.get('orgaoEntidade', {}).get('cnpj', '0000')
-        ano = lic.get('anoCompra', '0000')
-        seq = lic.get('sequencialCompra', '0000')
+        ano = str(lic.get('anoCompra', '0000'))
+        seq = str(lic.get('sequencialCompra', '0000'))
         id_ref = f"{cnpj}/{ano}/{seq}"
         
         sit_global_id = lic.get('situacaoCompraId') or 1
@@ -212,8 +194,11 @@ def processar_licitacao(lic, session, forcado=False):
         
         if not forcado:
             if uf and uf in ESTADOS_BLOQUEADOS: return ('IGNORADO', None, 0, 0)
-            dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
-            if dt_enc < DATA_CORTE_FIXA: return ('IGNORADO', None, 0, 0)
+            try:
+                dt_enc = datetime.fromisoformat(dt_enc_str.replace('Z', '+00:00')).replace(tzinfo=None)
+                if dt_enc < DATA_CORTE_FIXA: return ('IGNORADO', None, 0, 0)
+            except:
+                pass
             if veta_edital(obj_raw, uf): return ('VETADO', None, 0, 0)
             
             palavras_magicas = ["MEDICAMENTO", "MEDICAMENTOS", "AQUISICAO DE MEDICAMENTOS"]
@@ -229,10 +214,44 @@ def processar_licitacao(lic, session, forcado=False):
             
             if not tem_interesse: return ('IGNORADO', None, 0, 0)
 
-        # ✅ USA NOVA API DE DADOS ABERTOS PARA ITENS
-        itens_brutos = buscar_itens_dados_abertos(cnpj, ano, seq, session)
+        # ✅ USA FUNÇÃO COM FALLBACK
+        itens_brutos, fonte = buscar_itens_com_fallback(cnpj, ano, seq, session)
         
-        if not itens_brutos: return ('IGNORADO', None, 0, 0)
+        if not itens_brutos:
+            return ('IGNORADO', None, 0, 0)
+        
+        # Mapear itens
+        itens_mapeados = []
+        for it in itens_brutos:
+            if not isinstance(it, dict):
+                continue
+            
+            desc = it.get('descricao', '')
+            sit_id = int(it.get('situacaoCompraItem') or 1)
+            sit_nome = MAPA_SITUACAO_ITEM.get(sit_id, "EM ANDAMENTO")
+            
+            benef_id = it.get('tipoBeneficioId')
+            benef_nome_api = str(it.get('tipoBeneficioNome', '')).upper()
+            if benef_id in [1, 2, 3]:
+                benef_final = benef_id
+            elif "EXCLUSIVA" in benef_nome_api:
+                benef_final = 1
+            elif "COTA" in benef_nome_api:
+                benef_final = 3
+            else:
+                benef_final = 4
+            
+            itens_mapeados.append({
+                'n': it.get('numeroItem'),
+                'd': desc,
+                'q': safe_float(it.get('quantidade')),
+                'u': it.get('unidadeMedida', 'UN'),
+                'v_est': safe_float(it.get('valorUnitarioEstimado')),
+                'benef': benef_final,
+                'sit': sit_nome,
+                'res_forn': None,
+                'res_val': 0.0
+            })
         
         dados_finais = {
             'id': f"{cnpj}{ano}{seq}",
@@ -246,17 +265,18 @@ def processar_licitacao(lic, session, forcado=False):
             'edit': f"{str(lic.get('numeroCompra', '')).zfill(5)}/{ano}",
             'link': f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
             'val_tot': safe_float(lic.get('valorTotalEstimado')),
-            'itens': itens_brutos,
+            'itens': itens_mapeados,
             'sit_global': sit_global_nome,
-            'fonte': lic.get('nomeEntidadeIntegradora', 'PNCP Direto')
+            'fonte': lic.get('nomeEntidadeIntegradora', 'PNCP Direto'),
+            'api_fonte': fonte  # Registra qual API funcionou
         }
-        return ('CAPTURADO', dados_finais, len(itens_brutos), 0)
+        return ('CAPTURADO', dados_finais, len(itens_mapeados), 0)
         
     except Exception as e:
-        return ('ERRO', {'msg': f"Erro interno em {id_ref}: {str(e)}"}, 0, 0)
+        return ('ERRO', {'msg': f"Erro em {id_ref}: {str(e)}"}, 0, 0)
 
 def buscar_periodo(session, banco, d_ini, d_fim):
-    stats = {'vetados': 0, 'capturados': 0, 'itens': 0, 'ignorados': 0, 'erros': 0}
+    stats = {'vetados': 0, 'capturados': 0, 'itens': 0, 'ignorados': 0, 'erros': 0, 'fallbacks': 0}
     checkpoint = carregar_checkpoint()
     
     delta = d_fim - d_ini
@@ -267,8 +287,6 @@ def buscar_periodo(session, banco, d_ini, d_fim):
         if checkpoint and dia < checkpoint['dia']: continue
 
         print(f"\n📅 DATA: {dia}")
-        
-        # Endpoint de consulta pública (mantido - funciona)
         pag = checkpoint['pagina'] if checkpoint and dia == checkpoint['dia'] else 1
         
         while True:
@@ -278,7 +296,7 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                     params={
                         'dataInicial': dia,
                         'dataFinal': dia,
-                        'codigoModalidadeContratacao': 6,  # Pregão Eletrônico
+                        'codigoModalidadeContratacao': 6,
                         'pagina': pag,
                         'tamanhoPagina': 50
                     },
@@ -286,7 +304,7 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                 )
                 
                 if r.status_code != 200:
-                    print(f"   ⚠️ Erro crítico HTTP {r.status_code}. Abortando para segurança.")
+                    print(f"   ⚠️ Erro crítico HTTP {r.status_code}. Abortando.")
                     break
                 
                 dados = r.json()
@@ -294,7 +312,7 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                 if not lics: break
                 
                 tot_pag = dados.get('totalPaginas', 1)
-                s_pag = {'vetados': 0, 'capturados': 0, 'itens': 0, 'ignorados': 0, 'erros': 0}
+                s_pag = {'vetados': 0, 'capturados': 0, 'itens': 0, 'ignorados': 0, 'erros': 0, 'fallbacks': 0}
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
                     futuros = [exe.submit(processar_licitacao, l, session) for l in lics]
@@ -303,13 +321,15 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                         if st == 'CAPTURADO' and d:
                             s_pag['capturados'] += 1
                             s_pag['itens'] += i_qtd
+                            if d.get('api_fonte') == 'api_antiga':
+                                s_pag['fallbacks'] += 1
                             banco[f"{d['id'][:14]}_{d['edit']}"] = d
                         elif st == 'VETADO': s_pag['vetados'] += 1
                         elif st == 'IGNORADO': s_pag['ignorados'] += 1
                         elif st == 'ERRO': s_pag['erros'] += 1
 
-                for k in stats: stats[k] += s_pag[k]
-                print(f"   📄 Pág {pag}/{tot_pag}: 🎯 {s_pag['capturados']} Caps | 🔥 {s_pag['erros']} Erros")
+                for k in stats: stats[k] += s_pag.get(k, 0)
+                print(f"   📄 Pág {pag}/{tot_pag}: 🎯 {s_pag['capturados']} Caps | 🔄 {s_pag['fallbacks']} FB | 🔥 {s_pag['erros']} Erros")
                 
                 salvar_checkpoint(dia, pag + 1)
                 
@@ -319,8 +339,10 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                 pag += 1
                 
             except Exception as e:
-                print(f"   ⚠️ Falha na página {pag}: {e}. O robô tentará novamente na próxima execução via checkpoint.")
+                print(f"   ⚠️ Falha na página {pag}: {e}")
                 break
+    
+    print(f"\n📊 Resumo: {stats['capturados']} capturados, {stats['fallbacks']} fallbacks, {stats['erros']} erros")
 
 if __name__ == '__main__':
     if os.path.exists(ARQ_LOCK): sys.exit(0)
@@ -344,14 +366,14 @@ if __name__ == '__main__':
 
         buscar_periodo(session, banco, dt_start, dt_end)
         
-        print("\n💾 Salvando banco de dados com segurança...")
+        print("\n💾 Salvando...")
         with gzip.open(ARQ_TEMP, 'wt', encoding='utf-8') as f:
             json.dump(list(banco.values()), f, ensure_ascii=False)
         
         if os.path.exists(ARQ_TEMP):
             os.replace(ARQ_TEMP, ARQDADOS)
             if os.path.exists(ARQ_CHECKPOINT): os.remove(ARQ_CHECKPOINT)
-            print("✅ Banco de dados atualizado com sucesso!")
+            print("✅ Concluído!")
 
     finally:
         if os.path.exists(ARQ_LOCK): os.remove(ARQ_LOCK)
