@@ -17,7 +17,6 @@ def carregar_licitacoes():
     """Carrega licitações do arquivo dadosoportunidades.json.gz."""
     licitacoes = []
     
-    # ✅ Procura arquivo específico do app.py
     arquivo = Path(ARQ_ENTRADA)
     
     if not arquivo.exists():
@@ -49,7 +48,6 @@ def normalizar_id(licitacao):
         if campo in licitacao and licitacao[campo]:
             return str(licitacao[campo]).strip()
     
-    # Fallback
     orgao = licitacao.get('orgao', '') or licitacao.get('org', '')
     edital = licitacao.get('edital', '') or licitacao.get('edit', '')
     if orgao and edital:
@@ -76,7 +74,6 @@ def deduplicar(licitacoes):
         if len(versoes) == 1:
             resultado.append(versoes[0])
         else:
-            # Escolher versão com mais campos preenchidos
             melhor = max(versoes, key=lambda x: len([v for v in x.values() if v]))
             resultado.append(melhor)
             logger.debug(f"🔄 {lic_id}: {len(versoes)} versões → 1")
@@ -84,6 +81,7 @@ def deduplicar(licitacoes):
     logger.info(f"✅ Após deduplicação: {len(resultado)} licitações")
     return resultado
 
+# ✅ CORRIGIDO: Normalização de valores monetários
 def limpar_dados(licitacao):
     """Limpa e normaliza campos."""
     # Remover campos internos
@@ -99,14 +97,30 @@ def limpar_dados(licitacao):
             except:
                 pass
     
-    # Normalizar valores
-    for campo in ['val_tot', 'valorTotal']:
+    # ✅ CORRIGIDO: Normalizar valores monetários
+    for campo in ['val_tot', 'valorTotal', 'valorTotalEstimado', 'valorUnitarioEstimado']:
         if campo in licitacao and licitacao[campo]:
             try:
-                valor = float(str(licitacao[campo]).replace('R$', '').replace('.', '').replace(',', '.'))
-                licitacao[campo] = valor
-            except:
-                pass
+                val = licitacao[campo]
+                
+                # Se é string, limpar
+                if isinstance(val, str):
+                    val = val.replace('R$', '').replace(' ', '')
+                    # Formato brasileiro: 1.234.567,89 → 1234567.89
+                    if ',' in val:
+                        val = val.replace('.', '').replace(',', '.')
+                
+                valor_float = float(val)
+                
+                # Se valor parece ser centavos (inteiro muito grande), converter
+                if valor_float > 100000 and valor_float == int(valor_float):
+                    valor_float = valor_float / 100.0
+                
+                licitacao[campo] = valor_float
+                
+            except Exception as e:
+                logger.warning(f"Não foi possível converter valor em {campo}: {licitacao[campo]}")
+                licitacao[campo] = 0.0
     
     return licitacao
 
@@ -127,7 +141,7 @@ def filtrar_relevantes(licitacoes):
         texto = ' '.join([
             str(lic.get('obj', '')),
             str(lic.get('objeto', '')),
-            str(lic.get('d', ''))  # descrição de itens
+            str(lic.get('d', ''))
         ]).upper()
         
         if any(p in texto for p in palavras_chave):
@@ -153,22 +167,15 @@ def salvar_resultado(licitacoes):
 def main():
     logger.info("🚀 Iniciando limpeza")
     
-    # 1. Carregar
     licitacoes = carregar_licitacoes()
     if not licitacoes:
         logger.warning("⚠️ Nada para processar")
         return
     
-    # 2. Deduplicar
     licitacoes = deduplicar(licitacoes)
-    
-    # 3. Limpar
     licitacoes = [limpar_dados(lic) for lic in licitacoes]
-    
-    # 4. Filtrar
     licitacoes = filtrar_relevantes(licitacoes)
     
-    # 5. Salvar
     if licitacoes:
         salvar_resultado(licitacoes)
         logger.info(f"✅ Concluído: {len(licitacoes)} licitações limpas")
