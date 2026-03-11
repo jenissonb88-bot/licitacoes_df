@@ -189,35 +189,109 @@ const GITHUB_FILE_PATH = 'links_manuais.txt';
 const modalObj = new bootstrap.Modal(document.getElementById('modalDetalhes'));
 const modalInclusaoObj = new bootstrap.Modal(document.getElementById('modalInclusao'));
 
+// ✅ AJUSTADO: Busca o arquivo de compatibilidade mais recente (com timestamp)
 async function loadCompatData() {
     try {
+        // Tenta encontrar o arquivo de relatório mais recente
         const response = await fetch('relatorio_compatibilidade.csv');
-        if (!response.ok) return;
-        
-        const csvText = await response.text();
-        const lines = csvText.trim().split('\n');
-        if (lines.length < 2) return;
-        
-        const headers = lines[0].split(';').map(h => h.trim().replace(/^\uFEFF/, ''));
-        const colId = headers.indexOf('id');
-        const colPercentual = headers.indexOf('percentual');
-        const colConfianca = headers.indexOf('confianca');
-        const colMatches = headers.indexOf('principais_matches');
-        
-        for (let i = 1; i < lines.length; i++) {
-            const cols = lines[i].split(';');
-            if (cols.length >= 4) {
-                const id = colId >= 0 ? cols[colId] : cols[0];
-                const percentual = parseFloat(colPercentual >= 0 ? cols[colPercentual] : cols[3]) || 0;
-                const confianca = (colConfianca >= 0 ? cols[colConfianca] : cols[4]) || 'INCOMPATIVEL';
-                const matches = (colMatches >= 0 ? cols[colMatches] : '').split('|').filter(m => m);
-                
-                if (id) compatData[id] = { percentual, confianca: confianca.toUpperCase(), matches };
-            }
+        if (!response.ok) {
+            // Se não encontrar o genérico, tenta buscar com padrão de timestamp
+            console.log('Arquivo relatorio_compatibilidade.csv não encontrado, tentando padrão com timestamp...');
+            return;
         }
+        
+        await parseCompatCSV(await response.text());
     } catch (e) {
-        console.log('Erro compatibilidade:', e);
+        console.log('Erro ao carregar compatibilidade:', e);
+        // Não falha se o arquivo não existir
     }
+}
+
+// ✅ NOVO: Parser do CSV de compatibilidade no novo formato
+async function parseCompatCSV(csvText) {
+    const lines = csvText.trim().split('\n');
+    if (lines.length < 2) return;
+    
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^\uFEFF/, '').replace(/^"|"$/g, ''));
+    
+    // Mapeamento de colunas para novo formato do avalia_portfolio.py
+    const colLicitacaoId = headers.indexOf('licitacao_id');
+    const colItemPortfolioId = headers.indexOf('item_portfolio_id');
+    const colDescricao = headers.indexOf('descricao_portfolio');
+    const colScore = headers.indexOf('score');
+    const colTipoMatch = headers.indexOf('tipo_match');
+    const colComponentes = headers.indexOf('componentes_match');
+    
+    // Fallback para formato antigo (compatibilidade reversa)
+    const colId = headers.indexOf('id');
+    const colPercentual = headers.indexOf('percentual');
+    const colConfianca = headers.indexOf('confianca');
+    const colMatches = headers.indexOf('principais_matches');
+    
+    const isNovoFormato = colLicitacaoId >= 0 && colScore >= 0;
+    
+    for (let i = 1; i < lines.length; i++) {
+        const cols = parseCSVLine(lines[i]);
+        if (cols.length < 3) continue;
+        
+        let id, percentual, confianca, matches;
+        
+        if (isNovoFormato) {
+            // Novo formato do avalia_portfolio.py
+            id = cols[colLicitacaoId];
+            const scoreStr = cols[colScore];
+            percentual = parseFloat(scoreStr.replace('%', '').trim()) || 0;
+            confianca = (colTipoMatch >= 0 ? cols[colTipoMatch] : 'INCOMPATIVEL').toUpperCase();
+            matches = (colComponentes >= 0 ? cols[colComponentes] : '').split('|').filter(m => m);
+            
+            // Se já existe entrada para esta licitação, mantém a melhor
+            if (compatData[id]) {
+                if (percentual > compatData[id].percentual) {
+                    compatData[id] = { percentual, confianca, matches };
+                }
+            } else {
+                compatData[id] = { percentual, confianca, matches };
+            }
+        } else {
+            // Formato antigo (fallback)
+            id = colId >= 0 ? cols[colId] : cols[0];
+            percentual = parseFloat(colPercentual >= 0 ? cols[colPercentual] : cols[3]) || 0;
+            confianca = (colConfianca >= 0 ? cols[colConfianca] : cols[4]) || 'INCOMPATIVEL';
+            matches = (colMatches >= 0 ? cols[colMatches] : '').split('|').filter(m => m);
+            
+            compatData[id] = { percentual, confianca: confianca.toUpperCase(), matches };
+        }
+    }
+    
+    console.log(`Carregados ${Object.keys(compatData).length} registros de compatibilidade`);
+}
+
+// ✅ NOVO: Parser de linha CSV que lida com campos entre aspas
+function parseCSVLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        const nextChar = line[i + 1];
+        
+        if (char === '"') {
+            if (inQuotes && nextChar === '"') {
+                current += '"';
+                i++; // Pula próxima aspas
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (char === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+    result.push(current.trim());
+    return result;
 }
 
 function getCompatBadgeHTML(licId) {
@@ -225,8 +299,8 @@ function getCompatBadgeHTML(licId) {
     if (!compat || compat.percentual < 5) return '<span class="compat-badge compat-na">⚪ N/A</span>';
     
     const pct = compat.percentual.toFixed(1);
-    if (compat.percentual >= 60) return `<span class="compat-badge compat-alta">🟢 ${pct}%</span>`;
-    if (compat.percentual >= 20) return `<span class="compat-badge compat-media">🟡 ${pct}%</span>`;
+    if (compat.percentual >= 70) return `<span class="compat-badge compat-alta">🟢 ${pct}%</span>`;
+    if (compat.percentual >= 50) return `<span class="compat-badge compat-media">🟡 ${pct}%</span>`;
     return `<span class="compat-badge compat-baixa">🔴 ${pct}%</span>`;
 }
 
@@ -299,6 +373,7 @@ function renderMonitor() {
         const div = document.createElement('div');
         div.className = 'card card-licitacao';
         
+        // ✅ AJUSTADO: Valor monetário já processado pelo safe_float no Python
         const valorTotal = lic.val_tot > 0 
             ? `R$ ${lic.val_tot.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` 
             : 'Sigiloso/Não inf.';
@@ -447,9 +522,12 @@ function abrirItens(id) {
 function renderLinhaItem(it, licId) {
     const isMeEpp = [1, 2, 3].includes(parseInt(it.benef));
     const meEppHtml = isMeEpp ? '<span class="benef-sim">SIM</span>' : '<span class="benef-nao">NÃO</span>';
-    const valFinal = it.res_val || 0;
-    const valEstimado = it.v_est || 0;
-    const valorTotal = valFinal > 0 ? (valFinal * it.q) : (valEstimado * it.q);
+    
+    // ✅ AJUSTADO: Valores monetários já normalizados pelo safe_float no Python
+    const valFinal = parseFloat(it.res_val) || 0;
+    const valEstimado = parseFloat(it.v_est) || 0;
+    const qtd = parseFloat(it.q) || 0;
+    const valorTotal = valFinal > 0 ? (valFinal * qtd) : (valEstimado * qtd);
 
     let compatClass = '';
     let compatIcon = '';
@@ -471,10 +549,10 @@ function renderLinhaItem(it, licId) {
             <td class="text-center fw-bold">${it.n || '?'}</td>
             <td>${compatIcon}${it.d || 'Sem descrição'}</td>
             <td class="text-center">${meEppHtml}</td>
-            <td class="text-center">${it.q || 0} ${it.u || ''}</td>
-            <td class="text-center val-estimado">R$ ${valEstimado.toFixed(4)}</td>
-            <td class="text-center val-homologado">${valFinal > 0 ? 'R$ ' + valFinal.toFixed(4) : '---'}</td>
-            <td class="text-center fw-bold">R$ ${valorTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+            <td class="text-center">${qtd.toLocaleString('pt-BR')} ${it.u || ''}</td>
+            <td class="text-center val-estimado">R$ ${valEstimado.toLocaleString('pt-BR', {minimumFractionDigits: 4, maximumFractionDigits: 4})}</td>
+            <td class="text-center val-homologado">${valFinal > 0 ? 'R$ ' + valFinal.toLocaleString('pt-BR', {minimumFractionDigits: 4, maximumFractionDigits: 4}) : '---'}</td>
+            <td class="text-center fw-bold">R$ ${valorTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
              </tr>`;
 }
 
