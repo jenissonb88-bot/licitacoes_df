@@ -19,11 +19,11 @@ ARQ_TEMP = ARQDADOS + '.tmp'
 ARQ_CHECKPOINT = 'checkpoint.json'
 ARQ_LOCK = 'execucao.lock'
 ARQ_CATALOGO = 'Exportar Dados.csv'
-ARQ_LOG = 'log_captura.txt'  # ✅ NOVO: Log detalhado
+ARQ_LOG = 'log_captura.txt'
 MAXWORKERS = 15
 DATA_CORTE_FIXA = datetime(2025, 12, 1)
 
-# API Oficial PNCP
+# --- API OFICIAL PNCP ---
 API_BASE = "https://pncp.gov.br/api/pncp/v1"
 API_CONSULTA = "https://pncp.gov.br/api/consulta/v1"
 
@@ -39,14 +39,14 @@ def normalize(t):
     if not t: return ""
     return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
 
-# --- CATÁLOGOS (mantidos) ---
+# --- CATÁLOGOS ---
 VETOS_ALIMENTACAO = [normalize(x) for x in ["ALIMENTACAO ESCOLAR", "GENEROS ALIMENTICIOS", "MERENDA", "PNAE", "PERECIVEIS", "HORTIFRUTI", "CARNES", "PANIFICACAO", "CESTAS BASICAS", "LANCHE", "REFEICOES", "COFFEE BREAK", "BUFFET", "COZINHA", "AÇOUGUE", "POLPA DE FRUTA", "ESTIAGEM"]]
 VETOS_EDUCACAO = [normalize(x) for x in ["MATERIAL ESCOLAR", "PEDAGOGICO", "DIDATICO", "BRINQUEDOS", "LIVROS", "TRANSPORTE ESCOLAR", "KIT ALUNO", "REDE MUNICIPAL DE ENSINO", "SECRETARIA DE EDUCACAO"]]
 VETOS_OPERACIONAL = [normalize(x) for x in ["OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "REFORMA", "MANUTENCAO PREDIAL", "MANUTENCAO DE EQUIPAMENTOS", "LIMPEZA URBANA", "RESIDUOS SOLIDOS", "LOCACAO DE VEICULOS", "TRANSPORTE", "COMBUSTIVEL", "DIESEL", "GASOLINA", "PNEUS", "PECAS AUTOMOTIVAS", "OFICINA", "VIGILANCIA", "SEGURANCA", "BOMBEIRO", "SALVAMENTO", "RESGATE", "VIATURA", "FARDAMENTO", "VESTUARIO", "INFORMATICA", "COMPUTADORES", "IMPRESSAO", "EVENTOS", "REPARO", "CORRETIVA", "VEICULO", "AMBULANCIA", "MOTOCICLETA", "MECANICA", "FERRO FUNDIDO", "CONTRATACAO DE SERVICO", "EQUIPAMENTO E MATERIA PERMANENTE", "RECARGA", "ASFATIC", "CONFECCAO"]]
 VETOS_ADM = [normalize(x) for x in ["ADESAO", "INTENCAO", "IRP", "CREDENCIAMENTO", "LEILAO", "ALIENACAO"]]
 TODOS_VETOS = VETOS_ALIMENTACAO + VETOS_EDUCACAO + VETOS_OPERACIONAL + VETOS_ADM
 
-WL_MEDICAMENTOS = [normalize(x) for x in ["MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOAL", "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA", "ANTIBIOTICO", "ACETILCISTEINA", "ACETILSALICILICO", "ACICLOVIR", "ADENOSINA", "ADRENALINA", "ALBENDAZOL", "ALENDRONATO", "ALFAEPOETINA", "ALFAINTERFERONA", "ALFAST", "ALOPURINOL", "ALPRAZOLAM", "AMBROXOL", "AMBROXOL XPE", "AMINOFILINA", "AMIODARONA", "AMITRIPTILINA", "AMOXICILINA", "AMPICILINA", "ANASTROZOL", "ANFOTERICINA", "ANLODIPINO", "ARIPIPRAZOL", "ATENOLOL", "ATORVASTATINA", "ATORVASTATINA CALCICA", "ATRACURIO", "ATROPINA", "AZITROMICINA", "AZTREONAM", "BACLOFENO", "BAMIFILINA", "BENZILPENICILINA", "BENZOATO", "BETAMETASONA", "BEZAFIBRATO", "BIMATOPROSTA", "BISACODIL", "BISSULFATO", "BOPRIV", "BROMOPRIDA", "BUDESONIDA", "BUPROPIONA", "BUTILBROMETO", "CABERGOLINA", "CALCITRIOL", "CANDESARTANA", "CAPTOPRIL", "CARBAMAZEPINA", "CARBONATO", "CARVEDILOL", "CAVERDILOL", "CEFALEXINA", "CEFALOTINA", "CEFAZOLINA", "CEFEPIMA", "CEFOTAXIMA", "CEFOXITINA", "CEFTAZIDIMA", "CEFTRIAXONA", "CEFUROXIMA", "CETOCONAZOL", "CETOPROFENO", "CETOROLACO", "CICLOBENZAPRINA", "CICLOSPORINA", "CILOSTAZOL", "CIMETIDINA", "CIPROFLOXACINO", "CIPROFLOXACINA", "CITALOPRAM", "CLARITROMICINA", "CLINDAMICINA", "CLOBETASOL", "CLOMIPRAMINA", "CLONAZEPAM", "CLONIDINA", "CLOPIDOGREL", "CLORETO", "CLORIDRATO", "CLORPROMAZINA", "CLORTALIDONA", "CLOTRIMAZOL", "CLOZAPINA", "CODEINA", "COLCHICINA", "COLECALCIFEROL", "COLISTIMETATO", "COMPLEXO B", "DACARBZINA", "DAPAGLIFLOZINA", "DAPSONA", "DAPTOMICINA", "DARBEPOETINA", "DESLANOSIDEO", "DESLORATADINA", "DEXAMETASONA", "DEXCLORFENIRAMINA", "DEXPANTENOL", "DIAZEPAM", "DIETILAMONIO", "DICLOFENACO", "DIGOXINA", "DILTIAZEM", "DIMETICONA", "DIOSMINA", "DIPIRONA", "DOBUTAMINA", "DOMPERIDONA", "DONEPEZILA", "DOPAMINA", "DOXAZOSINA", "DOXICICLINA", "DROPERIDOL", "DULAGLUTIDA", "DULOXETINA", "DUTASTERIDA", "ECONAZOL", "EMULSAO", "ENALAPRIL", "ENOXAPARINA", "ENTACAPONA", "EPINEFRINA", "ERITROMICINA", "ESCITALOPRAM", "ESOMEPRAZOL", "ESPIRONOLACTONA", "ESTRADIOL", "ESTRIOL", "ESTROGENIOS", "ETANERCEPTE", "ETILEFRINA", "ETOMIDATO", "ETOPOSIDEO", "EZETIMIBA", "FAMOTIDINA", "FENITOINA", "FENOBARBITAL", "FENOTEROL", "FENTANILA", "FERRO", "FIBRINOGENIO", "FILGRASTIM", "FINASTERIDA", "FITOMENADIONA", "FLUCONAZOL", "FLUDROCORTISONA", "FLUMAZENIL", "FLUNARIZINA", "FLUOXETINA", "FLUTICASONA", "FOLATO", "FONDAPARINUX", "FORMOTEROL", "FOSFATO", "FUROSEMIDA", "GABAPENTINA", "GANCICLOVIR", "GELADEIRA", "GENCITABINA", "GENTAMICINA", "GLIBENCLAMIDA", "GLICEROL", "GLICLAZIDA", "GLICOSE", "GLIMEPIRIDA", "GLUCAGON", "HALOPERIDOL", "HEPARINA", "HIDRALAZINA", "HIDROCLOROTIAZIDA", "HIDROCORTISONA", "HIDROTALCITA", "HIDROXIDOPROGESTERONA", "HIDROXIDO", "HIDROXIPROGESTERONA", "HIDROXIUREIA", "HIOSCINA", "HIPROMELOSE", "IBUPROFENO", "IMIPENEM", "IMIPRAMINA", "INDAPAMIDA", "INSULINA", "IOIMBINA", "IPRATROPIO", "IRBESARTANA", "IRINOTECANO", "ISOSSORBIDA", "ISOTRETINOINA", "ITRACONAZOL", "IVERMECTINA", "LACTULOSE", "LAMOTRIGINA", "LANSOPRAZOL", "LATANOPROSTA", "LEFLUNOMIDA", "LERCANIDIPINO", "LETROZOL", "LEVODOPA", "LEVOFLOXACINO", "LEVOMEPROMAZINA", "LEVONORGESTREL", "LEVOTIROXINA", "LIDOCAINA", "LINEZOLIDA", "LINOGLIPTINA", "LIPIDICA", "LISINOPRIL", "LITIO", "LOPERAMIDA", "LORATADINA", "LORAZEPAM", "LOSARTANA", "LOVASTATINA", "MAGNESIO", "MANITOL", "MEBENDAZOL", "MEDROXIPROGESTERONA", "MEMANTINA", "MEROPENEM", "MESALAZINA", "METILDOPA", "METILPREDNISOLONA", "METOCLOPRAMIDA", "METOPROLOL", "METOTREXATO", "METRONIDAZOL", "MICOFENOLATO", "MIDAZOLAM", "MIRTAZAPINA", "MISOPROSTOL", "MORFINA", "MUPIROCINA", "NARATRIPTANA", "NEOMICINA", "NEOSTIGMINA", "NIFEDIPINO", "NIMESULIDA", "NIMODIPINO", "NISTATINA", "NITROFURANTOINA", "NITROGLICERINA", "NITROPRUSSIATO", "NORETISTERONA", "NORFLOXACINO", "NORTRIPTILINA", "OCTREOTIDA", "OLANZAPINA", "OLMESARTANA", "OMEPRAZOL", "ONDANSETRONA", "OXALIPLATINA", "OXCARBAZEPINA", "OXIBUTININA", "PACLITAXEL", "PALONOSETRONA", "PANTOPRAZOL", "PARACETAMOL", "PAROXETINA", "PENICILINA", "PERICIAZINA", "PERMETRINA", "PETIDINA", "PIRAZINAMIDA", "PIRIDOSTIGMINA", "PIRIDOXINA", "POLIMIXINA", "POLIVITAMINICO", "POTASSIO", "PRAMIPEXOL", "PRAVASTATINA", "PREDNISOLONA", "PREDNISONA", "PREGABALINA", "PROMETAZINA", "PROPATILNITRATO", "PROPOFOL", "PROPRANOLOL", "PROSTIGMINA", "QUETIAPINA", "RAMIPRIL", "RANITIDINA", "RESERPINA", "RIFAMPICINA", "RISPERIDONA", "RITONAVIR", "RIVAROXABANA", "ROCURONIO", "ROSUVASTATINA", "SACARATO", "SALBUTAMOL", "SECAM", "SERTRALINA", "SEVELAMER", "SINVASTATINA", "SODIO", "SUCCINILCOLINA", "SUCRALFATO", "SULFADIAZINA", "SULFAMETOXAZOL", "SULFATO", "SULPIRIDA", "SUXAMETONIO", "TAMOXIFENO", "TANSULOSINA", "TEMOZOLAMIDA", "TEMOZOLOMIDA", "TENOXICAN", "TERBUTALINA", "TIAMINA", "TIGECICLINA", "TIOPENTAL", "TIORIDAZINA", "TOBRAMICINA", "TOPIRAMATO", "TRAMADOL", "TRAVOPROSTA", "TRIMETOPRIMA", "TROMETAMOL", "TROPICAMIDA", "VALSARTANA", "VANCOMICINA", "VARFARINA", "VASELINA","AQUISICAO DE MEDICAMENTO"]]
+WL_MEDICAMENTOS = [normalize(x) for x in ["MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOLA", "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA", "ANTIBIOTICO", "ACETILCISTEINA", "ACETILSALICILICO", "ACICLOVIR", "ADENOSINA", "ADRENALINA", "ALBENDAZOL", "ALENDRONATO", "ALFAEPOETINA", "ALFAINTERFERONA", "ALFAST", "ALOPURINOL", "ALPRAZOLAM", "AMBROXOL", "AMBROXOL XPE", "AMINOFILINA", "AMIODARONA", "AMITRIPTILINA", "AMOXICILINA", "AMPICILINA", "ANASTROZOL", "ANFOTERICINA", "ANLODIPINO", "ARIPIPRAZOL", "ATENOLOL", "ATORVASTATINA", "ATORVASTATINA CALCICA", "ATRACURIO", "ATROPINA", "AZITROMICINA", "AZTREONAM", "BACLOFENO", "BAMIFILINA", "BENZILPENICILINA", "BENZOATO", "BETAMETASONA", "BEZAFIBRATO", "BIMATOPROSTA", "BISACODIL", "BISSULFATO", "BOPRIV", "BROMOPRIDA", "BUDESONIDA", "BUPROPIONA", "BUTILBROMETO", "CABERGOLINA", "CALCITRIOL", "CANDESARTANA", "CAPTOPRIL", "CARBAMAZEPINA", "CARBONATO", "CARVEDILOL", "CAVERDILOL", "CEFALEXINA", "CEFALOTINA", "CEFAZOLINA", "CEFEPIMA", "CEFOTAXIMA", "CEFOXITINA", "CEFTAZIDIMA", "CEFTRIAXONA", "CEFUROXIMA", "CETOCONAZOL", "CETOPROFENO", "CETOROLACO", "CICLOBENZAPRINA", "CICLOSPORINA", "CILOSTAZOL", "CIMETIDINA", "CIPROFLOXACINO", "CIPROFLOXACINA", "CITALOPRAM", "CLARITROMICINA", "CLINDAMICINA", "CLOBETASOL", "CLOMIPRAMINA", "CLONAZEPAM", "CLONIDINA", "CLOPIDOGREL", "CLORETO", "CLORIDRATO", "CLORPROMAZINA", "CLORTALIDONA", "CLOTRIMAZOL", "CLOZAPINA", "CODEINA", "COLCHICINA", "COLECALCIFEROL", "COLISTIMETATO", "COMPLEXO B", "DACARBZINA", "DAPAGLIFLOZINA", "DAPSONA", "DAPTOMICINA", "DARBEPOETINA", "DESLANOSIDEO", "DESLORATADINA", "DEXAMETASONA", "DEXCLORFENIRAMINA", "DEXPANTENOL", "DIAZEPAM", "DIETILAMONIO", "DICLOFENACO", "DIGOXINA", "DILTIAZEM", "DIMETICONA", "DIOSMINA", "DIPIRONA", "DOBUTAMINA", "DOMPERIDONA", "DONEPEZILA", "DOPAMINA", "DOXAZOSINA", "DOXICICLINA", "DROPERIDOL", "DULAGLUTIDA", "DULOXETINA", "DUTASTERIDA", "ECONAZOL", "EMULSAO", "ENALAPRIL", "ENOXAPARINA", "ENTACAPONA", "EPINEFRINA", "ERITROMICINA", "ESCITALOPRAM", "ESOMEPRAZOL", "ESPIRONOLACTONA", "ESTRADIOL", "ESTRIOL", "ESTROGENIOS", "ETANERCEPTE", "ETILEFRINA", "ETOMIDATO", "ETOPOSIDEO", "EZETIMIBA", "FAMOTIDINA", "FENITOINA", "FENOBARBITAL", "FENOTEROL", "FENTANILA", "FERRO", "FIBRINOGENIO", "FILGRASTIM", "FINASTERIDA", "FITOMENADIONA", "FLUCONAZOL", "FLUDROCORTISONA", "FLUMAZENIL", "FLUNARIZINA", "FLUOXETINA", "FLUTICASONA", "FOLATO", "FONDAPARINUX", "FORMOTEROL", "FOSFATO", "FUROSEMIDA", "GABAPENTINA", "GANCICLOVIR", "GELADEIRA", "GENCITABINA", "GENTAMICINA", "GLIBENCLAMIDA", "GLICEROL", "GLICLAZIDA", "GLICOSE", "GLIMEPIRIDA", "GLUCAGON", "HALOPERIDOL", "HEPARINA", "HIDRALAZINA", "HIDROCLOROTIAZIDA", "HIDROCORTISONA", "HIDROTALCITA", "HIDROXIDOPROGESTERONA", "HIDROXIDO", "HIDROXIPROGESTERONA", "HIDROXIUREIA", "HIOSCINA", "HIPROMELOSE", "IBUPROFENO", "IMIPENEM", "IMIPRAMINA", "INDAPAMIDA", "INSULINA", "IOIMBINA", "IPRATROPIO", "IRBESARTANA", "IRINOTECANO", "ISOSSORBIDA", "ISOTRETINOINA", "ITRACONAZOL", "IVERMECTINA", "LACTULOSE", "LAMOTRIGINA", "LANSOPRAZOL", "LATANOPROSTA", "LEFLUNOMIDA", "LERCANIDIPINO", "LETROZOL", "LEVODOPA", "LEVOFLOXACINO", "LEVOMEPROMAZINA", "LEVONORGESTREL", "LEVOTIROXINA", "LIDOCAINA", "LINEZOLIDA", "LINOGLIPTINA", "LIPIDICA", "LISINOPRIL", "LITIO", "LOPERAMIDA", "LORATADINA", "LORAZEPAM", "LOSARTANA", "LOVASTATINA", "MAGNESIO", "MANITOL", "MEBENDAZOL", "MEDROXIPROGESTERONA", "MEMANTINA", "MEROPENEM", "MESALAZINA", "METILDOPA", "METILPREDNISOLONA", "METOCLOPRAMIDA", "METOPROLOL", "METOTREXATO", "METRONIDAZOL", "MICOFENOLATO", "MIDAZOLAM", "MIRTAZAPINA", "MISOPROSTOL", "MORFINA", "MUPIROCINA", "NARATRIPTANA", "NEOMICINA", "NEOSTIGMINA", "NIFEDIPINO", "NIMESULIDA", "NIMODIPINO", "NISTATINA", "NITROFURANTOINA", "NITROGLICERINA", "NITROPRUSSIATO", "NORETISTERONA", "NORFLOXACINO", "NORTRIPTILINA", "OCTREOTIDA", "OLANZAPINA", "OLMESARTANA", "OMEPRAZOL", "ONDANSETRONA", "OXALIPLATINA", "OXCARBAZEPINA", "OXIBUTININA", "PACLITAXEL", "PALONOSETRONA", "PANTOPRAZOL", "PARACETAMOL", "PAROXETINA", "PENICILINA", "PERICIAZINA", "PERMETRINA", "PETIDINA", "PIRAZINAMIDA", "PIRIDOSTIGMINA", "PIRIDOXINA", "POLIMIXINA", "POLIVITAMINICO", "POTASSIO", "PRAMIPEXOL", "PRAVASTATINA", "PREDNISOLONA", "PREDNISONA", "PREGABALINA", "PROMETAZINA", "PROPATILNITRATO", "PROPOFOL", "PROPRANOLOL", "PROSTIGMINA", "QUETIAPINA", "RAMIPRIL", "RANITIDINA", "RESERPINA", "RIFAMPICINA", "RISPERIDONA", "RITONAVIR", "RIVAROXABANA", "ROCURONIO", "ROSUVASTATINA", "SACARATO", "SALBUTAMOL", "SECAM", "SERTRALINA", "SEVELAMER", "SINVASTATINA", "SODIO", "SUCCINILCOLINA", "SUCRALFATO", "SULFADIAZINA", "SULFAMETOXAZOL", "SULFATO", "SULPIRIDA", "SUXAMETONIO", "TAMOXIFENO", "TANSULOSINA", "TEMOZOLAMIDA", "TEMOZOLOMIDA", "TENOXICAN", "TERBUTALINA", "TIAMINA", "TIGECICLINA", "TIOPENTAL", "TIORIDAZINA", "TOBRAMICINA", "TOPIRAMATO", "TRAMADOL", "TRAVOPROSTA", "TRIMETOPRIMA", "TROMETAMOL", "TROPICAMIDA", "VALSARTANA", "VANCOMICINA", "VARFARINA", "VASELINA","AQUISICAO DE MEDICAMENTO"]]
 WL_NUTRI_CLINICA = [normalize(x) for x in ["NUTRICAO ENTERAL", "FORMULA INFANTIL", "SUPLEMENTO ALIMENTAR", "DIETA ENTERAL", "DIETA PARENTERAL", "NUTRICAO CLINICA", "ENTERAL", "PARENTERA","ENTERA"]]
 WL_MATERIAIS_NE = [normalize(x) for x in ["MATERIAL MEDIC", "INSUMO HOSPITALAR", "MMH", "SERINGA", "AGULHA", "GAZE", "ATADURA", "SONDA", "CATETER", "EQUIPO", "LUVAS DE PROCEDIMENTO", "MASCARA", "MASCARA CIRURGICA", "PENSO", "MATERIAL PENSO", "MATERIAL-MEDICO", "MATERIAIS-MEDICO", "FRALDA", "ABSORVENTE", "MEDICO-HOSPITALAR", "CURATIV", "CURATIVO", "CURATIVOS", "LUVA DE PROCEDIMENTO", "COMPRESSA GAZE", "AVENTAL DESCARTAVEL", "GESSADA", "CAMPO OPERATORIO", "CLOREXIDINA", "COLETOR PERFURO", "ESPARADRAPO", "FITA MICROPORE", "GLUTARALDEIDO", "SONDA NASO", "TOUCA DESCARTAVEL", "TUBO ASPIRACAO", "CORRELATO", "AGULHAS", "SERINGAS"]]
 
@@ -72,9 +72,64 @@ def veta_edital(obj_raw, uf):
             return True
     return False
 
+# ✅ CORRIGIDO: Conversão de valores monetários
 def safe_float(val):
-    try: return float(val) if val is not None else 0.0
-    except: return 0.0
+    """
+    Converte valor monetário do PNCP para float.
+    Lida com: inteiros (centavos), strings formatadas, e formatos brasileiros.
+    """
+    if val is None:
+        return 0.0
+    
+    try:
+        # Se já é número, retornar direto
+        if isinstance(val, (int, float)):
+            # Se for inteiro grande (> 1000), provavelmente é centavos
+            if isinstance(val, int) and val > 1000:
+                return val / 100.0
+            return float(val)
+        
+        # Se é string, limpar e converter
+        val_str = str(val).strip()
+        
+        # Remover símbolo de moeda e espaços
+        val_str = val_str.replace('R$', '').replace(' ', '')
+        
+        # Detectar formato brasileiro (vírgula como decimal)
+        if ',' in val_str and '.' in val_str:
+            # Formato: 1.234.567,89 → remover pontos, vírgula vira ponto
+            val_str = val_str.replace('.', '').replace(',', '.')
+        elif ',' in val_str:
+            # Formato: 1234567,89 → vírgula vira ponto
+            val_str = val_str.replace(',', '.')
+        # Se só tem ponto, assumir que é separador decimal americano
+        # ou separador de milhar se houver mais de um ponto
+        
+        # Converter para float
+        resultado = float(val_str)
+        
+        # Heurística: se valor > 1000 e não tem casas decimais significativas,
+        # provavelmente veio em centavos (API do PNCP às vezes faz isso)
+        if resultado > 1000 and resultado == int(resultado):
+            # Verificar se parece ser centavos (valor muito grande para ser reais)
+            if resultado > 100000:  # R$ 100.000,00 em centavos = 10.000.000
+                resultado = resultado / 100.0
+        
+        return resultado
+        
+    except Exception as e:
+        # Fallback: tentar extrair qualquer número
+        try:
+            numeros = re.findall(r'[\d.,]+', str(val))
+            if numeros:
+                # Pegar o maior número encontrado
+                maior = max(numeros, key=lambda x: len(x))
+                # Tentar converter assumindo formato brasileiro
+                limpo = maior.replace('.', '').replace(',', '.')
+                return float(limpo)
+        except:
+            pass
+        return 0.0
 
 def salvar_checkpoint(dia, pagina):
     with open(ARQ_CHECKPOINT, 'w') as f:
@@ -86,7 +141,6 @@ def carregar_checkpoint():
             return json.load(f)
     return None
 
-# ✅ NOVO: Função de log com timestamp
 def log(msg, console=True, arquivo=True):
     timestamp = datetime.now().strftime('%H:%M:%S')
     linha = f"[{timestamp}] {msg}"
@@ -165,7 +219,6 @@ def processar_licitacao(lic, session, forcado=False):
         obj_norm = normalize(obj_raw)
         dt_enc_str = lic.get('dataEncerramentoProposta') or datetime.now().isoformat()
         
-        # Filtros
         if not forcado:
             if uf and uf in ESTADOS_BLOQUEADOS: 
                 return ('IGNORADO_GEO', None, 0, 'estado_bloqueado')
@@ -178,7 +231,6 @@ def processar_licitacao(lic, session, forcado=False):
             if veta_edital(obj_raw, uf): 
                 return ('VETADO', None, 0, 'palavra_veto')
             
-            # Verificar interesse
             palavras_magicas = ["MEDICAMENTO", "MEDICAMENTOS", "AQUISICAO DE MEDICAMENTOS"]
             tem_super_passe = any(p in obj_norm for p in palavras_magicas)
             tem_med = any(t in obj_norm for t in WL_MEDICAMENTOS)
@@ -197,13 +249,11 @@ def processar_licitacao(lic, session, forcado=False):
             if not tem_interesse: 
                 return ('IGNORADO_TEMATICA', None, 0, 'sem_interesse')
 
-        # Buscar itens
-        itens_brutos, status_api = buscar_itens_oficial(cnpj, ano, seq, session)
+        itens_brutos, fonte = buscar_itens_oficial(cnpj, ano, seq, session)
         
         if not itens_brutos:
-            return ('ERRO_ITENS', None, 0, status_api)
+            return ('ERRO_ITENS', None, 0, fonte)
         
-        # Mapear itens
         itens_mapeados = []
         for it in itens_brutos:
             if not isinstance(it, dict):
@@ -250,7 +300,8 @@ def processar_licitacao(lic, session, forcado=False):
             'val_tot': safe_float(lic.get('valorTotalEstimado')),
             'itens': itens_mapeados,
             'sit_global': sit_global_nome,
-            'fonte': lic.get('nomeEntidadeIntegradora', 'PNCP Direto')
+            'fonte': lic.get('nomeEntidadeIntegradora', 'PNCP Direto'),
+            'api_fonte': fonte
         }
         return ('CAPTURADO', dados_finais, len(itens_mapeados), 'ok')
         
@@ -261,7 +312,6 @@ def buscar_periodo(session, banco, d_ini, d_fim):
     stats_geral = {'vetados': 0, 'capturados': 0, 'itens': 0, 'ignorados': 0, 'erros': 0}
     checkpoint = carregar_checkpoint()
     
-    # Limpar log anterior
     if os.path.exists(ARQ_LOG):
         os.remove(ARQ_LOG)
     
@@ -278,7 +328,7 @@ def buscar_periodo(session, banco, d_ini, d_fim):
         if checkpoint and dia < checkpoint['dia']: 
             continue
 
-        log("", console=True, arquivo=False)  # Linha em branco no console
+        log("", console=True, arquivo=False)
         log(f"📅 DATA: {dia_fmt} ({dia})", console=True, arquivo=True)
         log("-" * 60, console=True, arquivo=True)
         
@@ -288,7 +338,6 @@ def buscar_periodo(session, banco, d_ini, d_fim):
             inicio_pag = time.time()
             
             try:
-                # Buscar lista de licitações
                 r = session.get(
                     f"{API_CONSULTA}/contratacoes/publicacao",
                     params={
@@ -312,64 +361,48 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                     break
                 
                 tot_pag = dados.get('totalPaginas', 1)
-                
-                # Processar página
-                stats_pag = {
-                    'capturados': 0, 'vetados': 0, 'ignorados_geo': 0, 'ignorados_data': 0,
-                    'ignorados_tematica': 0, 'erros_itens': 0, 'erros_outros': 0, 'itens': 0
-                }
+                s_pag = {'capturados': 0, 'vetados': 0, 'ignorados_geo': 0, 'ignorados_data': 0, 'ignorados_tematica': 0, 'erros_itens': 0, 'erros_outros': 0, 'itens': 0}
                 erros_detalhados = []
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
                     futuros = [exe.submit(processar_licitacao, l, session) for l in lics]
-                    
                     for f in concurrent.futures.as_completed(futuros):
                         st, d, i_qtd, info = f.result()
-                        
                         if st == 'CAPTURADO' and d:
-                            stats_pag['capturados'] += 1
-                            stats_pag['itens'] += i_qtd
+                            s_pag['capturados'] += 1
+                            s_pag['itens'] += i_qtd
                             banco[f"{d['id'][:14]}_{d['edit']}"] = d
                         elif st == 'VETADO':
-                            stats_pag['vetados'] += 1
+                            s_pag['vetados'] += 1
                         elif st == 'IGNORADO_GEO':
-                            stats_pag['ignorados_geo'] += 1
+                            s_pag['ignorados_geo'] += 1
                         elif st == 'IGNORADO_DATA':
-                            stats_pag['ignorados_data'] += 1
+                            s_pag['ignorados_data'] += 1
                         elif st == 'IGNORADO_TEMATICA':
-                            stats_pag['ignorados_tematica'] += 1
+                            s_pag['ignorados_tematica'] += 1
                         elif st == 'ERRO_ITENS':
-                            stats_pag['erros_itens'] += 1
+                            s_pag['erros_itens'] += 1
                             erros_detalhados.append(f"404:{info}" if info == '404' else info[:30])
                         else:
-                            stats_pag['erros_outros'] += 1
+                            s_pag['erros_outros'] += 1
                             if info:
                                 erros_detalhados.append(info[:30])
 
-                # Calcular tempos
                 tempo_pag = time.time() - inicio_pag
                 
-                # Log da página em tempo real
                 log(f"   📄 Pág {pag}/{tot_pag} | ⏱️ {tempo_pag:.1f}s", console=True, arquivo=True)
-                log(f"      🎯 Capturados: {stats_pag['capturados']} ({stats_pag['itens']} itens)", console=True, arquivo=True)
-                log(f"      🔒 Vetados: {stats_pag['vetados']} | 🌍 Geo: {stats_pag['ignorados_geo']} | 📅 Data: {stats_pag['ignorados_data']} | 📝 Temática: {stats_pag['ignorados_tematica']}", console=True, arquivo=True)
+                log(f"      🎯 Capturados: {s_pag['capturados']} ({s_pag['itens']} itens)", console=True, arquivo=True)
+                log(f"      🔒 Vetados: {s_pag['vetados']} | 🌍 Geo: {s_pag['ignorados_geo']} | 📅 Data: {s_pag['ignorados_data']} | 📝 Temática: {s_pag['ignorados_tematica']}", console=True, arquivo=True)
                 
-                if stats_pag['erros_itens'] > 0 or stats_pag['erros_outros'] > 0:
-                    total_erros = stats_pag['erros_itens'] + stats_pag['erros_outros']
-                    erros_str = ', '.join(set(erros_detalhados[:3]))  # Mostra até 3 tipos de erro
+                if s_pag['erros_itens'] > 0 or s_pag['erros_outros'] > 0:
+                    total_erros = s_pag['erros_itens'] + s_pag['erros_outros']
+                    erros_str = ', '.join(set(erros_detalhados[:3]))
                     log(f"      ⚠️ Erros: {total_erros} ({erros_str}{'...' if len(erros_detalhados) > 3 else ''})", console=True, arquivo=True)
                 
-                # Atualizar estatísticas gerais
-                stats_geral['capturados'] += stats_pag['capturados']
-                stats_geral['vetados'] += stats_pag['vetados']
-                stats_geral['itens'] += stats_pag['itens']
-                stats_geral['ignorados'] += (stats_pag['ignorados_geo'] + stats_pag['ignorados_data'] + stats_pag['ignorados_tematica'])
-                stats_geral['erros'] += (stats_pag['erros_itens'] + stats_pag['erros_outros'])
+                for k in stats_geral: stats_geral[k] += s_pag.get(k, 0)
                 
-                # Salvar checkpoint
                 salvar_checkpoint(dia, pag + 1)
                 
-                # Verificar se terminou
                 if pag >= tot_pag:
                     log(f"   ✅ Fim do dia {dia_fmt}: {stats_geral['capturados']} total acumulado", console=True, arquivo=True)
                     salvar_checkpoint((dia_obj + timedelta(days=1)).strftime('%Y%m%d'), 1)
@@ -381,7 +414,6 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                 log(f"   ❌ EXCEÇÃO na página {pag}: {str(e)[:100]}", console=True, arquivo=True)
                 break
     
-    # Resumo final
     log("", console=True, arquivo=True)
     log("=" * 60, console=True, arquivo=True)
     log("📊 RESUMO FINAL DA CAPTURA", console=True, arquivo=True)
@@ -422,7 +454,7 @@ if __name__ == '__main__':
 
         buscar_periodo(session, banco, dt_start, dt_end)
         
-        print("\n💾 Salvando banco de dados...")
+        print("\n💾 Salvando...")
         with gzip.open(ARQ_TEMP, 'wt', encoding='utf-8') as f:
             json.dump(list(banco.values()), f, ensure_ascii=False)
         
@@ -430,7 +462,7 @@ if __name__ == '__main__':
             os.replace(ARQ_TEMP, ARQDADOS)
             if os.path.exists(ARQ_CHECKPOINT): 
                 os.remove(ARQ_CHECKPOINT)
-            print("✅ Captura concluída com sucesso!")
+            print("✅ Concluído!")
 
     finally:
         if os.path.exists(ARQ_LOCK): 
