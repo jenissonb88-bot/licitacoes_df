@@ -35,9 +35,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Constantes
-THRESHOLD_ALTO = 0.70      # ≥70% = ALTO
-THRESHOLD_MEDIO = 0.50     # 50-69% = MÉDIO  
-THRESHOLD_BAIXO = 0.30     # 30-49% = BAIXO
+THRESHOLD_ALTO = 0.70
+THRESHOLD_MEDIO = 0.50
+THRESHOLD_BAIXO = 0.30
 MAX_WORKERS = 4
 CHECKPOINT_FILE = "checkpoint_avaliacao_v3.json"
 
@@ -45,7 +45,7 @@ CHECKPOINT_FILE = "checkpoint_avaliacao_v3.json"
 ARQ_LICITACOES = 'pregacoes_pharma_limpos.json.gz'
 ARQ_PORTFOLIO = 'Exportar Dados.csv'
 
-# Dicionário de sinônimos farmacêuticos (expansível)
+# Dicionário de sinônimos farmacêuticos
 SINONIMOS_FARMACOS = {
     "ESCOPOLAMINA": ["HIOSCINA", "BUSCOPAN", "BUTILBROMETO DE ESCOPOLAMINA", "ESCOPOLAMINA BUTILBROMETO"],
     "HIOSCINA": ["ESCOPOLAMINA", "BUSCOPAN", "BUTILBROMETO DE ESCOPOLAMINA"],
@@ -62,25 +62,17 @@ SINONIMOS_FARMACOS = {
 
 
 class PortfolioIndexado:
-    """
-    Estrutura de indexação híbrida:
-    - Índice invertido por componente (velocidade)
-    - Metadados enriquecidos (precisão)
-    """
-
     def __init__(self):
-        self.indice_componentes = defaultdict(list)  # componente -> [items]
-        self.items_completos = {}  # id -> dados completos
-        self.sinonimos_expandidos = {}  # componente -> [sinônimos]
+        self.indice_componentes = defaultdict(list)
+        self.items_completos = {}
+        self.sinonimos_expandidos = {}
 
     def carregar_portfolio(self, csv_path=ARQ_PORTFOLIO):
-        """Carrega e indexa o portfólio com enriquecimento."""
         logger.info(f"📂 Carregando portfólio: {csv_path}")
 
         if not os.path.exists(csv_path):
             raise FileNotFoundError(f"Arquivo não encontrado: {csv_path}")
 
-        # Carregar dados
         if HAS_PANDAS:
             df = pd.read_csv(csv_path, encoding='utf-8', sep=None, engine='python')
             df = df.where(pd.notnull(df), None)
@@ -90,28 +82,23 @@ class PortfolioIndexado:
 
         logger.info(f"📊 {len(registros)} itens carregados")
 
-        # Indexar cada item
         for idx, row in enumerate(registros):
             item = self._enriquecer_item(row, idx)
             self.items_completos[item['id']] = item
 
-            # Indexar por cada componente
             for comp in item['componentes_normalizados']:
                 self.indice_componentes[comp].append(item['id'])
 
-                # Indexar também pelos sinônimos
                 for sinonimo in self._expandir_sinonimos(comp):
                     if sinonimo != comp:
                         self.indice_componentes[sinonimo].append(item['id'])
 
-        # Estatísticas
         total_entradas = sum(len(v) for v in self.indice_componentes.values())
         logger.info(f"✅ Portfólio indexado: {len(registros)} itens, {len(self.indice_componentes)} componentes, {total_entradas} entradas")
 
         return self
 
     def _carregar_csv_nativo(self, path):
-        """Fallback para carregamento sem pandas."""
         registros = []
         with open(path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
@@ -120,8 +107,6 @@ class PortfolioIndexado:
         return registros
 
     def _enriquecer_item(self, row, idx):
-        """Enriquece item do CSV com metadados para matching."""
-        # Identificadores
         sku = row.get('Código', f'ITEM_{idx}')
         descricao = str(row.get('Descrição', '')).upper().strip()
         farmaco_raw = str(row.get('Fármaco', '')).upper().strip()
@@ -129,24 +114,19 @@ class PortfolioIndexado:
         forma = str(row.get('Forma Farmacêutica', '')).upper().strip()
         sinonimos_raw = str(row.get('Nomes Técnicos/Sinônimos', '')).upper().strip()
 
-        # Extrair componentes da descrição e fármaco
         componentes_desc = self._extrair_componentes(descricao)
         componentes_farm = self._extrair_componentes(farmaco_raw) if farmaco_raw else []
         componentes_sin = self._extrair_componentes(sinonimos_raw) if sinonimos_raw else []
 
-        # Unificar componentes (sem duplicatas, preservando ordem)
         todos_componentes = []
         for c in componentes_desc + componentes_farm + componentes_sin:
             if c not in todos_componentes:
                 todos_componentes.append(c)
 
-        # Normalizar componentes
         componentes_normalizados = [self._normalizar_componente(c) for c in todos_componentes]
 
-        # Determinar tipo (simples vs combo)
         tipo = 'combo' if len(componentes_normalizados) > 1 else 'simples'
 
-        # Extrair concentrações
         concentracoes = self._extrair_concentracoes(dosagem) if dosagem else {}
 
         return {
@@ -163,17 +143,14 @@ class PortfolioIndexado:
         }
 
     def _extrair_componentes(self, texto):
-        """Extrai componentes químicos de texto."""
         if not texto:
             return []
 
-        # Separadores comuns
         separadores = r'[+/&,;]'
         partes = re.split(separadores, texto)
 
         componentes = []
         for parte in partes:
-            # Limpar: remover doses, unidades, textos entre parênteses
             limpo = re.sub(r'\d+[\d.,/\s]*\s*(MG|ML|G|UI|MCG|UNIDADES?)', '', parte, flags=re.I)
             limpo = re.sub(r'\(.*?\)', '', limpo)
             limpo = re.sub(r'\b(C/|COM|X|DE|DA|DO|DOS|DAS)\b', '', limpo, flags=re.I)
@@ -185,9 +162,7 @@ class PortfolioIndexado:
         return componentes
 
     def _normalizar_componente(self, comp):
-        """Normaliza nome do componente."""
         comp = comp.strip()
-        # Remover acentos comuns
         substituicoes = {
             'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
             'Â': 'A', 'Ê': 'E', 'Ô': 'O',
@@ -199,7 +174,6 @@ class PortfolioIndexado:
         return comp
 
     def _expandir_sinonimos(self, componente):
-        """Expande componente para incluir sinônimos conhecidos."""
         expansao = {componente}
         for principal, sinonimos in SINONIMOS_FARMACOS.items():
             if componente == principal or componente in sinonimos:
@@ -208,10 +182,8 @@ class PortfolioIndexado:
         return expansao
 
     def _extrair_concentracoes(self, dosagem):
-        """Extrai concentrações numéricas da string de dosagem."""
         concentracoes = {}
 
-        # Padrões: 500MG, 4MG/ML, 0,5MG, etc.
         padrao = r'(\d+[\d.,]*)\s*(MG|ML|G|UI|MCG)/?(ML)?'
         matches = re.findall(padrao, dosagem, re.I)
 
@@ -226,16 +198,11 @@ class PortfolioIndexado:
         return concentracoes
 
     def buscar_candidatos(self, componentes_edital, top_n=50):
-        """
-        Busca candidatos via índice.
-        Retorna lista de IDs ordenados por frequência de matches.
-        """
         contagem = defaultdict(int)
         componentes_encontrados = defaultdict(set)
 
         for comp in componentes_edital:
             comp_norm = self._normalizar_componente(comp)
-            # Buscar componente e sinônimos
             chaves_busca = {comp_norm}
             chaves_busca.update(self._expandir_sinonimos(comp_norm))
 
@@ -245,7 +212,6 @@ class PortfolioIndexado:
                         contagem[item_id] += 1
                         componentes_encontrados[item_id].add(comp_norm)
 
-        # Ordenar por número de matches (descendente)
         candidatos_ordenados = sorted(
             contagem.items(), 
             key=lambda x: (x[1], x[0]), 
@@ -263,26 +229,14 @@ class PortfolioIndexado:
 
 
 class MatcherHibrido:
-    """
-    Motor de matching híbrido:
-    - Usa indexação para encontrar candidatos (velocidade)
-    - Aplica regras de negócio rigorosas (precisão)
-    """
-
     def __init__(self, portfolio_indexado):
         self.portfolio = portfolio_indexado
 
     def avaliar_licitacao(self, licitacao):
-        """
-        Avalia uma licitação completa contra o portfólio.
-        Retorna lista de matches ordenados por score.
-        """
-        # Extrair dados do edital
         objeto = licitacao.get('objeto', '')
         itens = licitacao.get('itens', [])
 
         if not itens and objeto:
-            # Se não tem itens estruturados, tratar objeto como único item
             itens = [{'descricao': objeto, 'quantidade': 1}]
 
         resultados = []
@@ -291,15 +245,12 @@ class MatcherHibrido:
             if matches:
                 resultados.extend(matches)
 
-        # Consolidar e ordenar
         resultados = self._consolidar_resultados(resultados)
         return resultados
 
     def _avaliar_item(self, item_edital):
-        """Avalia um item do edital contra o portfólio."""
         descricao = str(item_edital.get('descricao', '')).upper()
 
-        # Extrair componentes do edital
         componentes_edital = self._extrair_componentes_edital(descricao)
         if not componentes_edital:
             return []
@@ -307,13 +258,11 @@ class MatcherHibrido:
         tipo_edital = 'combo' if len(componentes_edital) > 1 else 'simples'
         concentracoes_edital = self._extrair_concentracoes(descricao)
 
-        # FASE 1: Indexação - encontrar candidatos
         candidatos = self.portfolio.buscar_candidatos(componentes_edital, top_n=30)
 
         if not candidatos:
             return []
 
-        # FASE 2: Scoring detalhado
         resultados = []
         for candidato in candidatos:
             item_portfolio = self.portfolio.items_completos[candidato['id']]
@@ -335,17 +284,12 @@ class MatcherHibrido:
                     'detalhes': self._gerar_detalhes(componentes_edital, item_portfolio)
                 })
 
-        # Ordenar por score
         resultados.sort(key=lambda x: x['score'], reverse=True)
         return resultados
 
     def _extrair_componentes_edital(self, descricao):
-        """Extrai componentes de descrição do edital."""
-        # Primeiro tentar extrair de padrões farmacêuticos
         componentes = []
 
-        # Padrão: "NOME CONCENTRAÇÃO + NOME2 CONCENTRAÇÃO2"
-        # Ex: "DIPIRONA 500MG/ML + ESCOPOLAMINA 4MG/ML"
         padrao_componente = r'([A-Z][A-Z\s]+?)\s+\d+[\d.,/]*\s*(?:MG|ML|G|UI|MCG)'
         matches = re.findall(padrao_componente, descricao, re.I)
 
@@ -355,12 +299,10 @@ class MatcherHibrido:
                 if len(comp) > 2:
                     componentes.append(comp)
 
-        # Se não encontrou padrão farmacêutico, usar separadores genéricos
         if not componentes:
             separadores = r'[+/&,;]'
             partes = re.split(separadores, descricao)
             for parte in partes:
-                # Limpar similar ao portfólio
                 limpo = re.sub(r'\d+[\d.,/\s]*\s*(MG|ML|G|UI|MCG|UNIDADES?)', '', parte, flags=re.I)
                 limpo = re.sub(r'\(.*?\)', '', limpo)
                 limpo = limpo.strip()
@@ -371,14 +313,9 @@ class MatcherHibrido:
 
     def _calcular_score_hibrido(self, comps_edital, concs_edital, tipo_edital, 
                                  item_portfolio, matches_indices):
-        """
-        Calcula score híbrido considerando múltiplos fatores.
-        """
         comps_portfolio = item_portfolio['componentes_normalizados']
         tipo_portfolio = item_portfolio['tipo']
 
-        # 1. COBERTURA DE COMPONENTES (40%)
-        # Quantos componentes do edital estão no portfólio?
         comps_edital_norm = [self.portfolio._normalizar_componente(c) for c in comps_edital]
         comps_portfolio_norm = comps_portfolio
 
@@ -393,8 +330,6 @@ class MatcherHibrido:
 
         score_cobertura = cobertura * 0.40
 
-        # 2. PRECISÃO DO MATCH (30%)
-        # Similaridade textual dos componentes
         if HAS_RAPIDFUZZ and comps_edital and comps_portfolio:
             similaridades = []
             for ce in comps_edital:
@@ -406,66 +341,52 @@ class MatcherHibrido:
         else:
             score_similaridade = cobertura * 0.30
 
-        # 3. REGRAS DE NEGÓCIO (30%) - CRÍTICO
         score_regras = 0
 
-        # Regra 3.1: Penalidade/Bonificação por tipo de combinação
         if tipo_edital == 'combo' and tipo_portfolio == 'combo':
-            # Edital quer combo, portfólio tem combo = IDEAL
-            if cobertura >= 0.8:  # Match quase completo
-                score_regras += 0.20  # Bonificação máxima
+            if cobertura >= 0.8:
+                score_regras += 0.20
             else:
                 score_regras += 0.10
         elif tipo_edital == 'combo' and tipo_portfolio == 'simples':
-            # Edital quer combo, portfólio tem simples = PROBLEMA
-            score_regras -= 0.15  # Penalidade severa
+            score_regras -= 0.15
         elif tipo_edital == 'simples' and tipo_portfolio == 'combo':
-            # Edital quer simples, portfólio tem combo = Aceitável (pode atender)
             score_regras += 0.05
         else:
-            # Ambos simples
             score_regras += 0.10
 
-        # Regra 3.2: Validação de concentração
         if concs_edital and item_portfolio['concentracoes']:
             match_conc = self._validar_concentracoes(concs_edital, item_portfolio['concentracoes'])
             score_regras += match_conc * 0.10
         else:
-            score_regras += 0.05  # Sem dados de concentração = neutro
+            score_regras += 0.05
 
-        # Score total
         score_total = score_cobertura + score_similaridade + score_regras
 
-        # Normalizar para 0-1
         return max(0.0, min(1.0, score_total))
 
     def _match_componente(self, comp1, comp2):
-        """Verifica se dois componentes são equivalentes (direto ou via sinônimo)."""
         if comp1 == comp2:
             return True
 
-        # Verificar sinônimos
         for principal, sinonimos in SINONIMOS_FARMACOS.items():
             grupo = {principal} | set(sinonimos)
             if comp1 in grupo and comp2 in grupo:
                 return True
 
-        # Similaridade fuzzy
         if HAS_RAPIDFUZZ:
             return fuzz.ratio(comp1, comp2) > 85
         else:
-            return comp1[:5] == comp2[:5]  # Fallback simples
+            return comp1[:5] == comp2[:5]
 
     def _validar_concentracoes(self, concs_edital, concs_portfolio):
-        """Valida compatibilidade de concentrações."""
         if not concs_edital or not concs_portfolio:
-            return 0.5  # Sem dados
+            return 0.5
 
         matches = 0
         for chave, valor_edital in concs_edital.items():
             if chave in concs_portfolio:
                 valor_portfolio = concs_portfolio[chave]
-                # Tolerância de 10%
                 if valor_portfolio == 0:
                     continue
                 diff = abs(valor_edital - valor_portfolio) / valor_portfolio
@@ -476,7 +397,6 @@ class MatcherHibrido:
         return matches / total if total > 0 else 0.5
 
     def _classificar_score(self, score):
-        """Classifica score em categorias."""
         if score >= THRESHOLD_ALTO:
             return 'ALTO'
         elif score >= THRESHOLD_MEDIO:
@@ -487,36 +407,29 @@ class MatcherHibrido:
             return 'INCOMPATIVEL'
 
     def _consolidar_resultados(self, resultados):
-        """Consolida resultados duplicados (mesmo item em múltiplos lotes)."""
         if not resultados:
             return []
 
-        # Agrupar por ID do item do portfólio
         agrupados = defaultdict(list)
         for r in resultados:
             agrupados[r['item_portfolio']['id']].append(r)
 
-        # Pegar melhor score de cada grupo
         consolidados = []
         for item_id, matches in agrupados.items():
             melhor = max(matches, key=lambda x: x['score'])
             consolidados.append(melhor)
 
-        # Ordenar final
         consolidados.sort(key=lambda x: x['score'], reverse=True)
         return consolidados
 
     def _gerar_detalhes(self, comps_edital, item_portfolio):
-        """Gera texto explicativo do match."""
         comps_port = item_portfolio['componentes_normalizados']
         return f"Edital:{comps_edital} ↔ Portfolio:{comps_port}"
 
 
 def processar_licitacao_wrapper(args):
-    """Wrapper para processamento paralelo."""
     licitacao, portfolio_data = args
 
-    # Reconstruir objetos (necessário para multiprocessing)
     portfolio = PortfolioIndexado()
     portfolio.indice_componentes = defaultdict(list, portfolio_data['indice'])
     portfolio.items_completos = portfolio_data['items']
@@ -526,21 +439,17 @@ def processar_licitacao_wrapper(args):
 
 
 def main():
-    """Função principal."""
     logger.info("🚀 Iniciando avaliação de portfólio v3 (Híbrida)")
     logger.info(f"⚙️ Thresholds: ALTO≥{THRESHOLD_ALTO}, MEDIO≥{THRESHOLD_MEDIO}, BAIXO≥{THRESHOLD_BAIXO}")
 
-    # 1. Carregar e indexar portfólio
     portfolio = PortfolioIndexado().carregar_portfolio()
 
-    # 2. ✅ CARREGAR LICITAÇÕES DO ARQUIVO CORRETO
     licitacoes = []
     
-    # Procura arquivo específico do limpeza.py
     padroes = [
-        ARQ_LICITACOES,                      # ✅ Padrão atual: pregacoes_pharma_limpos.json.gz
-        'pregacoes_pharma_limpos_*.json.gz', # Fallback com timestamp
-        'licitacoes_*.json*'                 # Padrão antigo (compatibilidade)
+        ARQ_LICITACOES,
+        'pregacoes_pharma_limpos_*.json.gz',
+        'licitacoes_*.json*'
     ]
     
     arquivos_licitacoes = []
@@ -559,7 +468,6 @@ def main():
         logger.info(f"   📁 Arquivos disponíveis: {[f for f in os.listdir('.') if '.json' in f or '.gz' in f]}")
         return
 
-    # Carregar licitações dos arquivos encontrados
     for arquivo in arquivos_licitacoes:
         try:
             if str(arquivo).endswith('.gz'):
@@ -585,12 +493,9 @@ def main():
         logger.warning("⚠️ Nenhuma licitação encontrada para avaliar")
         return
 
-    # 3. Processar licitações
     resultados_finais = []
 
-    # Serial para debug, paralelo para produção
     if len(licitacoes) < 10:
-        # Modo serial para poucas licitações
         matcher = MatcherHibrido(portfolio)
         for lic in licitacoes:
             matches = matcher.avaliar_licitacao(lic)
@@ -600,8 +505,6 @@ def main():
                     'matches': matches
                 })
     else:
-        # Modo paralelo
-        # Preparar dados serializáveis
         portfolio_data = {
             'indice': dict(portfolio.indice_componentes),
             'items': portfolio.items_completos
@@ -625,11 +528,9 @@ def main():
                 except Exception as e:
                     logger.error(f"❌ Erro processando licitação {idx}: {e}")
 
-    # 4. Gerar relatório
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     arquivo_saida = f"relatorio_compatibilidade_{timestamp}.csv"
 
-    # CSV
     with open(arquivo_saida, 'w', encoding='utf-8', newline='') as f:
         writer = csv.writer(f)
         writer.writerow([
@@ -653,7 +554,6 @@ def main():
     logger.info(f"✅ Relatório gerado: {arquivo_saida}")
     logger.info(f"📊 Licitações com matches: {len(resultados_finais)}/{len(licitacoes)}")
     
-    # Resumo por tipo de match
     resumo = {'ALTO': 0, 'MEDIO': 0, 'BAIXO': 0}
     for r in resultados_finais:
         for m in r['matches']:
