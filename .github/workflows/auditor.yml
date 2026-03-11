@@ -1,7 +1,7 @@
 name: Sniper Pharma (Auditor de Resultados)
 
 concurrency:
-  group: banco-dados-pharma
+  group: auditoria-pncp  # ✅ Grupo separado do captura (evita cancelamento)
   cancel-in-progress: false
 
 on:
@@ -12,13 +12,27 @@ on:
 jobs:
   auditoria:
     runs-on: ubuntu-latest
+    timeout-minutes: 45  # ✅ Timeout de segurança (auditoria pode demorar mais)
     permissions:
       contents: write
       actions: write
+    
     steps:
-    - uses: actions/checkout@v4
+    # ✅ Checkout rápido: fetch-depth=1, sem LFS
+    - name: Checkout (rápido)
+      uses: actions/checkout@v4
       with:
-        fetch-depth: 0
+        fetch-depth: 1  # ✅ Apenas último commit - muito mais rápido
+        lfs: false
+
+    # ✅ Cache de pip para acelerar instalação
+    - name: Cache pip
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
 
     - name: Setup Python
       uses: actions/setup-python@v5
@@ -27,8 +41,7 @@ jobs:
 
     - name: Install deps
       run: |
-        pip install requests
-        pip install pandas  # NOVO: necessário para avalia_portfolio.py
+        pip install requests pandas
 
     - name: 🩺 Run Auditor (atualiza.py)
       run: python atualiza.py
@@ -37,7 +50,7 @@ jobs:
       if: always()  # Roda mesmo se atualiza.py falhar
       run: python avalia_portfolio.py
 
-    - name: 💾 Commit Auditoria, Atualização e Avaliação
+    - name: 💾 Commit Auditoria
       run: |
         git config user.name "Sniper Pharma Auditor"
         git config user.email "auditor@pharma.bot"
@@ -45,13 +58,18 @@ jobs:
         # Adiciona todos os arquivos de dados
         git add pregacoes_pharma_limpos.json.gz || true
         git add relatorio_atualizacoes.csv || true
-        git add relatorio_compatibilidade.csv || true
-        git add log_avaliacao.txt || true
+        git add relatorio_compatibilidade_*.csv || true
         git add log_atualizacao.txt || true
+        git add log_captura.txt || true
+        
+        # Remove arquivos temporários do tracking (se existirem)
+        git rm --cached checkpoint*.json 2>/dev/null || true
+        git rm --cached execucao.lock 2>/dev/null || true
+        git rm --cached checkpoint_atualizacao.json 2>/dev/null || true
 
         # Só commita se houver mudanças
         if ! git diff --staged --quiet; then
-          git commit -m "Auditoria: $(date +'%Y-%m-%d %H:%M') - Atualização e Avaliação de Portfólio"
+          git commit -m "🔍 Auditoria: $(date +'%Y-%m-%d %H:%M') - Atualização de resultados"
           git pull origin main --rebase -X theirs || true
           git push origin main || true
         else
@@ -62,13 +80,13 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: relatorios-auditoria-${{ github.run_id }}
+        name: relatorios-auditoria-${{ github.run_id }}-$(date +'%Y%m%d')
         path: |
           relatorio_atualizacoes.csv
-          relatorio_compatibilidade.csv
+          relatorio_compatibilidade_*.csv
           log_atualizacao.txt
-          log_avaliacao.txt
-        retention-days: 30
+          log_captura.txt
+        retention-days: 7  # ✅ Reduzido de 30 para economizar espaço
         compression-level: 6
 
     - name: 📋 Resumo da Execução
@@ -82,18 +100,18 @@ jobs:
         if [ -f log_atualizacao.txt ]; then
           echo ""
           echo "🔄 ATUALIZAÇÃO:"
-          tail -n 5 log_atualizacao.txt
+          tail -n 10 log_atualizacao.txt
         fi
 
         # Resumo da avaliação
-        if [ -f log_avaliacao.txt ]; then
+        if [ -f log_captura.txt ]; then  # ✅ Nome correto do log
           echo ""
           echo "📊 AVALIAÇÃO DE PORTFÓLIO:"
-          tail -n 5 log_avaliacao.txt
+          tail -n 10 log_captura.txt
         fi
 
         # Estatísticas dos relatórios
         echo ""
         echo "📁 ARQUIVOS GERADOS:"
         [ -f relatorio_atualizacoes.csv ] && echo "   - Atualizações: $(wc -l < relatorio_atualizacoes.csv) linhas"
-        [ -f relatorio_compatibilidade.csv ] && echo "   - Compatibilidade: $(wc -l < relatorio_compatibilidade.csv) linhas"
+        [ -f relatorio_compatibilidade_*.csv ] && echo "   - Compatibilidade: $(ls relatorio_compatibilidade_*.csv | wc -l) arquivo(s)"
