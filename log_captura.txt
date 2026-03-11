@@ -1,103 +1,19 @@
-[12:11:12] 🚀 Iniciando captura Sniper Pharma
-[12:11:12] 📅 Período: 2026-02-06 até 2026-02-06
-[12:11:12] ============================================================
-[12:11:12] 📅 DATA: 06/02/2026 (20260206)
-[12:11:12] ------------------------------------------------------------
-[12:11:46]    📄 Pág 1/29 | ⏱️ 33.8s
-[12:11:46]       🎯 Capturados: 6 (64 itens)
-[12:11:46]       🔒 Vetados: 15 | 🌍 Geo: 8 | 📅 Data: 0 | 📝 Temática: 21
-[12:11:47]    📄 Pág 2/29 | ⏱️ 0.8s
-[12:11:47]       🎯 Capturados: 3 (42 itens)
-[12:11:47]       🔒 Vetados: 15 | 🌍 Geo: 9 | 📅 Data: 0 | 📝 Temática: 23
-[12:11:48]    📄 Pág 3/29 | ⏱️ 0.8s
-[12:11:48]       🎯 Capturados: 4 (47 itens)
-[12:11:48]       🔒 Vetados: 15 | 🌍 Geo: 12 | 📅 Data: 0 | 📝 Temática: 19
-[12:12:20]    📄 Pág 4/29 | ⏱️ 32.9s
-[12:12:20]       🎯 Capturados: 9 (198 itens)
-[12:12:20]       🔒 Vetados: 12 | 🌍 Geo: 8 | 📅 Data: 0 | 📝 Temática: 21
-[12:12:21]    📄 Pág 5/29 | ⏱️ 0.9s
-[12:12:21]       🎯 Capturados: 6 (25 itens)
-[12:12:21]       🔒 Vetados: 16 | 🌍 Geo: 10 | 📅 Data: 0 | 📝 Temática: 18
-[12:12:22]    📄 Pág 6/29 | ⏱️ 1.1s
-[12:12:22]       🎯 Capturados: 2 (45 itens)
-[12:12:22]       🔒 Vetados: 14 | 🌍 Geo: 12 | 📅 Data: 0 | 📝 Temática: 22
-[12:12:25]    📄 Pág 7/29 | ⏱️ 2.3s
-[12:12:25]       🎯 Capturados: 4 (291 itens)
-[12:12:25]       🔒 Vetados: 13 | 🌍 Geo: 14 | 📅 Data: 0 | 📝 Temática: 19
-[12:12:28]    📄 Pág 8/29 | ⏱️ 3.1s
-[12:12:28]       🎯 Capturados: 6 (399 itens)
-[12:12:28]       🔒 Vetados: 12 | 🌍 Geo: 12 | 📅 Data: 0 | 📝 Temática: 20
-[12:12:29]    📄 Pág 9/29 | ⏱️ 1.4s
-[12:12:29]       🎯 Capturados: 5 (127 itens)
-[12:12:29]       🔒 Vetados: 16 | 🌍 Geo: 13 | 📅 Data: 4 | 📝 Temática: 12
-[12:12:30]    📄 Pág 10/29 | ⏱️ 0.8s
-[12:12:30]       🎯 Capturados: 1 (8 itens)
-[12:12:30]       🔒 Vetados: 13 | 🌍 Geo: 22 | 📅 Data: 0 | 📝 Temática: 14
-[12:12:31]    📄 Pág 11/29 | ⏱️ 1.1s
-[12:12:31]       🎯 Capturados: 6 (63 itens)
-[12:12:31]       🔒 Vetados: 18 | 🌍 Geo: 12 | 📅 Data: 0 | 📝 Temática: 14
-[12:12:35]    📄 Pág 12/29 | ⏱️ 4.2s
-[12:12:35]       🎯 Capturados: 7 (540 itens)
-[12:12:35]       🔒 Vetados: 16 | 🌍 Geo: 18 | 📅 Data: 0 | 📝 Temática: 9
-[12:12:36]    📄 Pág 13/29 | ⏱️ 0.6s
-[12:12:36]       🎯 Capturados: 2 (9 itens)
-[12:12:36]       🔒 Vetados: 17 | 🌍 Geo: 14 | 📅 Data: 1 | 📝 Temática: 16
-[12:13:08]    📄 Pág 14/29 | ⏱️ 31.9s
-[12:13:08]       🎯 Capturados: 7 (74 itens)
-[12:13:08]       🔒 Vetados: 17 | 🌍 Geo: 13 | 📅 Data: 1 | 📝 Temática: 12
-[12:13:09]    📄 Pág 15/29 | ⏱️ 0.8s
-[12:13:09]       🎯 Capturados: 2 (3 itens)
-[12:13:09]       🔒 Vetados: 16 | 🌍 Geo: 12 | 📅 Data: 1 | 📝 Temática: 19
-[12:13:10]    📄 Pág 16/29 | ⏱️ 1.0s
-[12:13:10]       🎯 Capturados: 2 (17 itens)
-[12:13:10]       🔒 Vetados: 15 | 🌍 Geo: 12 | 📅 Data: 1 | 📝 Temática: 20
-[12:13:13]    📄 Pág 17/29 | ⏱️ 3.3s
-[12:13:13]       🎯 Capturados: 5 (333 itens)
-[12:13:13]       🔒 Vetados: 18 | 🌍 Geo: 10 | 📅 Data: 0 | 📝 Temática: 17
-[12:13:15]    📄 Pág 18/29 | ⏱️ 2.2s
-[12:13:15]       🎯 Capturados: 6 (436 itens)
-[12:13:15]       🔒 Vetados: 16 | 🌍 Geo: 4 | 📅 Data: 0 | 📝 Temática: 24
-[12:13:19]    📄 Pág 19/29 | ⏱️ 3.8s
-[12:13:19]       🎯 Capturados: 4 (469 itens)
-[12:13:19]       🔒 Vetados: 27 | 🌍 Geo: 9 | 📅 Data: 2 | 📝 Temática: 8
-[12:13:21]    📄 Pág 20/29 | ⏱️ 1.6s
-[12:13:21]       🎯 Capturados: 7 (164 itens)
-[12:13:21]       🔒 Vetados: 9 | 🌍 Geo: 16 | 📅 Data: 1 | 📝 Temática: 17
-[12:13:23]    📄 Pág 21/29 | ⏱️ 2.4s
-[12:13:23]       🎯 Capturados: 7 (446 itens)
-[12:13:23]       🔒 Vetados: 10 | 🌍 Geo: 17 | 📅 Data: 0 | 📝 Temática: 16
-[12:13:27]    📄 Pág 22/29 | ⏱️ 4.2s
-[12:13:27]       🎯 Capturados: 2 (454 itens)
-[12:13:27]       🔒 Vetados: 11 | 🌍 Geo: 15 | 📅 Data: 1 | 📝 Temática: 21
-[12:13:31]    📄 Pág 23/29 | ⏱️ 3.7s
-[12:13:31]       🎯 Capturados: 4 (479 itens)
-[12:13:31]       🔒 Vetados: 14 | 🌍 Geo: 17 | 📅 Data: 0 | 📝 Temática: 15
-[12:13:33]    📄 Pág 24/29 | ⏱️ 1.6s
-[12:13:33]       🎯 Capturados: 2 (149 itens)
-[12:13:33]       🔒 Vetados: 20 | 🌍 Geo: 16 | 📅 Data: 0 | 📝 Temática: 12
-[12:13:33]    📄 Pág 25/29 | ⏱️ 0.6s
-[12:13:33]       🎯 Capturados: 3 (24 itens)
-[12:13:33]       🔒 Vetados: 14 | 🌍 Geo: 20 | 📅 Data: 1 | 📝 Temática: 12
-[12:13:36]    📄 Pág 26/29 | ⏱️ 3.1s
-[12:13:36]       🎯 Capturados: 3 (395 itens)
-[12:13:36]       🔒 Vetados: 15 | 🌍 Geo: 12 | 📅 Data: 0 | 📝 Temática: 20
-[12:13:37]    📄 Pág 27/29 | ⏱️ 0.4s
-[12:13:37]       🎯 Capturados: 0 (0 itens)
-[12:13:37]       🔒 Vetados: 19 | 🌍 Geo: 16 | 📅 Data: 0 | 📝 Temática: 15
-[12:13:38]    📄 Pág 28/29 | ⏱️ 1.4s
-[12:13:38]       🎯 Capturados: 11 (83 itens)
-[12:13:38]       🔒 Vetados: 18 | 🌍 Geo: 15 | 📅 Data: 0 | 📝 Temática: 6
-[12:13:43]    📄 Pág 29/29 | ⏱️ 4.7s
-[12:13:43]       🎯 Capturados: 5 (872 itens)
-[12:13:43]       🔒 Vetados: 20 | 🌍 Geo: 4 | 📅 Data: 1 | 📝 Temática: 7
-[12:13:43]    ✅ Fim do dia 06/02/2026: 131 total acumulado
-[12:13:43] 
-[12:13:43] ============================================================
-[12:13:43] 📊 RESUMO FINAL DA CAPTURA
-[12:13:43] ============================================================
-[12:13:43]    🎯 Capturados: 131 licitações (6256 itens)
-[12:13:43]    🔒 Vetados: 451
-[12:13:43]    🚫 Ignorados: 0
-[12:13:43]    ⚠️ Erros: 0
-[12:13:43]    💾 Total no banco: 9321 licitações
-[12:13:43] ============================================================
+[12:14:48] 🚀 Iniciando captura Sniper Pharma
+[12:14:48] 📅 Período: 2026-02-07 até 2026-02-07
+[12:14:48] ============================================================
+[12:14:48] 📅 DATA: 07/02/2026 (20260207)
+[12:14:48] ------------------------------------------------------------
+[12:14:51]    📄 Pág 1/1 | ⏱️ 2.6s
+[12:14:51]       🎯 Capturados: 1 (220 itens)
+[12:14:51]       🔒 Vetados: 7 | 🌍 Geo: 13 | 📅 Data: 0 | 📝 Temática: 6
+[12:14:51]    ✅ Fim do dia 07/02/2026: 1 total acumulado
+[12:14:51] 
+[12:14:51] ============================================================
+[12:14:51] 📊 RESUMO FINAL DA CAPTURA
+[12:14:51] ============================================================
+[12:14:51]    🎯 Capturados: 1 licitações (220 itens)
+[12:14:51]    🔒 Vetados: 7
+[12:14:51]    🚫 Ignorados: 0
+[12:14:51]    ⚠️ Erros: 0
+[12:14:51]    💾 Total no banco: 9321 licitações
+[12:14:51] ============================================================
