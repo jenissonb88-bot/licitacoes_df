@@ -23,7 +23,7 @@ on:
         default: '2026-01-01'
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # ✅ Opt-in Node.js 24
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   extracao_e_limpeza:
@@ -35,19 +35,26 @@ jobs:
     
     steps:
     - name: Checkout (rápido)
-      uses: actions/checkout@v4.2.2  # ✅ Versão específica com Node 24
-
-    - name: Cache pip
-      uses: actions/cache@v4.2.0  # ✅ Versão atualizada
+      uses: actions/checkout@v4.2.2
 
     - name: Setup Python
-      uses: actions/setup-python@v5.5.0  # ✅ Versão atualizada
+      uses: actions/setup-python@v5.5.0
       with:
         python-version: '3.11'
 
+    # ✅ CORRIGIDO: Cache com key obrigatória
+    - name: Cache pip
+      uses: actions/cache@v4.2.0
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/app.py', '**/limpeza.py', '**/avalia_portfolio.py') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    # ✅ CORRIGIDO: Instalar numpy também
     - name: Install deps
       run: |
-        pip install requests pandas
+        pip install requests pandas numpy
 
     - name: Definir Datas e Modo
       id: config
@@ -112,7 +119,7 @@ jobs:
 
     - name: 📁 Upload Artefatos
       if: always()
-      uses: actions/upload-artifact@v4.6.2  # ✅ Versão atualizada
+      uses: actions/upload-artifact@v4.6.2
       with:
         name: captura-pncp-${{ github.run_id }}-${{ env.START_DATE }}
         path: |
