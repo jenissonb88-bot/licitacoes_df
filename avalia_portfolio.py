@@ -5,6 +5,7 @@ import sys
 import gzip
 import logging
 import csv
+import signal
 from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
@@ -31,6 +32,23 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
+
+# ✅ Handler global para capturar crashes
+def handle_exception(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+    logger.error(f"💥 ERRO CRÍTICO NÃO CAPTURADO: {exc_value}", exc_info=(exc_type, exc_value, exc_traceback))
+    sys.exit(1)
+
+sys.excepthook = handle_exception
+
+# ✅ Timeout handler para evitar travamentos infinitos
+class TimeoutError(Exception):
+    pass
+
+def timeout_handler(signum, frame):
+    raise TimeoutError("Operação excedeu tempo limite")
 
 # Constantes - ✅ AJUSTADOS para serem mais permissivos
 THRESHOLD_ALTO = 0.60      # Reduzido de 0.70
@@ -115,7 +133,9 @@ class PortfolioIndexado:
     def __init__(self):
         self.indice_componentes = defaultdict(list)
         self.items_completos = {}
-        self.sinonimos_expandidos = {}
+        # ✅ Limitar tamanho do cache de sinônimos para economizar memória
+        self._sinonimos_cache = {}
+        self._cache_max_size = 10000
 
     def carregar_portfolio(self, csv_path=ARQ_PORTFOLIO):
         logger.info(f"📂 Carregando portfólio: {csv_path}")
@@ -144,9 +164,11 @@ class PortfolioIndexado:
                 for comp in item['componentes_normalizados']:
                     self.indice_componentes[comp].append(item['id'])
 
-                    for sinonimo in self._expandir_sinonimos(comp):
-                        if sinonimo != comp:
-                            self.indice_componentes[sinonimo].append(item['id'])
+                    # ✅ Limitar expansão de sinônimos para componentes muito comuns
+                    if len(self.indice_componentes[comp]) <= 100:  # Só expandir se não for muito comum
+                        for sinonimo in self._expandir_sinonimos(comp):
+                            if sinonimo != comp:
+                                self.indice_componentes[sinonimo].append(item['id'])
             except Exception as e:
                 logger.warning(f"Erro ao indexar item {idx}: {e}")
 
@@ -203,9 +225,6 @@ class PortfolioIndexado:
         if not texto:
             return []
 
-        # ✅ MELHORADO: Extrair palavras que parecem nomes de fármacos (maiúsculas com 4+ letras)
-        # e também padrões farmacêuticos comuns
-        
         componentes = []
         
         # Padrão 1: Palavras em maiúsculas de 4-20 caracteres (possíveis nomes de fármacos)
@@ -253,11 +272,20 @@ class PortfolioIndexado:
         return comp
 
     def _expandir_sinonimos(self, componente):
+        # ✅ Usar cache com limite de tamanho
+        if componente in self._sinonimos_cache:
+            return self._sinonimos_cache[componente]
+        
         expansao = {componente}
         for principal, sinonimos in SINONIMOS_FARMACOS.items():
             if componente == principal or componente in sinonimos:
                 expansao.add(principal)
                 expansao.update(sinonimos)
+        
+        # ✅ Limitar tamanho do cache
+        if len(self._sinonimos_cache) < self._cache_max_size:
+            self._sinonimos_cache[componente] = expansao
+        
         return expansao
 
     def _extrair_concentracoes(self, dosagem):
@@ -309,6 +337,8 @@ class PortfolioIndexado:
 class MatcherHibrido:
     def __init__(self, portfolio_indexado):
         self.portfolio = portfolio_indexado
+        self._debug_count = 0
+        self._total_processado = 0
 
     def avaliar_licitacao(self, licitacao):
         objeto = licitacao.get('objeto') or licitacao.get('obj') or ''
@@ -320,11 +350,22 @@ class MatcherHibrido:
         resultados = []
         for item_edital in itens:
             try:
+                # ✅ Timeout por item para evitar travamentos
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(5)  # 5 segundos por item
+                
                 matches = self._avaliar_item(item_edital)
+                
+                signal.alarm(0)  # Cancelar alarme
+                
                 if matches:
                     resultados.extend(matches)
+            except TimeoutError:
+                logger.warning(f"⏱️ Timeout ao processar item: {item_edital.get('descricao', 'N/A')[:50]}...")
+                signal.alarm(0)
             except Exception as e:
                 logger.debug(f"Erro ao avaliar item: {e}")
+                signal.alarm(0)
 
         resultados = self._consolidar_resultados(resultados)
         return resultados
@@ -336,8 +377,6 @@ class MatcherHibrido:
             return []
 
         # ✅ DEBUG: Log das primeiras descrições para ver o que está chegando
-        if not hasattr(self, '_debug_count'):
-            self._debug_count = 0
         if self._debug_count < 3:
             logger.info(f"   🔍 Descrição item {self._debug_count}: {descricao[:80]}...")
             self._debug_count += 1
@@ -355,7 +394,8 @@ class MatcherHibrido:
         tipo_edital = 'combo' if len(componentes_edital) > 1 else 'simples'
         concentracoes_edital = self._extrair_concentracoes(descricao)
 
-        candidatos = self.portfolio.buscar_candidatos(componentes_edital, top_n=30)
+        # ✅ Limitar número de candidatos para evitar processamento excessivo
+        candidatos = self.portfolio.buscar_candidatos(componentes_edital, top_n=20)
 
         if not candidatos:
             if self._debug_count <= 3:
@@ -366,7 +406,7 @@ class MatcherHibrido:
             logger.info(f"      ✅ Candidatos encontrados: {len(candidatos)}")
 
         resultados = []
-        for candidato in candidatos[:5]:  # Top 5 para debug
+        for candidato in candidatos[:3]:  # ✅ Reduzido para top 3
             try:
                 item_portfolio = self.portfolio.items_completos[candidato['id']]
 
@@ -443,7 +483,7 @@ class MatcherHibrido:
         comps_portfolio = item_portfolio['componentes_normalizados']
         tipo_portfolio = item_portfolio['tipo']
 
-        # 1. COBERTURA DE COMPONENTES (50%) - ✅ Aumentado peso
+        # 1. COBERTURA DE COMPONENTES (50%)
         comps_edital_norm = [self.portfolio._normalizar_componente(c) for c in comps_edital]
         
         matches_diretos = 0
@@ -464,7 +504,8 @@ class MatcherHibrido:
         if HAS_RAPIDFUZZ and comps_edital and comps_portfolio:
             similaridades = []
             for ce in comps_edital_norm:
-                melhores = [fuzz.ratio(ce, cp) for cp in comps_portfolio]
+                # ✅ Limitar comparações para evitar O(n²) excessivo
+                melhores = [fuzz.ratio(ce, cp) for cp in comps_portfolio[:5]]
                 if melhores:
                     similaridades.append(max(melhores))
             if similaridades:
@@ -506,13 +547,17 @@ class MatcherHibrido:
         if c1 == c2:
             return True
 
+        # ✅ Otimização: verificar tamanho primeiro
+        if abs(len(c1) - len(c2)) > 3:
+            return False
+
         # Verificar sinônimos
         for principal, sinonimos in SINONIMOS_FARMACOS.items():
             grupo = {principal} | set(sinonimos)
             if c1 in grupo and c2 in grupo:
                 return True
 
-        # Similaridade fuzzy - ✅ Reduzido threshold para 70
+        # Similaridade fuzzy - Reduzido threshold para 70
         if HAS_RAPIDFUZZ:
             return fuzz.ratio(c1, c2) > 70
         else:
@@ -529,7 +574,7 @@ class MatcherHibrido:
                 if valor_portfolio == 0:
                     continue
                 diff = abs(valor_edital - valor_portfolio) / valor_portfolio
-                if diff <= 0.20:  # ✅ Aumentado tolerância para 20%
+                if diff <= 0.20:  # Aumentado tolerância para 20%
                     matches += 1
 
         total = len(concs_edital)
@@ -567,10 +612,14 @@ class MatcherHibrido:
 
 
 def main():
-    logger.info("🚀 Iniciando avaliação de portfólio v3.2 (Debug)")
+    logger.info("🚀 Iniciando avaliação de portfólio v3.3 (Otimizado)")
     logger.info(f"⚙️ Thresholds: ALTO≥{THRESHOLD_ALTO}, MEDIO≥{THRESHOLD_MEDIO}, BAIXO≥{THRESHOLD_BAIXO}")
 
-    portfolio = PortfolioIndexado().carregar_portfolio()
+    try:
+        portfolio = PortfolioIndexado().carregar_portfolio()
+    except Exception as e:
+        logger.error(f"💥 Erro ao carregar portfólio: {e}")
+        sys.exit(1)
 
     licitacoes = []
     
@@ -592,7 +641,7 @@ def main():
     
     if not arquivos_licitacoes:
         logger.error(f"❌ Nenhum arquivo de licitações encontrado!")
-        return
+        sys.exit(1)
 
     for arquivo in arquivos_licitacoes:
         try:
@@ -617,7 +666,7 @@ def main():
 
     if not licitacoes:
         logger.warning("⚠️ Nenhuma licitação encontrada para avaliar")
-        return
+        sys.exit(1)
 
     # ✅ DEBUG: Mostrar estrutura da primeira licitação e alguns itens
     if licitacoes:
@@ -639,45 +688,68 @@ def main():
 
     logger.info(f"🔧 Processando em modo serial...")
     
-    for idx, lic in enumerate(licitacoes):
-        try:
-            matches = matcher.avaliar_licitacao(lic)
-            if matches:
-                resultados_finais.append({
-                    'licitacao': lic.get('id', f'idx_{idx}'),
-                    'matches': matches
-                })
-        except Exception as e:
-            logger.debug(f"❌ Erro processando licitação {idx}: {e}")
+    # ✅ Processar em batches com checkpoint
+    batch_size = 100
+    total_licitacoes = len(licitacoes)
+    
+    for batch_start in range(0, total_licitacoes, batch_size):
+        batch_end = min(batch_start + batch_size, total_licitacoes)
+        logger.info(f"📦 Processando batch {batch_start//batch_size + 1}: {batch_start}-{batch_end-1}")
+        
+        for idx in range(batch_start, batch_end):
+            try:
+                lic = licitacoes[idx]
+                matches = matcher.avaliar_licitacao(lic)
+                if matches:
+                    resultados_finais.append({
+                        'licitacao': lic.get('id', f'idx_{idx}'),
+                        'matches': matches
+                    })
+                
+                matcher._total_processado += 1
+                
+            except Exception as e:
+                logger.error(f"❌ Erro processando licitação {idx}: {e}")
+                # ✅ Continuar mesmo com erro em uma licitação
+                continue
 
-        if (idx + 1) % 500 == 0:
-            logger.info(f"   Processadas {idx + 1}/{len(licitacoes)} licitações, {len(resultados_finais)} com matches...")
+        # ✅ Log de progresso a cada batch
+        progresso = (batch_end / total_licitacoes) * 100
+        logger.info(f"   📊 Progresso: {progresso:.1f}% | Matches até agora: {len(resultados_finais)}")
+        
+        # ✅ Forçar garbage collection a cada batch para liberar memória
+        import gc
+        gc.collect()
 
     # Gerar relatório
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     arquivo_saida = f"relatorio_compatibilidade_{timestamp}.csv"
 
-    with open(arquivo_saida, 'w', encoding='utf-8', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow([
-            'licitacao_id', 'item_portfolio_id', 'descricao_portfolio',
-            'score', 'tipo_match', 'componentes_match', 'detalhes'
-        ])
+    try:
+        with open(arquivo_saida, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                'licitacao_id', 'item_portfolio_id', 'descricao_portfolio',
+                'score', 'tipo_match', 'componentes_match', 'detalhes'
+            ])
 
-        for resultado in resultados_finais:
-            lic_id = resultado['licitacao']
-            for match in resultado['matches']:
-                writer.writerow([
-                    lic_id,
-                    match['item_portfolio']['id'],
-                    match['item_portfolio']['descricao'][:100],
-                    f"{match['score']:.2%}",
-                    match['tipo_match'],
-                    '|'.join(match['componentes_match']),
-                    match['detalhes']
-                ])
+            for resultado in resultados_finais:
+                lic_id = resultado['licitacao']
+                for match in resultado['matches']:
+                    writer.writerow([
+                        lic_id,
+                        match['item_portfolio']['id'],
+                        match['item_portfolio']['descricao'][:100],
+                        f"{match['score']:.2%}",
+                        match['tipo_match'],
+                        '|'.join(match['componentes_match']),
+                        match['detalhes']
+                    ])
 
-    logger.info(f"✅ Relatório gerado: {arquivo_saida}")
+        logger.info(f"✅ Relatório gerado: {arquivo_saida}")
+    except Exception as e:
+        logger.error(f"❌ Erro ao gerar relatório: {e}")
+
     logger.info(f"📊 Licitações com matches: {len(resultados_finais)}/{len(licitacoes)}")
     
     resumo = {'ALTO': 0, 'MEDIO': 0, 'BAIXO': 0, 'INCOMPATIVEL': 0}
@@ -690,6 +762,8 @@ def main():
     if len(resultados_finais) == 0:
         logger.warning("⚠️ NENHUM MATCH ENCONTRADO!")
         logger.warning("   Verifique se os nomes dos fármacos no portfólio correspondem às descrições das licitações.")
+    
+    logger.info("🏁 Processamento concluído com sucesso!")
 
 
 if __name__ == "__main__":
