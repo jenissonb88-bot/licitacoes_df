@@ -1,119 +1,20 @@
-[19:05:54] 🚀 Iniciando captura Sniper Pharma
-[19:05:54] 📅 Período: 2026-03-06 até 2026-03-06
-[19:05:54] ============================================================
-[19:05:54] 📅 DATA: 06/03/2026 (20260306)
-[19:05:54] ------------------------------------------------------------
-[19:06:28]    📄 Pág 1/34 | ⏱️ 33.3s
-[19:06:28]       🎯 Capturados: 3 (115 itens)
-[19:06:28]       🔒 Vetados: 17 | 🌍 Geo: 12 | 📅 Data: 0 | 📝 Temática: 18
-[19:06:30]    📄 Pág 2/34 | ⏱️ 2.7s
-[19:06:30]       🎯 Capturados: 8 (167 itens)
-[19:06:30]       🔒 Vetados: 12 | 🌍 Geo: 7 | 📅 Data: 0 | 📝 Temática: 23
-[19:07:34]    📄 Pág 3/34 | ⏱️ 63.5s
-[19:07:34]       🎯 Capturados: 9 (132 itens)
-[19:07:34]       🔒 Vetados: 14 | 🌍 Geo: 6 | 📅 Data: 0 | 📝 Temática: 21
-[19:08:06]    📄 Pág 4/34 | ⏱️ 32.5s
-[19:08:06]       🎯 Capturados: 12 (218 itens)
-[19:08:06]       🔒 Vetados: 18 | 🌍 Geo: 6 | 📅 Data: 0 | 📝 Temática: 14
-[19:08:38]    📄 Pág 5/34 | ⏱️ 31.8s
-[19:08:38]       🎯 Capturados: 8 (94 itens)
-[19:08:38]       🔒 Vetados: 15 | 🌍 Geo: 8 | 📅 Data: 0 | 📝 Temática: 19
-[19:08:39]    📄 Pág 6/34 | ⏱️ 0.9s
-[19:08:39]       🎯 Capturados: 3 (36 itens)
-[19:08:39]       🔒 Vetados: 13 | 🌍 Geo: 15 | 📅 Data: 0 | 📝 Temática: 19
-[19:08:41]    📄 Pág 7/34 | ⏱️ 1.5s
-[19:08:41]       🎯 Capturados: 6 (149 itens)
-[19:08:41]       🔒 Vetados: 22 | 🌍 Geo: 4 | 📅 Data: 0 | 📝 Temática: 18
-[19:08:41]    📄 Pág 8/34 | ⏱️ 0.7s
-[19:08:41]       🎯 Capturados: 4 (43 itens)
-[19:08:41]       🔒 Vetados: 15 | 🌍 Geo: 16 | 📅 Data: 0 | 📝 Temática: 15
-[19:08:43]    📄 Pág 9/34 | ⏱️ 1.4s
-[19:08:43]       🎯 Capturados: 2 (46 itens)
-[19:08:43]       🔒 Vetados: 24 | 🌍 Geo: 7 | 📅 Data: 0 | 📝 Temática: 17
-[19:08:44]    📄 Pág 10/34 | ⏱️ 1.5s
-[19:08:44]       🎯 Capturados: 11 (130 itens)
-[19:08:44]       🔒 Vetados: 23 | 🌍 Geo: 6 | 📅 Data: 0 | 📝 Temática: 10
-[19:08:47]    📄 Pág 11/34 | ⏱️ 2.3s
-[19:08:47]       🎯 Capturados: 7 (668 itens)
-[19:08:47]       🔒 Vetados: 19 | 🌍 Geo: 12 | 📅 Data: 0 | 📝 Temática: 12
-[19:08:48]    📄 Pág 12/34 | ⏱️ 1.5s
-[19:08:48]       🎯 Capturados: 7 (202 itens)
-[19:08:48]       🔒 Vetados: 17 | 🌍 Geo: 8 | 📅 Data: 1 | 📝 Temática: 17
-[19:08:52]    📄 Pág 13/34 | ⏱️ 4.2s
-[19:08:52]       🎯 Capturados: 7 (744 itens)
-[19:08:52]       🔒 Vetados: 19 | 🌍 Geo: 9 | 📅 Data: 0 | 📝 Temática: 15
-[19:08:54]    📄 Pág 14/34 | ⏱️ 1.2s
-[19:08:54]       🎯 Capturados: 4 (81 itens)
-[19:08:54]       🔒 Vetados: 15 | 🌍 Geo: 13 | 📅 Data: 1 | 📝 Temática: 17
-[19:08:56]    📄 Pág 15/34 | ⏱️ 2.4s
-[19:08:56]       🎯 Capturados: 6 (357 itens)
-[19:08:56]       🔒 Vetados: 27 | 🌍 Geo: 4 | 📅 Data: 1 | 📝 Temática: 12
-[19:08:57]    📄 Pág 16/34 | ⏱️ 0.6s
-[19:08:57]       🎯 Capturados: 1 (18 itens)
-[19:08:57]       🔒 Vetados: 21 | 🌍 Geo: 12 | 📅 Data: 0 | 📝 Temática: 16
-[19:09:00]    📄 Pág 17/34 | ⏱️ 3.1s
-[19:09:00]       🎯 Capturados: 3 (499 itens)
-[19:09:00]       🔒 Vetados: 21 | 🌍 Geo: 10 | 📅 Data: 0 | 📝 Temática: 16
-[19:09:01]    📄 Pág 18/34 | ⏱️ 1.2s
-[19:09:01]       🎯 Capturados: 5 (212 itens)
-[19:09:01]       🔒 Vetados: 21 | 🌍 Geo: 12 | 📅 Data: 0 | 📝 Temática: 12
-[19:10:04]    📄 Pág 19/34 | ⏱️ 63.5s
-[19:10:04]       🎯 Capturados: 3 (260 itens)
-[19:10:04]       🔒 Vetados: 20 | 🌍 Geo: 11 | 📅 Data: 2 | 📝 Temática: 14
-[19:10:06]    📄 Pág 20/34 | ⏱️ 1.3s
-[19:10:06]       🎯 Capturados: 4 (57 itens)
-[19:10:06]       🔒 Vetados: 25 | 🌍 Geo: 5 | 📅 Data: 2 | 📝 Temática: 14
-[19:10:09]    📄 Pág 21/34 | ⏱️ 3.3s
-[19:10:09]       🎯 Capturados: 5 (438 itens)
-[19:10:09]       🔒 Vetados: 28 | 🌍 Geo: 2 | 📅 Data: 2 | 📝 Temática: 13
-[19:10:41]    📄 Pág 22/34 | ⏱️ 31.7s
-[19:10:41]       🎯 Capturados: 2 (5 itens)
-[19:10:41]       🔒 Vetados: 24 | 🌍 Geo: 12 | 📅 Data: 0 | 📝 Temática: 12
-[19:10:43]    📄 Pág 23/34 | ⏱️ 2.4s
-[19:10:43]       🎯 Capturados: 7 (307 itens)
-[19:10:43]       🔒 Vetados: 21 | 🌍 Geo: 14 | 📅 Data: 1 | 📝 Temática: 7
-[19:10:46]    📄 Pág 24/34 | ⏱️ 2.5s
-[19:10:46]       🎯 Capturados: 3 (304 itens)
-[19:10:46]       🔒 Vetados: 22 | 🌍 Geo: 14 | 📅 Data: 0 | 📝 Temática: 11
-[19:10:46]    📄 Pág 25/34 | ⏱️ 0.6s
-[19:10:46]       🎯 Capturados: 0 (0 itens)
-[19:10:46]       🔒 Vetados: 26 | 🌍 Geo: 10 | 📅 Data: 3 | 📝 Temática: 11
-[19:10:47]    📄 Pág 26/34 | ⏱️ 1.0s
-[19:10:47]       🎯 Capturados: 4 (38 itens)
-[19:10:47]       🔒 Vetados: 25 | 🌍 Geo: 9 | 📅 Data: 0 | 📝 Temática: 12
-[19:10:49]    📄 Pág 27/34 | ⏱️ 1.4s
-[19:10:49]       🎯 Capturados: 4 (97 itens)
-[19:10:49]       🔒 Vetados: 14 | 🌍 Geo: 14 | 📅 Data: 0 | 📝 Temática: 18
-[19:11:51]    📄 Pág 28/34 | ⏱️ 62.5s
-[19:11:51]       🎯 Capturados: 0 (0 itens)
-[19:11:51]       🔒 Vetados: 19 | 🌍 Geo: 15 | 📅 Data: 0 | 📝 Temática: 16
-[19:11:54]    📄 Pág 29/34 | ⏱️ 3.1s
-[19:11:54]       🎯 Capturados: 1 (265 itens)
-[19:11:54]       🔒 Vetados: 26 | 🌍 Geo: 18 | 📅 Data: 2 | 📝 Temática: 3
-[19:12:29]    📄 Pág 30/34 | ⏱️ 34.2s
-[19:12:29]       🎯 Capturados: 4 (690 itens)
-[19:12:29]       🔒 Vetados: 25 | 🌍 Geo: 11 | 📅 Data: 0 | 📝 Temática: 10
-[19:12:29]    📄 Pág 31/34 | ⏱️ 0.7s
-[19:12:29]       🎯 Capturados: 2 (77 itens)
-[19:12:29]       🔒 Vetados: 19 | 🌍 Geo: 9 | 📅 Data: 1 | 📝 Temática: 19
-[19:12:31]    📄 Pág 32/34 | ⏱️ 1.7s
-[19:12:31]       🎯 Capturados: 5 (203 itens)
-[19:12:31]       🔒 Vetados: 19 | 🌍 Geo: 7 | 📅 Data: 7 | 📝 Temática: 12
-[19:12:32]    📄 Pág 33/34 | ⏱️ 0.7s
-[19:12:32]       🎯 Capturados: 0 (0 itens)
-[19:12:32]       🔒 Vetados: 4 | 🌍 Geo: 0 | 📅 Data: 44 | 📝 Temática: 2
-[19:12:32]    📄 Pág 34/34 | ⏱️ 0.5s
-[19:12:32]       🎯 Capturados: 1 (44 itens)
-[19:12:32]       🔒 Vetados: 5 | 🌍 Geo: 0 | 📅 Data: 0 | 📝 Temática: 4
-[19:12:32]    ✅ Fim do dia 06/03/2026: 151 total acumulado
-[19:12:32] 
-[19:12:32] ============================================================
-[19:12:32] 📊 RESUMO FINAL DA CAPTURA
-[19:12:32] ============================================================
-[19:12:32]    🎯 Capturados: 151 licitações (6696 itens)
-[19:12:32]    🔒 Vetados: 655
-[19:12:32]    🌍 Ignorados Geo: 318
-[19:12:32]    📝 Ignorados Temática: 469
-[19:12:32]    ⚠️ Erros Totais: 0
-[19:12:32]    💾 Total no banco: 9429 licitações
-[19:12:32] ============================================================
+[19:13:24] 🚀 Iniciando captura Sniper Pharma
+[19:13:24] 📅 Período: 2026-03-07 até 2026-03-07
+[19:13:24] ============================================================
+[19:13:24] 📅 DATA: 07/03/2026 (20260307)
+[19:13:24] ------------------------------------------------------------
+[19:13:25]    📄 Pág 1/1 | ⏱️ 1.7s
+[19:13:25]       🎯 Capturados: 2 (2 itens)
+[19:13:25]       🔒 Vetados: 17 | 🌍 Geo: 7 | 📅 Data: 0 | 📝 Temática: 18
+[19:13:25]    ✅ Fim do dia 07/03/2026: 2 total acumulado
+[19:13:25] 
+[19:13:25] ============================================================
+[19:13:25] 📊 RESUMO FINAL DA CAPTURA
+[19:13:25] ============================================================
+[19:13:25]    🎯 Capturados: 2 licitações (2 itens)
+[19:13:25]    🔒 Vetados: 17
+[19:13:25]    🌍 Ignorados Geo: 7
+[19:13:25]    📝 Ignorados Temática: 18
+[19:13:25]    ⚠️ Erros Totais: 0
+[19:13:25]    💾 Total no banco: 9430 licitações
+[19:13:25] ============================================================
