@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # ✅ Opt-in Node.js 24
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   auditoria:
@@ -22,19 +22,26 @@ jobs:
     
     steps:
     - name: Checkout (rápido)
-      uses: actions/checkout@v4.2.2  # ✅ Versão específica com Node 24
-
-    - name: Cache pip
-      uses: actions/cache@v4.2.0  # ✅ Versão atualizada
+      uses: actions/checkout@v4.2.2
 
     - name: Setup Python
-      uses: actions/setup-python@v5.5.0  # ✅ Versão atualizada
+      uses: actions/setup-python@v5.5.0
       with:
         python-version: '3.11'
 
+    # ✅ CORRIGIDO: Cache com key obrigatória
+    - name: Cache pip
+      uses: actions/cache@v4.2.0
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/atualiza.py', '**/avalia_portfolio.py') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    # ✅ CORRIGIDO: Instalar numpy também
     - name: Install deps
       run: |
-        pip install requests pandas
+        pip install requests pandas numpy
 
     - name: 🩺 Run Auditor (atualiza.py)
       run: python atualiza.py
@@ -68,7 +75,7 @@ jobs:
 
     - name: 📁 Upload Relatórios como Artefatos
       if: always()
-      uses: actions/upload-artifact@v4.6.2  # ✅ Versão atualizada
+      uses: actions/upload-artifact@v4.6.2
       with:
         name: relatorios-auditoria-${{ github.run_id }}-$(date +'%Y%m%d')
         path: |
