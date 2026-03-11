@@ -96,7 +96,13 @@ def processar_lote(lote_licitacoes, arquivo_saida_csv):
     for licitacao in lote_licitacoes:
         itens = licitacao.get('itens', [])
         for item in itens:
-            descricao = str(item.get('descricao', '')).upper()
+            # ✅ CORREÇÃO CRÍTICA: Lendo a chave 'd' gerada pelo app.py em vez de 'descricao'
+            descricao = str(item.get('d', '')).upper()
+            
+            # Ignora itens sem descrição válida para evitar processamento inútil
+            if not descricao or descricao == 'NONE':
+                continue
+                
             componentes = extrair_componentes(descricao)
             
             # Cruzamento exato de palavras (O(1))
@@ -112,9 +118,12 @@ def processar_lote(lote_licitacoes, arquivo_saida_csv):
             if match:
                 resultado = {
                     'id_licitacao': licitacao.get('id', ''),
-                    'orgao': licitacao.get('orgao', ''),
-                    'item_num': item.get('numero', ''),
-                    'descricao_item': item.get('descricao', ''),
+                    # ✅ CORREÇÃO CRÍTICA: Lendo a chave 'org' em vez de 'orgao'
+                    'orgao': licitacao.get('org', ''),
+                    # ✅ CORREÇÃO CRÍTICA: Lendo a chave 'n' em vez de 'numero'
+                    'item_num': item.get('n', ''),
+                    # ✅ CORREÇÃO CRÍTICA: Lendo a chave 'd'
+                    'descricao_item': item.get('d', ''),
                     'termo_encontrado': " | ".join(list(match))
                 }
                 resultados_lote.append(resultado)
