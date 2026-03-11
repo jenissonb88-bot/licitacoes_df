@@ -23,6 +23,7 @@ on:
         default: '2026-01-01'
 
 env:
+  # Força o uso do Node 24 para evitar os warnings de depreciação nas Actions
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -35,23 +36,23 @@ jobs:
     
     steps:
     - name: Checkout (rápido)
-      uses: actions/checkout@v4.2.2
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1 # Otimizado conforme análise anterior: não precisamos do histórico git para o script
 
     - name: Setup Python
-      uses: actions/setup-python@v5.5.0
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
-    # ✅ CORRIGIDO: Cache com key obrigatória
     - name: Cache pip
-      uses: actions/cache@v4.2.0
+      uses: actions/cache@v4
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/app.py', '**/limpeza.py', '**/avalia_portfolio.py') }}
         restore-keys: |
           ${{ runner.os }}-pip-
 
-    # ✅ CORRIGIDO: Instalar numpy também
     - name: Install deps
       run: |
         pip install requests pandas numpy
@@ -89,7 +90,9 @@ jobs:
         git add dadosoportunidades.json.gz || true
         git add pregacoes_pharma_limpos.json.gz || true
         git add log_captura.txt || true
-        git add relatorio_compatibilidade_*.csv || true
+        
+        # ✅ ATUALIZADO: Apontando para o arquivo consolidado exato
+        git add relatorio_compatibilidade_consolidado.csv || true
         
         git rm --cached checkpoint.json 2>/dev/null || true
         git rm --cached execucao.lock 2>/dev/null || true
@@ -119,11 +122,11 @@ jobs:
 
     - name: 📁 Upload Artefatos
       if: always()
-      uses: actions/upload-artifact@v4.6.2
+      uses: actions/upload-artifact@v4
       with:
         name: captura-pncp-${{ github.run_id }}-${{ env.START_DATE }}
         path: |
-          relatorio_compatibilidade_*.csv
+          relatorio_compatibilidade_consolidado.csv
           log_captura.txt
           pregacoes_pharma_limpos.json.gz
         retention-days: 7
