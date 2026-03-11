@@ -33,7 +33,6 @@
         .compat-baixa { background: #dc3545; color: white; }
         .compat-na { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.6); }
 
-        /* ✅ CORRIGIDO: Estilo para itens compatíveis - mais visível */
         .item-compativel {
             background-color: #d4edda !important;
             border-left: 4px solid #28a745 !important;
@@ -84,7 +83,6 @@
         .btn-excluir { font-size: 0.7rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 2px 8px; border-radius: 4px; cursor: pointer; }
         .btn-excluir:hover { background: var(--red-df); border-color: var(--red-df); }
 
-        /* ✅ NOVO: Barra de progresso de compatibilidade */
         .compat-barra-container {
             display: inline-flex;
             align-items: center;
@@ -212,7 +210,7 @@
 <script>
 let allData = [];
 let filteredData = [];
-let compatData = {};  // ✅ Estrutura: { licId: { percentual, confianca, matches: [...] } }
+let compatData = {};  
 let currentPage = 1;
 let totalPages = 1;
 const itemsPerPage = 20;
@@ -224,13 +222,15 @@ const GITHUB_FILE_PATH = 'links_manuais.txt';
 const modalObj = new bootstrap.Modal(document.getElementById('modalDetalhes'));
 const modalInclusaoObj = new bootstrap.Modal(document.getElementById('modalInclusao'));
 
-// ✅ AJUSTADO: Parser de CSV melhorado
+// ✅ ATUALIZADO: Apontando para o arquivo consolidado novo
 async function loadCompatData() {
     try {
-        const response = await fetch('relatorio_compatibilidade.csv');
+        // Tenta buscar o arquivo consolidado primeiro
+        let response = await fetch('relatorio_compatibilidade_consolidado.csv');
         if (!response.ok) {
-            console.log('Arquivo relatorio_compatibilidade.csv não encontrado, tentando padrão com timestamp...');
-            return;
+            console.log('Arquivo consolidado não encontrado, tentando formato antigo...');
+            response = await fetch('relatorio_compatibilidade.csv');
+            if(!response.ok) return;
         }
         
         await parseCompatCSV(await response.text());
@@ -239,86 +239,61 @@ async function loadCompatData() {
     }
 }
 
+// ✅ ATUALIZADO: Interpretador adaptado para a nova estrutura do Python
 async function parseCompatCSV(csvText) {
     const lines = csvText.trim().split('\n');
     if (lines.length < 2) return;
     
     const headers = lines[0].split(',').map(h => h.trim().replace(/^\uFEFF/, '').replace(/^"|"$/g, ''));
     
-    // Novo formato
-    const colLicitacaoId = headers.indexOf('licitacao_id');
-    const colItemPortfolioId = headers.indexOf('item_portfolio_id');
-    const colDescricao = headers.indexOf('descricao_portfolio');
-    const colScore = headers.indexOf('score');
-    const colTipoMatch = headers.indexOf('tipo_match');
-    const colComponentes = headers.indexOf('componentes_match');
+    // Identificadores do NOVO formato gerado pelo script atualizado
+    const colIdLicitacao = headers.indexOf('id_licitacao');
+    const colTermoEncontrado = headers.indexOf('termo_encontrado');
+    const colDescricaoItem = headers.indexOf('descricao_item');
     
-    // Formato antigo (fallback)
-    const colId = headers.indexOf('id');
-    const colPercentual = headers.indexOf('percentual');
-    const colConfianca = headers.indexOf('confianca');
-    const colMatches = headers.indexOf('principais_matches');
+    // Identificadores do formato antigo (para retrocompatibilidade caso ainda exista algum arquivo velho)
+    const colOldId = headers.indexOf('licitacao_id') !== -1 ? headers.indexOf('licitacao_id') : headers.indexOf('id');
+    const colOldMatches = headers.indexOf('componentes_match') !== -1 ? headers.indexOf('componentes_match') : headers.indexOf('principais_matches');
     
-    const isNovoFormato = colLicitacaoId >= 0 && colScore >= 0;
+    const isNovoFormatoPython = colIdLicitacao >= 0 && colTermoEncontrado >= 0;
     
     for (let i = 1; i < lines.length; i++) {
         const cols = parseCSVLine(lines[i]);
-        if (cols.length < 3) continue;
+        if (cols.length < 2) continue;
         
-        let id, percentual, confianca, matches, itemPortfolioId, descricao;
+        let id, matches = [];
         
-        if (isNovoFormato) {
-            id = cols[colLicitacaoId];
-            const scoreStr = cols[colScore];
-            percentual = parseFloat(scoreStr.replace('%', '').trim()) || 0;
-            confianca = (colTipoMatch >= 0 ? cols[colTipoMatch] : 'INCOMPATIVEL').toUpperCase();
-            matches = (colComponentes >= 0 ? cols[colComponentes] : '').split('|').filter(m => m);
-            itemPortfolioId = cols[colItemPortfolioId] || '';
-            descricao = cols[colDescricao] || '';
+        if (isNovoFormatoPython) {
+            id = cols[colIdLicitacao];
+            // O python salva os matches separados por " | "
+            matches = (cols[colTermoEncontrado] || '').split('|').map(m => m.trim()).filter(m => m);
         } else {
-            id = colId >= 0 ? cols[colId] : cols[0];
-            percentual = parseFloat(colPercentual >= 0 ? cols[colPercentual] : cols[3]) || 0;
-            confianca = (colConfianca >= 0 ? cols[colConfianca] : cols[4]) || 'INCOMPATIVEL';
-            matches = (colMatches >= 0 ? cols[colMatches] : '').split('|').filter(m => m);
-            itemPortfolioId = '';
-            descricao = '';
+            id = cols[colOldId];
+            matches = (colOldMatches >= 0 && cols[colOldMatches] ? cols[colOldMatches] : '').split('|').map(m => m.trim()).filter(m => m);
         }
         
         if (!id) continue;
         
-        // ✅ Acumula matches por licitação (pode ter múltiplos itens do portfólio)
+        // Estrutura inicial se a licitação for nova no loop
         if (!compatData[id]) {
             compatData[id] = { 
-                percentual: 0, 
-                confianca: 'INCOMPATIVEL', 
+                percentual: 100, // Marcamos como 100 pois o calculo real acontece no front
+                confianca: 'ALTO', 
                 matches: [],
                 itensPortfolio: []
             };
         }
         
-        // Adiciona match se for relevante
-        if (percentual >= 20) {
-            compatData[id].matches.push(...matches);
-            compatData[id].itensPortfolio.push({
-                id: itemPortfolioId,
-                descricao: descricao,
-                score: percentual
-            });
-            
-            // Atualiza percentual máximo e confiança
-            if (percentual > compatData[id].percentual) {
-                compatData[id].percentual = percentual;
-                compatData[id].confianca = confianca;
-            }
-        }
+        // Adiciona novos matches encontrados e remove duplicatas
+        compatData[id].matches.push(...matches);
     }
     
-    // Remove duplicatas nos matches
+    // Limpeza de duplicatas finais por segurança
     for (const id in compatData) {
         compatData[id].matches = [...new Set(compatData[id].matches)];
     }
     
-    console.log(`Carregados ${Object.keys(compatData).length} registros de compatibilidade`);
+    console.log(`Carregados ${Object.keys(compatData).length} registros de compatibilidade mestre.`);
 }
 
 function parseCSVLine(line) {
@@ -348,7 +323,6 @@ function parseCSVLine(line) {
     return result;
 }
 
-// ✅ CORRIGIDO: Calcula percentual real de itens compatíveis da licitação
 function calcularCompatibilidadeLic(lic) {
     const compat = compatData[lic.id];
     if (!compat || !compat.matches.length) return { percentual: 0, confianca: 'N/A', itensCompat: 0, totalItens: 0 };
@@ -356,14 +330,11 @@ function calcularCompatibilidadeLic(lic) {
     const totalItens = lic.itens?.length || 0;
     if (totalItens === 0) return { percentual: 0, confianca: 'N/A', itensCompat: 0, totalItens: 0 };
     
-    // Conta quantos itens da licitação deram match com algum componente do portfólio
     let itensCompat = 0;
     const matchesNorm = compat.matches.map(m => m.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
     
     for (const item of lic.itens || []) {
         const descNorm = (item.d || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        
-        // Verifica se algum match está contido na descrição do item
         const isCompat = matchesNorm.some(match => descNorm.includes(match));
         if (isCompat) {
             itensCompat++;
@@ -372,7 +343,6 @@ function calcularCompatibilidadeLic(lic) {
     
     const percentual = Math.round((itensCompat / totalItens) * 100);
     
-    // Determina confiança baseado no percentual de cobertura
     let confianca = 'BAIXO';
     if (percentual >= 70) confianca = 'ALTO';
     else if (percentual >= 40) confianca = 'MEDIO';
@@ -380,7 +350,6 @@ function calcularCompatibilidadeLic(lic) {
     return { percentual, confianca, itensCompat, totalItens };
 }
 
-// ✅ CORRIGIDO: Gera badge com percentual real de itens compatíveis
 function getCompatBadgeHTML(lic) {
     const compat = calcularCompatibilidadeLic(lic);
     
@@ -395,7 +364,6 @@ function getCompatBadgeHTML(lic) {
     if (pct >= 70) { classe = 'compat-alta'; corBarra = '#28a745'; }
     else if (pct >= 40) { classe = 'compat-media'; corBarra = '#ffc107'; }
     
-    // Badge com barra de progresso visual
     return `
         <span class="compat-badge ${classe}">
             ${pct}% (${compat.itensCompat}/${compat.totalItens})
@@ -578,7 +546,6 @@ function limparFiltros() {
     renderMonitor();
 }
 
-// ✅ CORRIGIDO: Função que verifica compatibilidade por item específico
 function getItemCompatInfo(item, licId) {
     const compat = compatData[licId];
     if (!compat || !compat.matches.length) return { isCompat: false, matchInfo: null };
@@ -586,13 +553,11 @@ function getItemCompatInfo(item, licId) {
     const descNorm = (item.d || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const matchesNorm = compat.matches.map(m => m.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
     
-    // Encontra qual match corresponde a este item
     for (let i = 0; i < matchesNorm.length; i++) {
         if (descNorm.includes(matchesNorm[i])) {
             return { 
                 isCompat: true, 
-                matchInfo: compat.matches[i],
-                itemPortfolio: compat.itensPortfolio.find(ip => descNorm.includes(ip.descricao?.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') || ''))
+                matchInfo: compat.matches[i].toUpperCase(),
             };
         }
     }
@@ -604,12 +569,11 @@ function abrirItens(id) {
     const lic = allData.find(x => x.id === id);
     if (!lic) return;
     
-    // ✅ Calcula estatísticas de compatibilidade para o header
     const compatStats = calcularCompatibilidadeLic(lic);
     
     document.getElementById('modalTitle').innerHTML = `
         Itens: ${lic.org || '---'} (Edital ${lic.edit || '---'})
-        ${compatStats.percentual > 0 ? `<span class="badge ${compatStats.confiança === 'ALTO' ? 'bg-success' : compatStats.confiança === 'MEDIO' ? 'bg-warning text-dark' : 'bg-danger'} ms-2">${compatStats.percentual}% compatível (${compatStats.itensCompat}/${compatStats.totalItens})</span>` : ''}
+        ${compatStats.percentual > 0 ? `<span class="badge ${compatStats.confianca === 'ALTO' ? 'bg-success' : compatStats.confianca === 'MEDIO' ? 'bg-warning text-dark' : 'bg-danger'} ms-2">${compatStats.percentual}% compatível (${compatStats.itensCompat}/${compatStats.totalItens})</span>` : ''}
     `;
     document.getElementById('linkPncp').href = lic.link || '#';
 
@@ -648,7 +612,6 @@ function abrirItens(id) {
     modalObj.show();
 }
 
-// ✅ CORRIGIDO: Renderização de linha com destaque de compatibilidade
 function renderLinhaItem(it, licId) {
     const isMeEpp = [1, 2, 3].includes(parseInt(it.benef));
     const meEppHtml = isMeEpp ? '<span class="benef-sim">SIM</span>' : '<span class="benef-nao">NÃO</span>';
@@ -658,7 +621,6 @@ function renderLinhaItem(it, licId) {
     const qtd = parseFloat(it.q) || 0;
     const valorTotal = valFinal > 0 ? (valFinal * qtd) : (valEstimado * qtd);
 
-    // ✅ Verifica compatibilidade específica deste item
     const compatInfo = getItemCompatInfo(it, licId);
     const isCompat = compatInfo.isCompat;
     
@@ -668,8 +630,8 @@ function renderLinhaItem(it, licId) {
     
     if (isCompat) {
         compatClass = 'item-compativel';
-        compatCell = `<span class="badge bg-success" title="Match: ${compatInfo.matchInfo || ''}">✓ SIM</span>`;
-        descricaoHtml = `<span class="compat-indicador">✓</span>${it.d || 'Sem descrição'}`;
+        compatCell = `<span class="badge bg-success" title="Palavra-chave: ${compatInfo.matchInfo || ''}">✓ SIM</span>`;
+        descricaoHtml = `<span class="compat-indicador">✓</span>${it.d || 'Sem descrição'} <br><small class="text-success fw-bold">(${compatInfo.matchInfo})</small>`;
     }
 
     return `<tr class="${compatClass}">
