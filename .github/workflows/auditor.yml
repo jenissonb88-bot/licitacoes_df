@@ -1,41 +1,34 @@
 name: Sniper Pharma (Auditor de Resultados)
 
 concurrency:
-  group: auditoria-pncp  # ✅ Grupo separado do captura (evita cancelamento)
+  group: auditoria-pncp
   cancel-in-progress: false
 
 on:
   schedule:
-    - cron: '0 15,21 * * *'  # 15:00 e 21:00 UTC (12:00 e 18:00 Brasília)
+    - cron: '0 15,21 * * *'
   workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # ✅ Opt-in Node.js 24
 
 jobs:
   auditoria:
     runs-on: ubuntu-latest
-    timeout-minutes: 45  # ✅ Timeout de segurança (auditoria pode demorar mais)
+    timeout-minutes: 45
     permissions:
       contents: write
       actions: write
     
     steps:
-    # ✅ Checkout rápido: fetch-depth=1, sem LFS
     - name: Checkout (rápido)
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 1  # ✅ Apenas último commit - muito mais rápido
-        lfs: false
+      uses: actions/checkout@v4.2.2  # ✅ Versão específica com Node 24
 
-    # ✅ Cache de pip para acelerar instalação
     - name: Cache pip
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
+      uses: actions/cache@v4.2.0  # ✅ Versão atualizada
 
     - name: Setup Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v5.5.0  # ✅ Versão atualizada
       with:
         python-version: '3.11'
 
@@ -47,7 +40,7 @@ jobs:
       run: python atualiza.py
 
     - name: 📊 Run Avaliação de Portfólio
-      if: always()  # Roda mesmo se atualiza.py falhar
+      if: always()
       run: python avalia_portfolio.py
 
     - name: 💾 Commit Auditoria
@@ -55,19 +48,16 @@ jobs:
         git config user.name "Sniper Pharma Auditor"
         git config user.email "auditor@pharma.bot"
 
-        # Adiciona todos os arquivos de dados
         git add pregacoes_pharma_limpos.json.gz || true
         git add relatorio_atualizacoes.csv || true
         git add relatorio_compatibilidade_*.csv || true
         git add log_atualizacao.txt || true
         git add log_captura.txt || true
         
-        # Remove arquivos temporários do tracking (se existirem)
         git rm --cached checkpoint*.json 2>/dev/null || true
         git rm --cached execucao.lock 2>/dev/null || true
         git rm --cached checkpoint_atualizacao.json 2>/dev/null || true
 
-        # Só commita se houver mudanças
         if ! git diff --staged --quiet; then
           git commit -m "🔍 Auditoria: $(date +'%Y-%m-%d %H:%M') - Atualização de resultados"
           git pull origin main --rebase -X theirs || true
@@ -78,7 +68,7 @@ jobs:
 
     - name: 📁 Upload Relatórios como Artefatos
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v4.6.2  # ✅ Versão atualizada
       with:
         name: relatorios-auditoria-${{ github.run_id }}-$(date +'%Y%m%d')
         path: |
@@ -86,7 +76,7 @@ jobs:
           relatorio_compatibilidade_*.csv
           log_atualizacao.txt
           log_captura.txt
-        retention-days: 7  # ✅ Reduzido de 30 para economizar espaço
+        retention-days: 7
         compression-level: 6
 
     - name: 📋 Resumo da Execução
@@ -96,21 +86,18 @@ jobs:
         echo "  AUDITORIA E AVALIAÇÃO CONCLUÍDAS"
         echo "=========================================="
 
-        # Resumo da atualização
         if [ -f log_atualizacao.txt ]; then
           echo ""
           echo "🔄 ATUALIZAÇÃO:"
           tail -n 10 log_atualizacao.txt
         fi
 
-        # Resumo da avaliação
-        if [ -f log_captura.txt ]; then  # ✅ Nome correto do log
+        if [ -f log_captura.txt ]; then
           echo ""
           echo "📊 AVALIAÇÃO DE PORTFÓLIO:"
           tail -n 10 log_captura.txt
         fi
 
-        # Estatísticas dos relatórios
         echo ""
         echo "📁 ARQUIVOS GERADOS:"
         [ -f relatorio_atualizacoes.csv ] && echo "   - Atualizações: $(wc -l < relatorio_atualizacoes.csv) linhas"
