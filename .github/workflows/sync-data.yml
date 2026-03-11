@@ -1,12 +1,12 @@
 name: Sniper Pharma (Captura)
 
 concurrency:
-  group: captura-pncp  # ✅ Grupo separado do auditor
+  group: captura-pncp
   cancel-in-progress: false
 
 on:
   schedule:
-    - cron: '0 9 * * *'  # Execução diária às 09:00 UTC (06:00 Brasília)
+    - cron: '0 9 * * *'
   workflow_dispatch:
     inputs:
       mode:
@@ -22,33 +22,26 @@ on:
         required: false
         default: '2026-01-01'
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # ✅ Opt-in Node.js 24
+
 jobs:
   extracao_e_limpeza:
     runs-on: ubuntu-latest
-    timeout-minutes: 30  # ✅ Timeout de segurança
+    timeout-minutes: 30
     permissions:
       contents: write
       actions: write
     
     steps:
-    # ✅ Checkout rápido: fetch-depth=1, sem LFS
     - name: Checkout (rápido)
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 1  # ✅ Apenas último commit - muito mais rápido
-        lfs: false
+      uses: actions/checkout@v4.2.2  # ✅ Versão específica com Node 24
 
-    # ✅ Cache de pip para acelerar instalação
     - name: Cache pip
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
+      uses: actions/cache@v4.2.0  # ✅ Versão atualizada
 
     - name: Setup Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v5.5.0  # ✅ Versão atualizada
       with:
         python-version: '3.11'
 
@@ -62,12 +55,10 @@ jobs:
         export TZ="America/Sao_Paulo"
         TODAY=$(date +'%Y-%m-%d')
         if [ "${{ github.event_name }}" == "schedule" ]; then
-            # Varredura automática: recua 6 dias para compensar atrasos do PNCP
             echo "START_DATE=$(date -d '6 days ago' +'%Y-%m-%d')" >> $GITHUB_ENV
             echo "END_DATE=$TODAY" >> $GITHUB_ENV
             echo "MODE=single_run" >> $GITHUB_ENV
         else
-            # Execução manual via interface
             echo "START_DATE=${{ inputs.target_date }}" >> $GITHUB_ENV
             echo "END_DATE=${{ inputs.target_date }}" >> $GITHUB_ENV
             echo "MODE=${{ inputs.mode }}" >> $GITHUB_ENV
@@ -80,7 +71,7 @@ jobs:
       run: python limpeza.py
 
     - name: 📊 3. Run Avaliação de Portfólio (avalia_portfolio.py)
-      if: always()  # Roda mesmo se etapas anteriores falharem parcialmente
+      if: always()
       run: python avalia_portfolio.py
 
     - name: 💾 Commit Resultados
@@ -88,17 +79,14 @@ jobs:
         git config user.name "Sniper Pharma Bot"
         git config user.email "sniper@pharma.bot"
 
-        # Adiciona todos os arquivos de saída
         git add dadosoportunidades.json.gz || true
         git add pregacoes_pharma_limpos.json.gz || true
         git add log_captura.txt || true
         git add relatorio_compatibilidade_*.csv || true
         
-        # Remove arquivos temporários do tracking (se existirem)
         git rm --cached checkpoint.json 2>/dev/null || true
         git rm --cached execucao.lock 2>/dev/null || true
 
-        # Só commita se houver mudanças
         if ! git diff --staged --quiet; then
           git commit -m "📊 Captura PNCP: $START_DATE a $END_DATE [$(date +'%H:%M')]"
           git pull origin main --rebase -X theirs || true
@@ -124,12 +112,12 @@ jobs:
 
     - name: 📁 Upload Artefatos
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v4.6.2  # ✅ Versão atualizada
       with:
         name: captura-pncp-${{ github.run_id }}-${{ env.START_DATE }}
         path: |
           relatorio_compatibilidade_*.csv
           log_captura.txt
           pregacoes_pharma_limpos.json.gz
-        retention-days: 7  # ✅ Reduzido de 30 para economizar espaço
-        compression-level: 6  # ✅ Compressão equilibrada
+        retention-days: 7
+        compression-level: 6
