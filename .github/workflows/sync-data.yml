@@ -71,15 +71,16 @@ jobs:
             echo "MODE=${{ inputs.mode }}" >> $GITHUB_ENV
         fi
 
+    # ✅ CORREÇÃO: Usando 'python -u' para logs em tempo real na tela do GitHub
     - name: 🚀 1. Run Core Crawler (app.py)
-      run: python app.py --start "$START_DATE" --end "$END_DATE" | tee log_crawler.txt
+      run: python -u app.py --start "$START_DATE" --end "$END_DATE" | tee log_crawler.txt
 
     - name: 🧹 2. Run Data Cleaner (limpeza.py)
-      run: python limpeza.py | tee log_limpeza.txt
+      run: python -u limpeza.py | tee log_limpeza.txt
 
     - name: 📊 3. Run Avaliação de Portfólio (avalia_portfolio.py)
       if: always()
-      run: python avalia_portfolio.py | tee log_avaliacao.txt
+      run: python -u avalia_portfolio.py | tee log_avaliacao.txt
 
     - name: 💾 Commit Resultados
       run: |
