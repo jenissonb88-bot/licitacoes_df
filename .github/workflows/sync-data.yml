@@ -1,8 +1,11 @@
 name: Sniper Pharma (Captura)
 
+# ✅ BLOQUEIO DE SEGURANÇA: 
+# Impede que dois robôs rodem ao mesmo tempo. 
+# Se um novo for disparado, ele fica na fila (pending) esperando o atual terminar.
 concurrency:
-  group: captura-pncp
-  cancel-in-progress: false
+  group: sniper-pharma-capture
+  cancel-in-progress: false 
 
 on:
   schedule:
@@ -22,13 +25,10 @@ on:
         required: false
         default: '2026-02-01'
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   extracao_e_limpeza:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60 # Tempo limite aumentado para garantir segurança
     permissions:
       contents: write
       actions: write
@@ -53,80 +53,75 @@ jobs:
           ${{ runner.os }}-pip-
 
     - name: Install deps
-      run: |
-        pip install requests urllib3
+      run: pip install requests urllib3
 
     - name: Definir Datas e Modo
       id: config
       run: |
         export TZ="America/Sao_Paulo"
         TODAY=$(date +'%Y-%m-%d')
+        # Verifica se existe checkpoint ou se usa o input
+        CHECKPOINT=$(cat checkpoint.txt 2>/dev/null || echo "")
+        
         if [ "${{ github.event_name }}" == "schedule" ]; then
-            # No agendamento diário, ele pega os últimos 6 dias para garantir que nada escape
-            echo "START_DATE=$(date -d '6 days ago' +'%Y-%m-%d')" >> $GITHUB_ENV
+            # No automático diário, foca no dia atual
+            echo "START_DATE=$TODAY" >> $GITHUB_ENV
             echo "END_DATE=$TODAY" >> $GITHUB_ENV
             echo "MODE=single_run" >> $GITHUB_ENV
+        elif [ "${{ inputs.mode }}" == "manual_loop" ]; then
+            # No modo Loop, prioriza o que está no checkpoint se existir
+            DATA_ALVO="${{ inputs.target_date }}"
+            if [ ! -z "$CHECKPOINT" ]; then DATA_ALVO=$CHECKPOINT; fi
+            echo "START_DATE=$DATA_ALVO" >> $GITHUB_ENV
+            echo "END_DATE=$DATA_ALVO" >> $GITHUB_ENV
+            echo "MODE=manual_loop" >> $GITHUB_ENV
         else
-            # No modo Manual ou Loop, ele processa EXATAMENTE UM DIA por vez
             echo "START_DATE=${{ inputs.target_date }}" >> $GITHUB_ENV
             echo "END_DATE=${{ inputs.target_date }}" >> $GITHUB_ENV
-            echo "MODE=${{ inputs.mode }}" >> $GITHUB_ENV
+            echo "MODE=single_run" >> $GITHUB_ENV
         fi
 
     - name: 🚀 1. Run Core Crawler (app.py)
-      run: python -u app.py --start "$START_DATE" --end "$END_DATE" | tee log_crawler.txt
+      run: python -u app.py --start "$START_DATE" --end "$END_DATE"
 
     - name: 🧹 2. Run Data Cleaner (limpeza.py)
-      run: python -u limpeza.py | tee log_limpeza.txt
+      run: python -u limpeza.py
 
     - name: 📊 3. Run Avaliação de Portfólio (avalia_portfolio.py)
-      if: always()
-      run: python -u avalia_portfolio.py | tee log_avaliacao.txt
+      if: success() # Só roda se os passos anteriores derem certo
+      run: python -u avalia_portfolio.py
 
-    - name: 💾 Commit Resultados
+    - name: 💾 Commit e Atualiza Checkpoint
+      if: success()
       run: |
         git config user.name "Sniper Pharma Bot"
         git config user.email "sniper@pharma.bot"
 
-        git add dadosoportunidades.json.gz || true
-        git add pregacoes_pharma_limpos.json.gz || true
-        git add relatorio_compatibilidade_consolidado.csv || true
-        
-        git rm --cached checkpoint*.json 2>/dev/null || true
-        git rm --cached execucao.lock 2>/dev/null || true
+        # Calcula o próximo dia para o checkpoint
+        NEXT_DAY=$(date -d "$START_DATE + 1 day" +'%Y-%m-%d')
+        echo $NEXT_DAY > checkpoint.txt
 
+        git add checkpoint.txt dadosoportunidades.json.gz pregacoes_pharma_limpos.json.gz relatorio_compatibilidade_consolidado.csv
+        
         if ! git diff --staged --quiet; then
-          git commit -m "📊 Captura PNCP: $START_DATE [$(date +'%H:%M')]"
+          git commit -m "📊 Captura concluída: $START_DATE | Próximo: $NEXT_DAY"
           git pull origin main --rebase -X theirs || true
-          git push origin main || true
-        else
-          echo "ℹ️ Nenhuma mudança para commitar"
+          git push origin main
         fi
 
-    - name: 🔁 Trigger Próximo Dia (Loop)
-      if: env.MODE == 'manual_loop'
+    - name: 🔁 Trigger Próximo Dia (Fila de Segurança)
+      # Só dispara se o modo for loop E o passo de commit terminou com sucesso
+      if: env.MODE == 'manual_loop' && success()
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Calcula o dia seguinte com base na START_DATE que acabou de rodar
-        NEXT_DAY=$(date -d "$START_DATE + 1 day" +'%Y-%m-%d')
+        NEXT_DAY=$(cat checkpoint.txt)
         TODAY=$(date +'%Y-%m-%d')
 
         if [[ "$NEXT_DAY" < "$TODAY" ]] || [[ "$NEXT_DAY" == "$TODAY" ]]; then
-           echo "🚀 Dia concluído. Disparando o robô para o dia $NEXT_DAY..."
+           echo "🚀 Ciclo de segurança: Disparando dia $NEXT_DAY..."
+           # Usamos a CLI do GitHub para disparar o próximo sem cancelar o atual
            gh workflow run "Sniper Pharma (Captura)" -f mode="manual_loop" -f target_date="$NEXT_DAY"
         else
-           echo "🏁 Loop finalizado. O robô alcançou o dia de hoje."
+           echo "🏁 Meta alcançada: Robô atualizado até hoje."
         fi
-
-    - name: 📁 Upload Artefatos
-      if: always()
-      uses: actions/upload-artifact@v4.6.2
-      with:
-        name: captura-pncp-${{ env.START_DATE }}
-        path: |
-          relatorio_compatibilidade_consolidado.csv
-          log_crawler.txt
-          log_limpeza.txt
-          log_avaliacao.txt
-        retention-days: 7
