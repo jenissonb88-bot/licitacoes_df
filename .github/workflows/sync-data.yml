@@ -23,7 +23,6 @@ on:
         default: '2026-01-01'
 
 env:
-  # Força o uso do Node 24 para evitar os warnings de depreciação nas Actions
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -36,26 +35,27 @@ jobs:
     
     steps:
     - name: Checkout (rápido)
-      uses: actions/checkout@v4
+      uses: actions/checkout@v4.2.2
       with:
-        fetch-depth: 1 # Otimizado conforme análise anterior: não precisamos do histórico git para o script
+        fetch-depth: 1
 
     - name: Setup Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v5.5.0
       with:
         python-version: '3.11'
 
     - name: Cache pip
-      uses: actions/cache@v4
+      uses: actions/cache@v4.2.0
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/app.py', '**/limpeza.py', '**/avalia_portfolio.py') }}
         restore-keys: |
           ${{ runner.os }}-pip-
 
+    # ✅ CORREÇÃO: Removido pandas e numpy (Acelerando o servidor)
     - name: Install deps
       run: |
-        pip install requests pandas numpy
+        pip install requests urllib3
 
     - name: Definir Datas e Modo
       id: config
@@ -72,15 +72,16 @@ jobs:
             echo "MODE=${{ inputs.mode }}" >> $GITHUB_ENV
         fi
 
+    # ✅ CORREÇÃO: Gerando logs de tela com 'tee'
     - name: 🚀 1. Run Core Crawler (app.py)
-      run: python app.py --start "$START_DATE" --end "$END_DATE"
+      run: python app.py --start "$START_DATE" --end "$END_DATE" | tee log_crawler.txt
 
     - name: 🧹 2. Run Data Cleaner (limpeza.py)
-      run: python limpeza.py
+      run: python limpeza.py | tee log_limpeza.txt
 
     - name: 📊 3. Run Avaliação de Portfólio (avalia_portfolio.py)
       if: always()
-      run: python avalia_portfolio.py
+      run: python avalia_portfolio.py | tee log_avaliacao.txt
 
     - name: 💾 Commit Resultados
       run: |
@@ -89,12 +90,9 @@ jobs:
 
         git add dadosoportunidades.json.gz || true
         git add pregacoes_pharma_limpos.json.gz || true
-        git add log_captura.txt || true
-        
-        # ✅ ATUALIZADO: Apontando para o arquivo consolidado exato
         git add relatorio_compatibilidade_consolidado.csv || true
         
-        git rm --cached checkpoint.json 2>/dev/null || true
+        git rm --cached checkpoint*.json 2>/dev/null || true
         git rm --cached execucao.lock 2>/dev/null || true
 
         if ! git diff --staged --quiet; then
@@ -122,12 +120,14 @@ jobs:
 
     - name: 📁 Upload Artefatos
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v4.6.2
       with:
         name: captura-pncp-${{ github.run_id }}-${{ env.START_DATE }}
         path: |
           relatorio_compatibilidade_consolidado.csv
-          log_captura.txt
+          log_crawler.txt
+          log_limpeza.txt
+          log_avaliacao.txt
           pregacoes_pharma_limpos.json.gz
         retention-days: 7
         compression-level: 6
