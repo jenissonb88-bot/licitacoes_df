@@ -44,7 +44,7 @@ VETOS_ALIMENTACAO = [normalize(x) for x in ["ALIMENTACAO ESCOLAR", "GENEROS ALIM
 VETOS_EDUCACAO = [normalize(x) for x in ["MATERIAL ESCOLAR", "PEDAGOGICO", "DIDATICO", "BRINQUEDOS", "LIVROS", "TRANSPORTE ESCOLAR", "KIT ALUNO", "REDE MUNICIPAL DE ENSINO", "SECRETARIA DE EDUCACAO"]]
 VETOS_OPERACIONAL = [normalize(x) for x in ["OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "REFORMA", "MANUTENCAO PREDIAL", "MANUTENCAO DE EQUIPAMENTOS", "LIMPEZA URBANA", "RESIDUOS SOLIDOS", "LOCACAO DE VEICULOS", "TRANSPORTE", "COMBUSTIVEL", "DIESEL", "GASOLINA", "PNEUS", "PECAS AUTOMOTIVAS", "OFICINA", "VIGILANCIA", "SEGURANCA", "BOMBEIRO", "SALVAMENTO", "RESGATE", "VIATURA", "FARDAMENTO", "VESTUARIO", "INFORMATICA", "COMPUTADORES", "IMPRESSAO", "EVENTOS", "REPARO", "CORRETIVA", "VEICULO", "AMBULANCIA", "MOTOCICLETA", "MECANICA", "FERRO FUNDIDO", "CONTRATACAO DE SERVICO", "EQUIPAMENTO E MATERIA PERMANENTE", "RECARGA", "ASFATIC", "CONFECCAO"]]
 VETOS_ADM = [normalize(x) for x in ["ADESAO", "INTENCAO", "IRP", "CREDENCIAMENTO", "LEILAO", "ALIENACAO"]]
-TODOS_VETOS = VETOS_ALIMENTACAO + VETOS_EDUCACAO + VETOS_OPERACIONAL + VETOS_ADM
+TODOS_VETOS = VETOS_ALIMENTACAO + VETOS_EDUCACAO + VETOS_OPERACIONAL
 
 WL_MEDICAMENTOS = [normalize(x) for x in ["MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOLA", "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA", "ANTIBIOTICO", "ACETILCISTEINA", "ACETILSALICILICO", "ACICLOVIR", "ADENOSINA", "ADRENALINA", "ALBENDAZOL", "ALENDRONATO", "ALFAEPOETINA", "ALFAINTERFERONA", "ALFAST", "ALOPURINOL", "ALPRAZOLAM", "AMBROXOL", "AMBROXOL XPE", "AMINOFILINA", "AMIODARONA", "AMITRIPTILINA", "AMOXICILINA", "AMPICILINA", "ANASTROZOL", "ANFOTERICINA", "ANLODIPINO", "ARIPIPRAZOL", "ATENOLOL", "ATORVASTATINA", "ATORVASTATINA CALCICA", "ATRACURIO", "ATROPINA", "AZITROMICINA", "AZTREONAM", "BACLOFENO", "BAMIFILINA", "BENZILPENICILINA", "BENZOATO", "BETAMETASONA", "BEZAFIBRATO", "BIMATOPROSTA", "BISACODIL", "BISSULFATO", "BOPRIV", "BROMOPRIDA", "BUDESONIDA", "BUPROPIONA", "BUTILBROMETO", "CABERGOLINA", "CALCITRIOL", "CANDESARTANA", "CAPTOPRIL", "CARBAMAZEPINA", "CARBONATO", "CARVEDILOL", "CAVERDILOL", "CEFALEXINA", "CEFALOTINA", "CEFAZOLINA", "CEFEPIMA", "CEFOTAXIMA", "CEFOXITINA", "CEFTAZIDIMA", "CEFTRIAXONA", "CEFUROXIMA", "CETOCONAZOL", "CETOPROFENO", "CETOROLACO", "CICLOBENZAPRINA", "CICLOSPORINA", "CILOSTAZOL", "CIMETIDINA", "CIPROFLOXACINO", "CIPROFLOXACINA", "CITALOPRAM", "CLARITROMICINA", "CLINDAMICINA", "CLOBETASOL", "CLOMIPRAMINA", "CLONAZEPAM", "CLONIDINA", "CLOPIDOGREL", "CLORETO", "CLORIDRATO", "CLORPROMAZINA", "CLORTALIDONA", "CLOTRIMAZOL", "CLOZAPINA", "CODEINA", "COLCHICINA", "COLECALCIFEROL", "COLISTIMETATO", "COMPLEXO B", "DACARBZINA", "DAPAGLIFLOZINA", "DAPSONA", "DAPTOMICINA", "DARBEPOETINA", "DESLANOSIDEO", "DESLORATADINA", "DEXAMETASONA", "DEXCLORFENIRAMINA", "DEXPANTENOL", "DIAZEPAM", "DIETILAMONIO", "DICLOFENACO", "DIGOXINA", "DILTIAZEM", "DIMETICONA", "DIOSMINA", "DIPIRONA", "DOBUTAMINA", "DOMPERIDONA", "DONEPEZILA", "DOPAMINA", "DOXAZOSINA", "DOXICICLINA", "DROPERIDOL", "DULAGLUTIDA", "DULOXETINA", "DUTASTERIDA", "ECONAZOL", "EMULSAO", "ENALAPRIL", "ENOXAPARINA", "ENTACAPONA", "EPINEFRINA", "ERITROMICINA", "ESCITALOPRAM", "ESOMEPRAZOL", "ESPIRONOLACTONA", "ESTRADIOL", "ESTRIOL", "ESTROGENIOS", "ETANERCEPTE", "ETILEFRINA", "ETOMIDATO", "ETOPOSIDEO", "EZETIMIBA", "FAMOTIDINA", "FENITOINA", "FENOBARBITAL", "FENOTEROL", "FENTANILA", "FERRO", "FIBRINOGENIO", "FILGRASTIM", "FINASTERIDA", "FITOMENADIONA", "FLUCONAZOL", "FLUDROCORTISONA", "FLUMAZENIL", "FLUNARIZINA", "FLUOXETINA", "FLUTICASONA", "FOLATO", "FONDAPARINUX", "FORMOTEROL", "FOSFATO", "FUROSEMIDA", "GABAPENTINA", "GANCICLOVIR", "GELADEIRA", "GENCITABINA", "GENTAMICINA", "GLIBENCLAMIDA", "GLICEROL", "GLICLAZIDA", "GLICOSE", "GLIMEPIRIDA", "GLUCAGON", "HALOPERIDOL", "HEPARINA", "HIDRALAZINA", "HIDROCLOROTIAZIDA", "HIDROCORTISONA", "HIDROTALCITA", "HIDROXIDOPROGESTERONA", "HIDROXIDO", "HIDROXIPROGESTERONA", "HIDROXIUREIA", "HIOSCINA", "HIPROMELOSE", "IBUPROFENO", "IMIPENEM", "IMIPRAMINA", "INDAPAMIDA", "INSULINA", "IOIMBINA", "IPRATROPIO", "IRBESARTANA", "IRINOTECANO", "ISOSSORBIDA", "ISOTRETINOINA", "ITRACONAZOL", "IVERMECTINA", "LACTULOSE", "LAMOTRIGINA", "LANSOPRAZOL", "LATANOPROSTA", "LEFLUNOMIDA", "LERCANIDIPINO", "LETROZOL", "LEVODOPA", "LEVOFLOXACINO", "LEVOMEPROMAZINA", "LEVONORGESTREL", "LEVOTIROXINA", "LIDOCAINA", "LINEZOLIDA", "LINOGLIPTINA", "LIPIDICA", "LISINOPRIL", "LITIO", "LOPERAMIDA", "LORATADINA", "LORAZEPAM", "LOSARTANA", "LOVASTATINA", "MAGNESIO", "MANITOL", "MEBENDAZOL", "MEDROXIPROGESTERONA", "MEMANTINA", "MEROPENEM", "MESALAZINA", "METILDOPA", "METILPREDNISOLONA", "METOCLOPRAMIDA", "METOPROLOL", "METOTREXATO", "METRONIDAZOL", "MICOFENOLATO", "MIDAZOLAM", "MIRTAZAPINA", "MISOPROSTOL", "MORFINA", "MUPIROCINA", "NARATRIPTANA", "NEOMICINA", "NEOSTIGMINA", "NIFEDIPINO", "NIMESULIDA", "NIMODIPINO", "NISTATINA", "NITROFURANTOINA", "NITROGLICERINA", "NITROPRUSSIATO", "NORETISTERONA", "NORFLOXACINO", "NORTRIPTILINA", "OCTREOTIDA", "OLANZAPINA", "OLMESARTANA", "OMEPRAZOL", "ONDANSETRONA", "OXALIPLATINA", "OXCARBAZEPINA", "OXIBUTININA", "PACLITAXEL", "PALONOSETRONA", "PANTOPRAZOL", "PARACETAMOL", "PAROXETINA", "PENICILINA", "PERICIAZINA", "PERMETRINA", "PETIDINA", "PIRAZINAMIDA", "PIRIDOSTIGMINA", "PIRIDOXINA", "POLIMIXINA", "POLIVITAMINICO", "POTASSIO", "PRAMIPEXOL", "PRAVASTATINA", "PREDNISOLONA", "PREDNISONA", "PREGABALINA", "PROMETAZINA", "PROPATILNITRATO", "PROPOFOL", "PROPRANOLOL", "PROSTIGMINA", "QUETIAPINA", "RAMIPRIL", "RANITIDINA", "RESERPINA", "RIFAMPICINA", "RISPERIDONA", "RITONAVIR", "RIVAROXABANA", "ROCURONIO", "ROSUVASTATINA", "SACARATO", "SALBUTAMOL", "SECAM", "SERTRALINA", "SEVELAMER", "SINVASTATINA", "SODIO", "SUCCINILCOLINA", "SUCRALFATO", "SULFADIAZINA", "SULFAMETOXAZOL", "SULFATO", "SULPIRIDA", "SUXAMETONIO", "TAMOXIFENO", "TANSULOSINA", "TEMOZOLAMIDA", "TEMOZOLOMIDA", "TENOXICAN", "TERBUTALINA", "TIAMINA", "TIGECICLINA", "TIOPENTAL", "TIORIDAZINA", "TOBRAMICINA", "TOPIRAMATO", "TRAMADOL", "TRAVOPROSTA", "TRIMETOPRIMA", "TROMETAMOL", "TROPICAMIDA", "VALSARTANA", "VANCOMICINA", "VARFARINA", "VASELINA","AQUISICAO DE MEDICAMENTO", "HEMODIALISE", "DIALISE", "TERAPIA RENAL", "AMINOACIDO", "AMINOACIDOS", "FOSFORO"]]
 WL_NUTRI_CLINICA = [normalize(x) for x in ["NUTRICAO ENTERAL", "FORMULA INFANTIL", "SUPLEMENTO ALIMENTAR", "DIETA ENTERAL", "DIETA PARENTERAL", "NUTRICAO CLINICA", "ENTERAL", "PARENTERA","ENTERA"]]
@@ -56,9 +56,6 @@ def log(msg, console=True, arquivo=True):
     linha = f"[{timestamp}] {msg}"
     if console:
         print(linha)
-    if arquivo:
-        with open(ARQ_LOG, 'a', encoding='utf-8') as f:
-            f.write(linha + '\n')
 
 def carregar_termos_portfolio():
     """Lê o Exportar Dados.csv e cria um motor de pesquisa na memória (Opção A)"""
@@ -90,7 +87,6 @@ def carregar_termos_portfolio():
         except Exception:
             continue
             
-    # Adiciona sinônimos básicos para garantir
     termos.update(["GLICOSE", "DEXTROSE", "AMINOACIDO", "HEMODIALISE", "DIALISE", "FOSFORO", "VITAMINA", "AAS"])
     return termos
 
@@ -103,12 +99,23 @@ def criar_sessao():
 
 def veta_edital(obj_raw, uf):
     obj = normalize(obj_raw)
+    
+    # 1. VETOS ABSOLUTOS (Bloqueia até mesmo se for Medicamento - Ex: IRP)
+    for v in VETOS_ADM:
+        if v in obj: 
+            return True
+
+    # 2. PALAVRAS MÁGICAS (Passe-livre)
     palavras_magicas = ["MEDICAMENTO", "MEDICAMENTOS", "AQUISICAO DE MEDICAMENTOS"]
-    if any(p in obj for p in palavras_magicas): return False
+    if any(p in obj for p in palavras_magicas): 
+        return False
+        
+    # 3. VETOS OPERACIONAIS E ALIMENTAÇÃO
     for v in TODOS_VETOS:
         if v in obj:
             if "NUTRICAO" in v or "ALIMENT" in v:
-                if any(bom in obj for bom in WL_NUTRI_CLINICA) and "ESCOLAR" not in obj: return False
+                if any(bom in obj for bom in WL_NUTRI_CLINICA) and "ESCOLAR" not in obj: 
+                    return False
             return True
     return False
 
@@ -181,8 +188,6 @@ def processar_licitacao(lic, session, termos_portfolio, forcado=False):
         sit_global_nome = MAPA_SITUACAO_GLOBAL.get(sit_global_id, "DIVULGADA")
         
         uo = lic.get('unidadeOrgao', {})
-        
-        # ✅ REGRA 3: O "Sem Estado" (Alarme BR)
         uf = str(uo.get('ufSigla') or '').upper().strip()
         if not uf:
             uf = 'BR'
@@ -207,24 +212,19 @@ def processar_licitacao(lic, session, termos_portfolio, forcado=False):
             tem_mmh_nutri = any(t in obj_norm for t in WL_MATERIAIS_NE + WL_NUTRI_CLINICA)
             tem_termo_amplo = any(x in obj_norm for x in ["SAUDE", "HOSPITAL", "MATERNIDADE", "CLINICA", "EBSERH", "FUNDO MUNICIPAL", "SECRETARIA DE"])
             
-            # ✅ REGRAS 1, 2 e 4: Funil Geográfico e Temático
             if tem_super_passe or tem_med: 
-                # Regra 1: Medicamentos Brasil todo, EXCETO Bloqueados
                 if uf in ESTADOS_BLOQUEADOS: return ('IGNORADO_GEO', None, 0, 'estado_bloqueado_med')
                 tem_interesse = True
             elif tem_mmh_nutri:
-                # Regra 2: MMH e Dietas EXCLUSIVAMENTE Nordeste + DF + BR
                 if uf not in UFS_PERMITIDAS_MMH: return ('IGNORADO_GEO', None, 0, 'fora_regiao_mmh')
                 tem_interesse = True
             elif tem_termo_amplo:
-                # Regra 4: Edital Vago. Bloqueia SUL/Norte e aciona a "Opção A" (Checar Portfólio)
                 if uf in ESTADOS_BLOQUEADOS: return ('IGNORADO_GEO', None, 0, 'estado_bloqueado_vago')
                 tem_interesse = True
                 precisa_checar_portfolio = True
             else:
                 return ('IGNORADO_TEMATICA', None, 0, 'sem_interesse')
 
-        # Baixa os itens
         itens_brutos, fonte = buscar_itens_oficial(cnpj, ano, seq, session)
         if not itens_brutos: return ('ERRO_ITENS', None, 0, fonte)
         
@@ -243,7 +243,6 @@ def processar_licitacao(lic, session, termos_portfolio, forcado=False):
                 'res_forn': None, 'res_val': 0.0
             })
             
-        # ✅ REGRA 4 (Opção A): O Sniper cruza os itens vagos com a memória RAM
         if precisa_checar_portfolio and termos_portfolio and not forcado:
             teve_match = False
             for it in itens_mapeados:
@@ -253,7 +252,6 @@ def processar_licitacao(lic, session, termos_portfolio, forcado=False):
                     break
             
             if not teve_match:
-                # Se baixou os itens e nenhum bateu com o Portfólio, descarta para poupar o BD!
                 return ('IGNORADO_PORTFOLIO', None, 0, 'sem_match_itens')
         
         dados_finais = {
@@ -277,13 +275,10 @@ def buscar_periodo(session, banco, d_ini, d_fim):
     stats = {'vetados': 0, 'capturados': 0, 'itens': 0, 'ignorados_geo': 0, 'ignorados_data': 0, 'ignorados_tematica': 0, 'ignorados_portfolio': 0, 'erros_itens': 0, 'erros_outros': 0}
     checkpoint = carregar_checkpoint()
     
-    if os.path.exists(ARQ_LOG): os.remove(ARQ_LOG)
+    log("🚀 Iniciando captura Sniper Pharma (Banco Blindado)")
     
-    log("🚀 Iniciando captura Sniper Pharma (Opção A - Banco de Dados Blindado)")
-    
-    # CARREGA A INTELIGÊNCIA NA MEMÓRIA UMA ÚNICA VEZ
     termos_portfolio = carregar_termos_portfolio()
-    log(f"🧠 Memória carregada com {len(termos_portfolio)} princípios ativos do Portfólio.")
+    log(f"🧠 Memória carregada com {len(termos_portfolio)} princípios ativos.")
     
     delta = d_fim - d_ini
     for i in range(delta.days + 1):
@@ -309,7 +304,6 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                 s_pag = {k: 0 for k in stats}
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
-                    # Passa o portfólio para dentro do processador
                     futuros = [exe.submit(processar_licitacao, l, session, termos_portfolio) for l in lics]
                     for f in concurrent.futures.as_completed(futuros):
                         st, d, i_qtd, info = f.result()
@@ -327,7 +321,7 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                 for k in stats: stats[k] += s_pag.get(k, 0)
                 salvar_checkpoint(dia, pag + 1)
                 
-                log(f"   📄 Pág {pag}/{tot_pag} | ⏱️ {time.time() - inicio_pag:.1f}s | 🎯 {s_pag['capturados']} Capt | 🗑️ {s_pag['ignorados_portfolio']} Descartados S/ Match")
+                log(f"   📄 Pág {pag}/{tot_pag} | ⏱️ {time.time() - inicio_pag:.1f}s | 🎯 {s_pag['capturados']} Capt | 🗑️ {s_pag['ignorados_portfolio']} Descartados (S/ Match)")
                 
                 if pag >= tot_pag:
                     salvar_checkpoint((dia_obj + timedelta(days=1)).strftime('%Y%m%d'), 1)
@@ -337,7 +331,7 @@ def buscar_periodo(session, banco, d_ini, d_fim):
                 log(f"   ❌ EXCEÇÃO na página {pag}: {str(e)[:100]}")
                 break
     
-    log(f"\n📊 RESUMO: {stats['capturados']} Capturados | {stats['ignorados_portfolio']} Filtrados pelo Portfólio (Limpeza Ativa) | Total no Banco: {len(banco)}")
+    log(f"\n📊 RESUMO: {stats['capturados']} Capturados | {stats['ignorados_portfolio']} Filtrados Ativamente | Total no Banco: {len(banco)}")
 
 if __name__ == '__main__':
     if os.path.exists(ARQ_LOCK): sys.exit(0)
