@@ -6,7 +6,7 @@ concurrency:
 
 on:
   schedule:
-    - cron: '0 15,21 * * *'
+    - cron: '0 15,21 * * *' # Executa às 15h e 21h BRT
   workflow_dispatch:
 
 env:
@@ -33,30 +33,35 @@ jobs:
       uses: actions/cache@v4.2.0
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/atualiza.py', '**/avalia_portfolio.py') }}
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/atualiza.py') }}
         restore-keys: |
           ${{ runner.os }}-pip-
 
+    # ✅ AJUSTE 1: Instalação super leve (apenas o necessário para o atualiza.py)
     - name: Install deps
       run: |
         pip install requests urllib3
 
-    # ✅ CORREÇÃO: Usando 'python -u' para logs em tempo real na tela do GitHub
-    - name: 🩺 Run Auditor (atualiza.py)
-      run: python -u atualiza.py | tee log_atualizacao.txt
+    # ✅ AJUSTE 2: Execução com gravação de Logs para auditoria
+    - name: 🩺 1. Run Auditor (atualiza.py)
+      run: python atualiza.py | tee log_atualizacao.txt
 
-    - name: 📊 Run Avaliação de Portfólio
+    # ✅ AJUSTE 3: Avaliação usando o Dicionário de Ouro
+    - name: 📊 2. Run Avaliação de Portfólio (avalia_portfolio.py)
       if: always()
-      run: python -u avalia_portfolio.py | tee log_avaliacao.txt
+      run: python avalia_portfolio.py | tee log_avaliacao.txt
 
     - name: 💾 Commit Auditoria
       run: |
         git config user.name "Sniper Pharma Auditor"
         git config user.email "auditor@pharma.bot"
 
+        # Adiciona o banco de dados atualizado com vencedores
         git add pregacoes_pharma_limpos.json.gz || true
+        # Adiciona o relatório Sniper (Compatibilidade)
         git add relatorio_compatibilidade_consolidado.csv || true
         
+        # Remove lixo de execução
         git rm --cached checkpoint*.json 2>/dev/null || true
         git rm --cached execucao.lock 2>/dev/null || true
 
@@ -65,14 +70,14 @@ jobs:
           git pull origin main --rebase -X theirs || true
           git push origin main || true
         else
-          echo "ℹ️ Nenhuma mudança para commitar"
+          echo "ℹ️ Nenhuma homologação nova encontrada para atualizar."
         fi
 
-    - name: 📁 Upload Relatórios como Artefatos
+    - name: 📁 Upload Artefatos (Logs de Auditoria)
       if: always()
       uses: actions/upload-artifact@v4.6.2
       with:
-        name: relatorios-auditoria-${{ github.run_id }}-$(date +'%Y%m%d')
+        name: relatorios-auditoria-${{ github.run_id }}
         path: |
           relatorio_compatibilidade_consolidado.csv
           log_atualizacao.txt
@@ -80,25 +85,11 @@ jobs:
         retention-days: 7
         compression-level: 6
 
-    - name: 📋 Resumo da Execução
+    - name: 📋 Resumo Visual
       if: always()
       run: |
         echo "=========================================="
         echo "  AUDITORIA E AVALIAÇÃO CONCLUÍDAS"
         echo "=========================================="
-
-        if [ -f log_atualizacao.txt ]; then
-          echo ""
-          echo "🔄 ATUALIZAÇÃO (Últimas linhas):"
-          tail -n 10 log_atualizacao.txt
-        fi
-
-        if [ -f log_avaliacao.txt ]; then
-          echo ""
-          echo "📊 AVALIAÇÃO DE PORTFÓLIO (Últimas linhas):"
-          tail -n 10 log_avaliacao.txt
-        fi
-
-        echo ""
-        echo "📁 ARQUIVOS:"
-        ls relatorio_compatibilidade*.csv >/dev/null 2>&1 && echo "   - Compatibilidade: Atualizado com sucesso." || echo "   - Compatibilidade: Nenhum arquivo gerado."
+        [ -f log_atualizacao.txt ] && tail -n 5 log_atualizacao.txt
+        [ -f log_avaliacao.txt ] && tail -n 5 log_avaliacao.txt
