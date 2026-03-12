@@ -37,12 +37,10 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-pip-
 
-    # ✅ CORREÇÃO 1: Removido pandas e numpy. Apenas o necessário para acelerar a execução.
     - name: Install deps
       run: |
         pip install requests urllib3
 
-    # ✅ CORREÇÃO 3: Usando 'tee' para gravar o print da tela num arquivo de log legível
     - name: 🩺 Run Auditor (atualiza.py)
       run: python atualiza.py | tee log_atualizacao.txt
 
@@ -55,7 +53,6 @@ jobs:
         git config user.name "Sniper Pharma Auditor"
         git config user.email "auditor@pharma.bot"
 
-        # ✅ CORREÇÃO 2: Apenas arquivos gerados pela nova arquitetura
         git add pregacoes_pharma_limpos.json.gz || true
         git add relatorio_compatibilidade_consolidado.csv || true
         
@@ -103,4 +100,4 @@ jobs:
 
         echo ""
         echo "📁 ARQUIVOS:"
-        [ -f relatorio_compatibilidade_consolidado.csv ] && echo "   - Compatibilidade: Atualizado com sucesso."
+        ls relatorio_compatibilidade*.csv >/dev/null 2>&1 && echo "   - Compatibilidade: Atualizado com sucesso." || echo "   - Compatibilidade: Nenhum arquivo gerado."
