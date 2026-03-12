@@ -29,7 +29,6 @@ jobs:
       with:
         python-version: '3.11'
 
-    # ✅ CORRIGIDO: Cache com key obrigatória
     - name: Cache pip
       uses: actions/cache@v4.2.0
       with:
@@ -38,35 +37,33 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-pip-
 
-    # ✅ CORRIGIDO: Instalar numpy também
+    # ✅ CORREÇÃO 1: Removido pandas e numpy. Apenas o necessário para acelerar a execução.
     - name: Install deps
       run: |
-        pip install requests pandas numpy
+        pip install requests urllib3
 
+    # ✅ CORREÇÃO 3: Usando 'tee' para gravar o print da tela num arquivo de log legível
     - name: 🩺 Run Auditor (atualiza.py)
-      run: python atualiza.py
+      run: python atualiza.py | tee log_atualizacao.txt
 
     - name: 📊 Run Avaliação de Portfólio
       if: always()
-      run: python avalia_portfolio.py
+      run: python avalia_portfolio.py | tee log_avaliacao.txt
 
     - name: 💾 Commit Auditoria
       run: |
         git config user.name "Sniper Pharma Auditor"
         git config user.email "auditor@pharma.bot"
 
+        # ✅ CORREÇÃO 2: Apenas arquivos gerados pela nova arquitetura
         git add pregacoes_pharma_limpos.json.gz || true
-        git add relatorio_atualizacoes.csv || true
-        git add relatorio_compatibilidade_*.csv || true
-        git add log_atualizacao.txt || true
-        git add log_captura.txt || true
+        git add relatorio_compatibilidade_consolidado.csv || true
         
         git rm --cached checkpoint*.json 2>/dev/null || true
         git rm --cached execucao.lock 2>/dev/null || true
-        git rm --cached checkpoint_atualizacao.json 2>/dev/null || true
 
         if ! git diff --staged --quiet; then
-          git commit -m "🔍 Auditoria: $(date +'%Y-%m-%d %H:%M') - Atualização de resultados"
+          git commit -m "🔍 Auditoria e Portfólio: $(date +'%Y-%m-%d %H:%M')"
           git pull origin main --rebase -X theirs || true
           git push origin main || true
         else
@@ -79,10 +76,9 @@ jobs:
       with:
         name: relatorios-auditoria-${{ github.run_id }}-$(date +'%Y%m%d')
         path: |
-          relatorio_atualizacoes.csv
-          relatorio_compatibilidade_*.csv
+          relatorio_compatibilidade_consolidado.csv
           log_atualizacao.txt
-          log_captura.txt
+          log_avaliacao.txt
         retention-days: 7
         compression-level: 6
 
@@ -95,17 +91,16 @@ jobs:
 
         if [ -f log_atualizacao.txt ]; then
           echo ""
-          echo "🔄 ATUALIZAÇÃO:"
+          echo "🔄 ATUALIZAÇÃO (Últimas linhas):"
           tail -n 10 log_atualizacao.txt
         fi
 
-        if [ -f log_captura.txt ]; then
+        if [ -f log_avaliacao.txt ]; then
           echo ""
-          echo "📊 AVALIAÇÃO DE PORTFÓLIO:"
-          tail -n 10 log_captura.txt
+          echo "📊 AVALIAÇÃO DE PORTFÓLIO (Últimas linhas):"
+          tail -n 10 log_avaliacao.txt
         fi
 
         echo ""
-        echo "📁 ARQUIVOS GERADOS:"
-        [ -f relatorio_atualizacoes.csv ] && echo "   - Atualizações: $(wc -l < relatorio_atualizacoes.csv) linhas"
-        [ -f relatorio_compatibilidade_*.csv ] && echo "   - Compatibilidade: $(ls relatorio_compatibilidade_*.csv | wc -l) arquivo(s)"
+        echo "📁 ARQUIVOS:"
+        [ -f relatorio_compatibilidade_consolidado.csv ] && echo "   - Compatibilidade: Atualizado com sucesso."
