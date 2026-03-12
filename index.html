@@ -222,36 +222,30 @@ const GITHUB_FILE_PATH = 'links_manuais.txt';
 const modalObj = new bootstrap.Modal(document.getElementById('modalDetalhes'));
 const modalInclusaoObj = new bootstrap.Modal(document.getElementById('modalInclusao'));
 
-// ✅ ATUALIZADO: Apontando para o arquivo consolidado novo
 async function loadCompatData() {
     try {
-        // Tenta buscar o arquivo consolidado primeiro
         let response = await fetch('relatorio_compatibilidade_consolidado.csv');
         if (!response.ok) {
             console.log('Arquivo consolidado não encontrado, tentando formato antigo...');
             response = await fetch('relatorio_compatibilidade.csv');
             if(!response.ok) return;
         }
-        
         await parseCompatCSV(await response.text());
     } catch (e) {
         console.log('Erro ao carregar compatibilidade:', e);
     }
 }
 
-// ✅ ATUALIZADO: Interpretador adaptado para a nova estrutura do Python
 async function parseCompatCSV(csvText) {
     const lines = csvText.trim().split('\n');
     if (lines.length < 2) return;
     
     const headers = lines[0].split(',').map(h => h.trim().replace(/^\uFEFF/, '').replace(/^"|"$/g, ''));
     
-    // Identificadores do NOVO formato gerado pelo script atualizado
     const colIdLicitacao = headers.indexOf('id_licitacao');
     const colTermoEncontrado = headers.indexOf('termo_encontrado');
     const colDescricaoItem = headers.indexOf('descricao_item');
     
-    // Identificadores do formato antigo (para retrocompatibilidade caso ainda exista algum arquivo velho)
     const colOldId = headers.indexOf('licitacao_id') !== -1 ? headers.indexOf('licitacao_id') : headers.indexOf('id');
     const colOldMatches = headers.indexOf('componentes_match') !== -1 ? headers.indexOf('componentes_match') : headers.indexOf('principais_matches');
     
@@ -265,7 +259,6 @@ async function parseCompatCSV(csvText) {
         
         if (isNovoFormatoPython) {
             id = cols[colIdLicitacao];
-            // O python salva os matches separados por " | "
             matches = (cols[colTermoEncontrado] || '').split('|').map(m => m.trim()).filter(m => m);
         } else {
             id = cols[colOldId];
@@ -274,26 +267,21 @@ async function parseCompatCSV(csvText) {
         
         if (!id) continue;
         
-        // Estrutura inicial se a licitação for nova no loop
         if (!compatData[id]) {
             compatData[id] = { 
-                percentual: 100, // Marcamos como 100 pois o calculo real acontece no front
+                percentual: 100,
                 confianca: 'ALTO', 
                 matches: [],
                 itensPortfolio: []
             };
         }
         
-        // Adiciona novos matches encontrados e remove duplicatas
         compatData[id].matches.push(...matches);
     }
     
-    // Limpeza de duplicatas finais por segurança
     for (const id in compatData) {
         compatData[id].matches = [...new Set(compatData[id].matches)];
     }
-    
-    console.log(`Carregados ${Object.keys(compatData).length} registros de compatibilidade mestre.`);
 }
 
 function parseCSVLine(line) {
@@ -445,8 +433,30 @@ function renderMonitor() {
         const div = document.createElement('div');
         div.className = 'card card-licitacao';
         
-        const valorTotal = lic.val_tot > 0 
-            ? `R$ ${lic.val_tot.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` 
+        // ==========================================
+        // ✅ CORREÇÃO AQUI: PROVA REAL MATEMÁTICA
+        // ==========================================
+        
+        // 1. Soma os valores unitários reais de cada item (Quantidade * Valor Estimado Unitário)
+        let somaRealItens = 0;
+        if (lic.itens && lic.itens.length > 0) {
+            lic.itens.forEach(it => {
+                const vEst = parseFloat(it.v_est) || 0;
+                const qtd = parseFloat(it.q) || 0;
+                somaRealItens += (vEst * qtd);
+            });
+        }
+        
+        // 2. Compara a soma matemática com o cabeçalho ("capa") do PNCP
+        const valCapa = parseFloat(lic.val_tot) || 0;
+        
+        // Se a soma dos itens for maior que zero, confiamos na matemática (pois a capa do PNCP frequentemente falha). 
+        // Caso contrário, usamos o valor da capa como backup.
+        const valorFinalCalculado = somaRealItens > 0 ? somaRealItens : valCapa;
+
+        // 3. Formata para o painel
+        const valorTotal = valorFinalCalculado > 0 
+            ? `R$ ${valorFinalCalculado.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` 
             : 'Sigiloso/Não inf.';
 
         let tipoLic = "AMPLO", cssTipo = "badge-amplo";
@@ -708,7 +718,6 @@ async function processarInclusaoManual() {
 document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
 document.getElementById('nextPage').onclick = () => { if(currentPage < totalPages) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
 
-// Inicializa
 loadData();
 </script>
 </body>
