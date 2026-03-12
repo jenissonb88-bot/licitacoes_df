@@ -4,6 +4,7 @@ import csv
 import gc
 import logging
 import os
+import re
 from math import ceil
 
 # Configuração de Logs
@@ -13,15 +14,24 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
-# 1. Dicionário de Sinónimos Base
+# 1. Dicionário de Sinônimos Base (✅ Sincronizado com app.py)
 SINONIMOS_FARMACOS = {
     "GLICOSE": {"GLICOSE INJETAVEL", "GLICOSE INJETÁVEL", "DEXTROSE"},
     "AMINOACIDO": {"AMINOÁCIDO", "AMINOACIDOS", "AMINOÁCIDOS"},
     "HEMODIALISE": {"HEMODIÁLISE", "DIALISE", "DIÁLISE", "TERAPIA RENAL"},
     "FOSFORO": {"FOSFORICO", "FOSFÓRICO", "FO"},
-    "MATERIAL_HOSPITALAR": {"MATERIAL MÉDICO-HOSPITALAR", "MÉDICO-HOSPITALAR"},
-    "VITAMINA_C": {"VITAMINA C", "ACIDO ASCORBICO", "ÁCIDO ASCÓRBICO"},
-    "AAS": {"AAS", "ACIDO ACETILSALICILICO", "ÁCIDO ACETILSALICÍLICO"}
+    "VITAMINA": {"VITAMINA C", "ACIDO ASCORBICO", "ÁCIDO ASCÓRBICO", "VITAMINA"},
+    "AAS": {"AAS", "ACIDO ACETILSALICILICO", "ÁCIDO ACETILSALICÍLICO"},
+    "MATERIAL_HOSPITALAR": {"MATERIAL MÉDICO-HOSPITALAR", "MÉDICO-HOSPITALAR"}
+}
+
+# 2. Escudo de Exclusão (Stopwords Farmacêuticos)
+# Essas palavras NUNCA serão consideradas como termo de busca principal
+TERMOS_GENERICOS = {
+    "FRASCO", "FRASCOS", "AMPOLA", "AMPOLAS", "BOLSA", "BOLSAS", "CAIXA", "CX", 
+    "COMPRIMIDO", "COMPRIMIDOS", "CPR", "CAPSULA", "CAPSULAS", "INJETAVEL", 
+    "INJ", "GOTAS", "XAROPE", "SOLUCAO", "MG", "ML", "KG", "LITRO", "LITROS", 
+    "UNIDADE", "UN", "KIT", "KITS", "TIPO", "PARA", "COM", "SEM", "MEDICAMENTO"
 }
 
 # Motor de pesquisa central
@@ -41,52 +51,45 @@ def carregar_portfolio():
         logging.warning(f"⚠️ Ficheiro {arquivo_csv} não encontrado. A usar apenas os termos estáticos.")
         return portfolio
 
-    # Tenta vários padrões de codificação comuns no Windows/Excel
     encodings = ['utf-8-sig', 'utf-8', 'iso-8859-1', 'cp1252']
     
     for enc in encodings:
         try:
             with open(arquivo_csv, mode='r', encoding=enc) as f:
-                # Amostra para descobrir se o Excel usou ',' ou ';'
                 amostra = f.read(1024)
                 f.seek(0)
                 delimitador = ';' if ';' in amostra else ','
-                
                 reader = csv.DictReader(f, delimiter=delimitador)
-                
-                # Normaliza cabeçalhos para ignorar espaços ocultos
                 headers = {h.strip().upper(): h for h in reader.fieldnames if h}
-                
-                # Encontra automaticamente a coluna de descrição
                 col_desc = next((h_real for h_upper, h_real in headers.items() if 'DESCRI' in h_upper), None)
                 
-                if not col_desc:
-                    continue # Falhou ao achar a coluna, tenta o próximo encoding
+                if not col_desc: continue
                 
                 for row in reader:
                     desc_completa = str(row.get(col_desc, '')).strip().upper()
                     if desc_completa:
                         portfolio.append(desc_completa)
                         
-                        # EXTRAÇÃO INTELIGENTE: Pega a primeira palavra (geralmente o Fármaco)
-                        # Ex: "AAS 100 MG INF" vira "AAS" e vai para o motor de busca
-                        palavra_chave = desc_completa.split()[0].replace(',', '').replace('.', '')
+                        # ✅ CORREÇÃO: Escalonamento Inteligente (Pula os Stopwords)
+                        palavras_cruas = desc_completa.replace(',', ' ').replace('.', ' ').split()
                         
-                        # Filtra sujeira (números soltos ou siglas muito curtas)
-                        if len(palavra_chave) > 2 and not palavra_chave.isdigit():
-                            TERMOS_BUSCA.add(palavra_chave)
+                        for palavra in palavras_cruas:
+                            # Limpa caracteres especiais (deixa só letras)
+                            palavra_limpa = re.sub(r'[^A-Z]', '', palavra)
                             
-            # Se chegou aqui e carregou dados, quebra o loop de tentativas
-            if portfolio:
-                break
+                            # Se a palavra for válida e NÃO for uma embalagem/medida genérica
+                            if len(palavra_limpa) > 2 and palavra_limpa not in TERMOS_GENERICOS:
+                                TERMOS_BUSCA.add(palavra_limpa)
+                                break # Achou o Princípio Ativo, pode pular pro próximo item do Excel
+                                
+            if portfolio: break
         except Exception as e:
             continue
             
     return portfolio
 
 def extrair_componentes(descricao):
-    if not descricao:
-        return []
+    if not descricao: return []
     descricao_limpa = str(descricao).replace(',', ' ').replace('(', ' ').replace(')', ' ').replace('.', ' ')
     return [palavra.strip().upper() for palavra in descricao_limpa.split() if palavra.strip()]
 
@@ -96,20 +99,17 @@ def processar_lote(lote_licitacoes, arquivo_saida_csv):
     for licitacao in lote_licitacoes:
         itens = licitacao.get('itens', [])
         for item in itens:
-            # ✅ CORREÇÃO CRÍTICA: Lendo a chave 'd' gerada pelo app.py em vez de 'descricao'
             descricao = str(item.get('d', '')).upper()
             
-            # Ignora itens sem descrição válida para evitar processamento inútil
-            if not descricao or descricao == 'NONE':
-                continue
+            if not descricao or descricao == 'NONE': continue
                 
             componentes = extrair_componentes(descricao)
+            componentes_set = set(componentes)
             
             # Cruzamento exato de palavras (O(1))
-            componentes_set = set(componentes)
             match = componentes_set.intersection(TERMOS_BUSCA)
             
-            # Cruzamento abrangente (para termos com 2+ palavras como 'TERAPIA RENAL')
+            # Cruzamento abrangente (para termos compostos)
             if not match:
                 for termo in TERMOS_BUSCA:
                     if " " in termo and termo in descricao:
@@ -118,17 +118,15 @@ def processar_lote(lote_licitacoes, arquivo_saida_csv):
             if match:
                 resultado = {
                     'id_licitacao': licitacao.get('id', ''),
-                    # ✅ CORREÇÃO CRÍTICA: Lendo a chave 'org' em vez de 'orgao'
                     'orgao': licitacao.get('org', ''),
-                    # ✅ CORREÇÃO CRÍTICA: Lendo a chave 'n' em vez de 'numero'
                     'item_num': item.get('n', ''),
-                    # ✅ CORREÇÃO CRÍTICA: Lendo a chave 'd'
                     'descricao_item': item.get('d', ''),
                     'termo_encontrado': " | ".join(list(match))
                 }
                 resultados_lote.append(resultado)
                 
     if resultados_lote:
+        # Aqui pode continuar sendo 'a' (append) porque estamos escrevendo lote por lote
         with open(arquivo_saida_csv, mode='a', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=['id_licitacao', 'orgao', 'item_num', 'descricao_item', 'termo_encontrado'])
             writer.writerows(resultados_lote)
@@ -140,18 +138,16 @@ def main():
     ARQUIVO_SAIDA = 'relatorio_compatibilidade_consolidado.csv'
     TAMANHO_LOTE = 500 
 
-    logging.info("🚀 A iniciar a Avaliação de Portfólio...")
+    logging.info("🚀 A iniciar a Avaliação de Portfólio (Modo Inteligente Escalonado)...")
     
-    # 1. Carrega o Portfólio e alimenta o Motor de Pesquisa ANTES de tudo
     portfolio = carregar_portfolio()
     logging.info(f"📦 Portfólio base carregado com {len(portfolio)} itens.")
-    logging.info(f"🧠 Motor de pesquisa configurado com {len(TERMOS_BUSCA)} palavras-chave.")
+    logging.info(f"🧠 Motor de pesquisa configurado com {len(TERMOS_BUSCA)} palavras-chave ativas.")
 
-    arquivo_existe = os.path.isfile(ARQUIVO_SAIDA)
-    with open(ARQUIVO_SAIDA, mode='a', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        if not arquivo_existe:
-            writer.writerow(['id_licitacao', 'orgao', 'item_num', 'descricao_item', 'termo_encontrado'])
+    # ✅ CORREÇÃO 1: Prepara o arquivo recriando-o do ZERO (mode='w') a cada execução global
+    with open(ARQUIVO_SAIDA, mode='w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=['id_licitacao', 'orgao', 'item_num', 'descricao_item', 'termo_encontrado'])
+        writer.writeheader()
 
     if not os.path.exists(ARQUIVO_ENTRADA):
         logging.error(f"❌ Ficheiro {ARQUIVO_ENTRADA} não encontrado.")
@@ -173,15 +169,13 @@ def main():
 
     for i in range(0, total_licitacoes, TAMANHO_LOTE):
         lote = licitacoes[i:i + TAMANHO_LOTE]
-        num_lote = (i // TAMANHO_LOTE) + 1
-        
         encontrados = processar_lote(lote, ARQUIVO_SAIDA)
         total_encontrados += encontrados
         
         del lote
         gc.collect() 
         
-    logging.info(f"✅ Avaliação concluída! Total de itens compatíveis encontrados: {total_encontrados}.")
+    logging.info(f"✅ Avaliação concluída! Total de itens estritamente compatíveis encontrados: {total_encontrados}.")
 
 if __name__ == '__main__':
     main()
