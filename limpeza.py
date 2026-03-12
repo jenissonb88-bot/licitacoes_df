@@ -1,7 +1,5 @@
 import json
 import gzip
-import re
-from datetime import datetime
 from pathlib import Path
 import logging
 import os
@@ -10,19 +8,16 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(m
 logger = logging.getLogger(__name__)
 
 # ✅ NOMES FIXOS DO FLUXO
-ARQ_ENTRADA = 'dadosoportunidades.json.gz'      # Do app.py
-ARQ_SAIDA = 'pregacoes_pharma_limpos.json.gz'   # Para avalia_portfolio.py
+ARQ_ENTRADA = 'dadosoportunidades.json.gz'      # Veio do app.py (O Sniper)
+ARQ_SAIDA = 'pregacoes_pharma_limpos.json.gz'   # Vai para o avalia_portfolio.py
 
 def carregar_licitacoes():
     """Carrega licitações do arquivo dadosoportunidades.json.gz."""
     licitacoes = []
-    
     arquivo = Path(ARQ_ENTRADA)
     
     if not arquivo.exists():
         logger.error(f"❌ Arquivo não encontrado: {ARQ_ENTRADA}")
-        logger.info(f"   📁 Diretório atual: {os.getcwd()}")
-        logger.info(f"   📁 Arquivos disponíveis: {[f for f in os.listdir('.') if '.json' in f]}")
         return []
     
     try:
@@ -31,7 +26,7 @@ def carregar_licitacoes():
 
         if isinstance(dados, list):
             licitacoes.extend(dados)
-            logger.info(f"✅ {arquivo}: {len(dados)} registros carregados")
+            logger.info(f"✅ {arquivo}: {len(dados)} registros carregados do app.py")
         else:
             logger.warning(f"⚠️ Formato inesperado: {type(dados)}")
 
@@ -39,148 +34,74 @@ def carregar_licitacoes():
         logger.error(f"❌ Erro ao carregar {arquivo}: {e}")
         return []
 
-    logger.info(f"📊 Total para processar: {len(licitacoes)} licitações")
     return licitacoes
 
-def normalizar_id(licitacao):
-    """Extrai ID normalizado da licitação."""
-    for campo in ['id', 'numeroControlePNCP', 'numeroCompra']:
-        if campo in licitacao and licitacao[campo]:
-            return str(licitacao[campo]).strip()
-    
-    orgao = licitacao.get('orgao', '') or licitacao.get('org', '')
-    edital = licitacao.get('edital', '') or licitacao.get('edit', '')
-    if orgao and edital:
-        return f"{orgao}_{edital}"
-    
-    return None
-
 def deduplicar(licitacoes):
-    """Remove duplicatas mantendo a versão mais completa."""
-    logger.info(f"🔍 Deduplicando {len(licitacoes)} licitações")
+    """Remove duplicatas absolutas mantendo o banco de dados enxuto."""
+    logger.info(f"🔍 Verificando duplicatas em {len(licitacoes)} licitações...")
     
     por_id = {}
     for lic in licitacoes:
-        lic_id = normalizar_id(lic)
+        # Usa a chave 'id' gerada de forma única pelo app.py (cnpj+ano+seq)
+        lic_id = str(lic.get('id', ''))
+        
         if not lic_id:
             continue
             
-        if lic_id not in por_id:
-            por_id[lic_id] = []
-        por_id[lic_id].append(lic)
+        # Mantém sempre a versão mais atual/completa processada
+        por_id[lic_id] = lic
     
-    resultado = []
-    for lic_id, versoes in por_id.items():
-        if len(versoes) == 1:
-            resultado.append(versoes[0])
-        else:
-            melhor = max(versoes, key=lambda x: len([v for v in x.values() if v]))
-            resultado.append(melhor)
-            logger.debug(f"🔄 {lic_id}: {len(versoes)} versões → 1")
-    
-    logger.info(f"✅ Após deduplicação: {len(resultado)} licitações")
+    resultado = list(por_id.values())
+    logger.info(f"✅ Após deduplicação (Safety Net): {len(resultado)} licitações únicas prontas.")
     return resultado
 
-# ✅ CORRIGIDO: Normalização de valores monetários
-def limpar_dados(licitacao):
-    """Limpa e normaliza campos."""
-    # Remover campos internos
-    for campo in ['_metadata', '_raw', 'api_fonte']:
+def otimizar_peso_json(licitacao):
+    """
+    Limpa chaves internas de debug que não são usadas pelo Painel,
+    deixando o arquivo .gz super leve para carregamento web.
+    """
+    chaves_para_remover = ['_metadata', '_raw', 'api_fonte']
+    for campo in chaves_para_remover:
         licitacao.pop(campo, None)
     
-    # Normalizar datas
-    for campo in ['dt_enc', 'dataEncerramento']:
-        if campo in licitacao and licitacao[campo]:
-            try:
-                data = datetime.fromisoformat(str(licitacao[campo]).replace('Z', '+00:00'))
-                licitacao[campo] = data.isoformat()
-            except:
-                pass
-    
-    # ✅ CORRIGIDO: Normalizar valores monetários
-    for campo in ['val_tot', 'valorTotal', 'valorTotalEstimado', 'valorUnitarioEstimado']:
-        if campo in licitacao and licitacao[campo]:
-            try:
-                val = licitacao[campo]
-                
-                # Se é string, limpar
-                if isinstance(val, str):
-                    val = val.replace('R$', '').replace(' ', '')
-                    # Formato brasileiro: 1.234.567,89 → 1234567.89
-                    if ',' in val:
-                        val = val.replace('.', '').replace(',', '.')
-                
-                valor_float = float(val)
-                
-                # Se valor parece ser centavos (inteiro muito grande), converter
-                if valor_float > 100000 and valor_float == int(valor_float):
-                    valor_float = valor_float / 100.0
-                
-                licitacao[campo] = valor_float
-                
-            except Exception as e:
-                logger.warning(f"Não foi possível converter valor em {campo}: {licitacao[campo]}")
-                licitacao[campo] = 0.0
-    
+    # Confia 100% no val_tot e na data gerados pelo app.py (não formata novamente)
     return licitacao
 
-def filtrar_relevantes(licitacoes):
-    """Filtra licitações relevantes (medicamentos/material médico)."""
-    logger.info(f"🔍 Filtrando {len(licitacoes)} licitações")
-    
-    palavras_chave = [
-        'MEDICAMENT', 'FARMAC', 'VACINA', 'IMUNIZANTE',
-        'MATERIAL MEDIC', 'INSUMO HOSPITALAR', 'MMH',
-        'GAZE', 'LUVA', 'SERINGA', 'AGULHA', 'SONDA', 'CATETER',
-        'FRALDA', 'ALGODAO', 'ANTISEPTICO', 'ANALGESICO',
-        'ANTIBIOTICO', 'HOSPITALAR', 'NUTRICAO ENTERAL'
-    ]
-    
-    relevantes = []
-    for lic in licitacoes:
-        texto = ' '.join([
-            str(lic.get('obj', '')),
-            str(lic.get('objeto', '')),
-            str(lic.get('d', ''))
-        ]).upper()
-        
-        if any(p in texto for p in palavras_chave):
-            relevantes.append(lic)
-    
-    logger.info(f"✅ {len(relevantes)}/{len(licitacoes)} licitações relevantes")
-    return relevantes
-
 def salvar_resultado(licitacoes):
-    """Salva resultado em pregacoes_pharma_limpos.json.gz."""
+    """Salva o resultado final comprimido e pronto para o Front-End e Portfólio."""
     try:
         with gzip.open(ARQ_SAIDA, 'wt', encoding='utf-8') as f:
-            json.dump(licitacoes, f, ensure_ascii=False, indent=2)
+            # indent=None deixa o arquivo minificado (menor tamanho em disco)
+            json.dump(licitacoes, f, ensure_ascii=False)
         
         tamanho = os.path.getsize(ARQ_SAIDA)
-        logger.info(f"💾 Salvo: {ARQ_SAIDA} ({len(licitacoes)} regs, {tamanho} bytes)")
-        return ARQ_SAIDA
+        tamanho_kb = tamanho / 1024
+        logger.info(f"💾 Salvo com sucesso: {ARQ_SAIDA} ({len(licitacoes)} registros, {tamanho_kb:.1f} KB)")
+        return True
         
     except Exception as e:
-        logger.error(f"❌ Erro ao salvar: {e}")
+        logger.error(f"❌ Erro crítico ao salvar json final: {e}")
         raise
 
 def main():
-    logger.info("🚀 Iniciando limpeza")
+    logger.info("🚀 Iniciando QA e Compressão (limpeza.py)")
     
+    # 1. Carrega os dados perfeitos do app.py
     licitacoes = carregar_licitacoes()
     if not licitacoes:
-        logger.warning("⚠️ Nada para processar")
+        logger.warning("⚠️ O app.py não gerou licitações ou o arquivo está vazio.")
         return
     
+    # 2. Garante que não há repetições
     licitacoes = deduplicar(licitacoes)
-    licitacoes = [limpar_dados(lic) for lic in licitacoes]
-    licitacoes = filtrar_relevantes(licitacoes)
     
+    # 3. Minifica e retira lixo de memória
+    licitacoes = [otimizar_peso_json(lic) for lic in licitacoes]
+    
+    # 4. Salva (Atenção: Não existe mais filtro de palavras aqui. O app.py já fez!)
     if licitacoes:
         salvar_resultado(licitacoes)
-        logger.info(f"✅ Concluído: {len(licitacoes)} licitações limpas")
-    else:
-        logger.warning("⚠️ Nenhuma licitação relevante após filtro")
+        logger.info("✅ Limpeza e Otimização concluídas perfeitamente! Passando bastão para Avaliação.")
 
 if __name__ == "__main__":
     main()
