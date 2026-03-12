@@ -52,7 +52,6 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-pip-
 
-    # ✅ CORREÇÃO: Removido pandas e numpy (Acelerando o servidor)
     - name: Install deps
       run: |
         pip install requests urllib3
@@ -72,7 +71,6 @@ jobs:
             echo "MODE=${{ inputs.mode }}" >> $GITHUB_ENV
         fi
 
-    # ✅ CORREÇÃO: Gerando logs de tela com 'tee'
     - name: 🚀 1. Run Core Crawler (app.py)
       run: python app.py --start "$START_DATE" --end "$END_DATE" | tee log_crawler.txt
 
