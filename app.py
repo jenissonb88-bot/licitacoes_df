@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, date
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-# --- CONFIGURAÇÕES ---
+# --- CONFIGURAÇÕES ORIGINAIS ---
 ARQDADOS = 'pregacoes_pharma_limpos.json.gz'
 ARQ_DICIONARIO = 'dicionario_ouro.json'
 ARQ_CHECKPOINT = 'checkpoint.txt'
@@ -26,9 +26,11 @@ def normalize(t):
     if not t: return ""
     return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
 
+# --- VETOS ATUALIZADOS ---
+# Removido "SISTEMA" (por causa de SRP) e "MANUTENCAO" (para avaliar via itens)
 VETOS_ABSOLUTOS = [normalize(x) for x in [
-    "SOFTWARE", "SISTEMA", "IMPLANTACAO", "LICENCA", "INFORMATICA", "IMPRESSAO",
-    "PRESTACAO DE SERVICO", "TERCEIRIZACAO", "LOCACAO", "ASSINATURA", "MANUTENCAO",
+    "SOFTWARE", "IMPLANTACAO", "LICENCA", "INFORMATICA", "IMPRESSAO",
+    "PRESTACAO DE SERVICO", "TERCEIRIZACAO", "LOCACAO", "ASSINATURA",
     "LIMPEZA", "EXAME", "RADIOLOGIA", "IMAGEM", "VIGILANCIA", "SEGURANCA", "OFICINA",
     "GASES MEDICINAIS", "OXIGENIO", "ODONTOLOGICO", "PROTESE", "ORTESE", "CILINDRO",
     "OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "ALIMENTACAO ESCOLAR", "MERENDA"
@@ -45,7 +47,7 @@ def log_mensagem(msg):
 
 def criar_sessao():
     s = requests.Session()
-    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Auditor/24.3'})
+    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Auditor/24.4'})
     retry = Retry(total=5, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
     s.mount('https://', HTTPAdapter(max_retries=retry))
     return s
@@ -74,11 +76,11 @@ def processar_licitacao(lic, session, termos_ouro):
         obj_norm = normalize(obj_raw)
         edit = f"{lic.get('numeroCompra')}/{lic.get('anoCompra')}"
 
-        # 🚩 MOTIVO 1: Bloqueio Geográfico
+        # 1. Bloqueio Geográfico
         if uf in ESTADOS_BLOQUEADOS:
             return ('VETO_GEO', f"UF {uf} bloqueada")
 
-        # 🚩 MOTIVO 2: Veto por Palavra-Chave no Título
+        # 2. Veto por Título (Sem "Sistema" e sem "Manutenção")
         for v in VETOS_ABSOLUTOS:
             if v in obj_norm:
                 return ('VETO_TITULO', f"Termo proibido '{v}' no objeto")
@@ -87,20 +89,18 @@ def processar_licitacao(lic, session, termos_ouro):
         ano = lic['anoCompra']
         seq = lic['sequencialCompra']
         
+        # 3. Varredura de Itens (Exaustiva)
         itens_brutos = buscar_todos_os_itens(cnpj, ano, seq, session)
         
         teve_match = False
         itens_mapeados = []
-        termos_encontrados = []
 
         for it in itens_brutos:
             desc_item = normalize(it.get('descricao', ''))
             
-            # Checa match com dicionário
-            match_local = [t for t in termos_ouro if t in desc_item]
-            if match_local:
+            # Match com o Dicionário de Ouro
+            if any(termo in desc_item for termo in termos_ouro):
                 teve_match = True
-                termos_encontrados.extend(match_local)
             
             itens_mapeados.append({
                 'n': it.get('numeroItem'), 'd': it.get('descricao', ''),
@@ -108,7 +108,7 @@ def processar_licitacao(lic, session, termos_ouro):
                 'v_est': it.get('valorUnitarioEstimado', 0), 'sit': 'EM ANDAMENTO'
             })
 
-        # 🚩 MOTIVO 3: Não passou no Dicionário E não é Medicamento Explícito
+        # 4. Decisão Final baseada em Itens
         is_med_titulo = any(t in obj_norm for t in WL_MEDICAMENTOS)
         
         if teve_match:
@@ -120,7 +120,6 @@ def processar_licitacao(lic, session, termos_ouro):
             })
         
         if is_med_titulo and uf in UFS_PERMITIDAS_MED:
-             # Se o título é medicamento, deixamos passar mesmo sem match nos itens (para análise manual)
              return ('OK', {
                 'id': f"{cnpj}{ano}{seq}", 'dt_enc': lic.get('dataEncerramentoProposta'),
                 'uf': uf, 'org': lic['orgaoEntidade']['razaoSocial'], 'obj': obj_raw,
@@ -128,7 +127,7 @@ def processar_licitacao(lic, session, termos_ouro):
                 'itens': itens_mapeados, 'sit_global': 'DIVULGADA'
             })
 
-        return ('VETO_DICIONARIO', f"Nenhum dos {len(itens_mapeados)} itens consta no dicionário e título não é med.")
+        return ('VETO_DICIONARIO', f"Nenhum dos {len(itens_mapeados)} itens no dicionário.")
     except Exception as e:
         return ('ERRO', str(e))
 
@@ -139,9 +138,9 @@ if __name__ == '__main__':
     try:
         if os.path.exists(ARQ_CHECKPOINT):
             with open(ARQ_CHECKPOINT, 'r') as f: data_alvo = f.read().strip()
-        else: data_alvo = "2026-02-01"
+        else: data_alvo = date.today().strftime('%Y-%m-%d')
 
-        log_mensagem(f"🔍 MODO AUDITOR: Analisando dia {data_alvo}")
+        log_mensagem(f"🔍 ANALISANDO DIA: {data_alvo}")
         
         with open(ARQ_DICIONARIO, 'r', encoding='utf-8') as f:
             termos_ouro = [normalize(t) for t in json.load(f)]
@@ -162,17 +161,16 @@ if __name__ == '__main__':
             lics = r.json().get('data', [])
             if not lics: break
             
-            log_mensagem(f"📄 Pag {pagina}: Analisando {len(lics)} editais...")
+            log_mensagem(f"📄 Pag {pagina}: Processando {len(lics)} editais...")
             
             for l in lics:
                 status, info = processar_licitacao(l, session, termos_ouro)
                 edit = f"{l.get('numeroCompra')}/{l.get('anoCompra')}"
                 
                 if status == 'OK':
-                    log_mensagem(f"   ✅ CAPTURADO: {edit} | {l.get('orgaoEntidade', {}).get('razaoSocial')[:30]}")
+                    log_mensagem(f"   ✅ CAPTURADO: {edit} | {l.get('orgaoEntidade', {}).get('razaoSocial')[:35]}")
                     banco[info['id']] = info
                 else:
-                    # Loga o motivo do veto para você entender o que o robô está rejeitando
                     log_mensagem(f"   ❌ PULADO ({status}): {edit} -> {info}")
 
             if len(lics) < 50: break
@@ -183,7 +181,7 @@ if __name__ == '__main__':
         
         proximo = (datetime.strptime(data_alvo, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
         with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo)
-        log_mensagem(f"🏁 Fim do dia {data_alvo}.")
+        log_mensagem(f"🏁 Dia {data_alvo} finalizado.")
 
     finally:
         if os.path.exists(ARQ_LOCK): os.remove(ARQ_LOCK)
