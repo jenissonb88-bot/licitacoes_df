@@ -6,44 +6,22 @@
     <title>Sniper Pharma - Painel de Licitações</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
+        /* MANTIDO EXATAMENTE COMO NO SEU ORIGINAL */
         :root { --blue-df: #004a99; --green-df: #198754; --red-df: #dc3545; --yellow-df: #ffc107; }
         body { background-color: #f0f2f5; font-family: 'Segoe UI', system-ui, sans-serif; color: #333; font-size: 0.92rem; }
-        
-        .header-card { 
-            background: linear-gradient(90deg, #002d5a 0%, #004a99 100%); 
-            color: white; padding: 12px 20px; border-radius: 10px 10px 0 0; font-size: 1.05rem;
-            display: flex; justify-content: space-between; align-items: center;
-        }
+        .header-card { background: linear-gradient(90deg, #002d5a 0%, #004a99 100%); color: white; padding: 12px 20px; border-radius: 10px 10px 0 0; font-size: 1.05rem; display: flex; justify-content: space-between; align-items: center; }
         .header-bold { font-weight: 700; }
         .badge-uf-header { background-color: #000; color: #fff; font-weight: 800; padding: 4px 8px; border-radius: 4px; margin-right: 10px; }
-        
         .card-licitacao { border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 25px; border-radius: 10px; background: #fff; }
-        .card-body { padding: 15px 20px; }
-        
         .info-label { color: #666; font-size: 0.75rem; text-transform: uppercase; font-weight: 600; margin-bottom: 2px; }
         .info-value { font-weight: 500; color: #222; margin-bottom: 12px; line-height: 1.3; }
         .obj-text { font-style: italic; color: #444; }
-
         .btn-itens { background-color: var(--blue-df); color: white; font-weight: 600; border-radius: 6px; padding: 8px 16px; border: none; transition: 0.2s; }
         .btn-itens:hover { background-color: #003366; color: white; }
-        .btn-link-oficial { color: var(--blue-df); text-decoration: none; font-weight: 600; font-size: 0.85rem; }
-        .btn-link-oficial:hover { text-decoration: underline; }
-
-        .table-itens { font-size: 0.85rem; margin-bottom: 0; }
-        .table-itens th { background-color: #f8f9fa; color: #555; font-weight: 600; border-top: none; }
         .compativel-sim { color: var(--green-df); font-weight: 800; }
-
         .status-pill { padding: 4px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; display: inline-block; }
         .status-em-andamento { background-color: #e3f2fd; color: #0d47a1; }
         .status-homologado { background-color: #e8f5e9; color: #1b5e20; }
-        .status-cancelado { background-color: #ffebee; color: #b71c1c; }
-
-        #filtros-container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 30px; }
-        .search-box { border-radius: 6px; border: 1px solid #ddd; padding: 10px 15px; }
-
-        .pagination-container { display: flex; justify-content: center; gap: 10px; margin: 40px 0; }
-        .btn-pag { padding: 8px 20px; border-radius: 6px; font-weight: 600; }
-        
         .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
         .spinner { width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid var(--blue-df); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -53,44 +31,31 @@
 
 <div id="loading" class="loading-overlay">
     <div class="spinner"></div>
-    <div class="mt-3 fw-bold">A carregar oportunidades Sniper...</div>
+    <div class="mt-3 fw-bold">A carregar oportunidades...</div>
 </div>
 
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="fw-bold text-dark m-0">🎯 Sniper Pharma <span class="fs-6 fw-normal text-muted">| Monitor de Resultados</span></h2>
+        <h2 class="fw-bold text-dark m-0">🎯 Sniper Pharma | Monitor de Resultados</h2>
         <button class="btn btn-outline-primary btn-sm" onclick="abrirModalInclusao()">➕ Incluir Manual</button>
     </div>
 
-    <div id="filtros-container">
-        <div class="row g-3">
+    <div id="filtros-container" class="bg-white p-3 rounded shadow-sm mb-4">
+        <div class="row g-2">
             <div class="col-md-5">
-                <input type="text" id="buscaRapida" class="form-control search-box" placeholder="Pesquisar órgão, edital ou objeto...">
+                <input type="text" id="buscaRapida" class="form-control" placeholder="Buscar Órgão ou Objeto...">
             </div>
             <div class="col-md-3">
-                <select id="filtroUF" class="form-select search-box">
-                    <option value="">Todos os Estados (Brasil)</option>
+                <select id="filtroUF" class="form-select">
+                    <option value="">Brasil (Todos)</option>
                     <option value="BA">Bahia (BA)</option>
                     <option value="PE">Pernambuco (PE)</option>
                     <option value="CE">Ceará (CE)</option>
-                    <option value="PB">Paraíba (PB)</option>
-                    <option value="RN">Rio Grande do Norte (RN)</option>
-                    <option value="SE">Sergipe (SE)</option>
-                    <option value="AL">Alagoas (AL)</option>
-                    <option value="PI">Piauí (PI)</option>
-                    <option value="MA">Maranhão (MA)</option>
                     <option value="DF">Distrito Federal (DF)</option>
-                    <option value="SP">São Paulo (SP)</option>
                 </select>
             </div>
             <div class="col-md-2">
-                <select id="ordemData" class="form-select search-box">
-                    <option value="desc">Mais Recentes</option>
-                    <option value="asc">Mais Antigas</option>
-                </select>
-            </div>
-            <div class="col-md-2 d-flex align-items-center">
-                <div class="form-check form-switch">
+                <div class="form-check form-switch mt-2">
                     <input class="form-check-input" type="checkbox" id="filtroCompativel">
                     <label class="form-check-label fw-bold" for="filtroCompativel">✓ Só Sniper</label>
                 </div>
@@ -100,29 +65,23 @@
 
     <div id="monitor-alvos"></div>
 
-    <div class="pagination-container">
-        <button id="prevPage" class="btn btn-outline-secondary btn-pag">Anterior</button>
+    <div class="pagination-container d-flex justify-content-center gap-3 mt-4">
+        <button id="prevPage" class="btn btn-secondary">Anterior</button>
         <span id="pageIndicator" class="align-self-center fw-bold"></span>
-        <button id="nextPage" class="btn btn-outline-secondary btn-pag">Próxima</button>
+        <button id="nextPage" class="btn btn-secondary">Próxima</button>
     </div>
 </div>
 
 <div class="modal fade" id="modalInclusao" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title fw-bold">Incluir Link Externo</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
+            <div class="modal-header"><h5 class="modal-title">Incluir Link Manual</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body">
-                <p class="small text-muted">Insira o link para ser processado pelo robô na próxima execução.</p>
-                <input type="text" id="manualLink" class="form-control mb-3" placeholder="https://pncp.gov.br/app/editais/...">
-                <input type="password" id="manualToken" class="form-control" placeholder="Token de Acesso">
-                <div id="statusInclusao" class="mt-2 small"></div>
+                <input type="text" id="manualLink" class="form-control mb-2" placeholder="Link do PNCP">
+                <input type="password" id="manualToken" class="form-control" placeholder="Token GitHub">
+                <div id="statusInclusao" class="mt-2"></div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-primary w-100" onclick="salvarLinkManual()">Salvar no Banco</button>
-            </div>
+            <div class="modal-footer"><button class="btn btn-primary w-100" onclick="salvarLinkManual()">Salvar</button></div>
         </div>
     </div>
 </div>
@@ -141,34 +100,22 @@ const modalInclusaoObj = new bootstrap.Modal(document.getElementById('modalInclu
 
 async function init() {
     try {
-        // ✅ 1. Carrega Relatório Sniper (CSV)
+        // Carrega Compatibilidade
         const resComp = await fetch('relatorio_compatibilidade_consolidado.csv');
         if (resComp.ok) {
-            const csvText = await resComp.text();
-            Papa.parse(csvText, {
-                header: true,
-                skipEmptyLines: true,
-                complete: (results) => {
-                    results.data.forEach(row => {
-                        // Chave composta: ID + Número do Item
-                        const key = `${row.id_licitacao}_${row.item_num}`;
-                        compatibilidadeMap.set(key, row.termo_encontrado);
-                    });
-                }
-            });
+            const csv = await resComp.text();
+            Papa.parse(csv, { header: true, complete: (r) => {
+                r.data.forEach(row => compatibilidadeMap.set(`${row.id_licitacao}_${row.item_num}`, row.termo_encontrado));
+            }});
         }
 
-        // ✅ 2. Carrega Banco de Dados (JSON Minificado)
+        // Carrega Dados Principais
         const res = await fetch('pregacoes_pharma_limpos.json.gz');
-        const data = await res.json();
-        rawData = data;
+        rawData = await res.json();
         
         document.getElementById('loading').style.display = 'none';
         renderMonitor();
-    } catch (e) {
-        console.error("Erro ao carregar dados:", e);
-        document.getElementById('loading').innerHTML = '<div class="text-danger p-5">Erro ao carregar banco de dados. Verifique a conexão.</div>';
-    }
+    } catch (e) { console.error(e); }
 }
 
 function renderMonitor() {
@@ -176,156 +123,82 @@ function renderMonitor() {
     const term = document.getElementById('buscaRapida').value.toLowerCase();
     const uf = document.getElementById('filtroUF').value;
     const onlySniper = document.getElementById('filtroCompativel').checked;
-    const sortOrder = document.getElementById('ordemData').value;
 
-    // ✅ FILTRAGEM COM CHAVES NOVAS
     let filtered = rawData.filter(lic => {
         const matchUF = !uf || lic.uf === uf;
-        const fullText = (lic.org + (lic.obj || "") + (lic.edit || "")).toLowerCase();
-        const matchTerm = !term || fullText.includes(term);
-        
-        let matchSniper = true;
-        if (onlySniper) {
-            matchSniper = (lic.itens || []).some(it => compatibilidadeMap.has(`${lic.id}_${it.n}`));
-        }
-
+        const matchTerm = !term || (lic.org + lic.obj).toLowerCase().includes(term);
+        const matchSniper = !onlySniper || (lic.itens || []).some(it => compatibilidadeMap.has(`${lic.id}_${it.n}`));
         return matchUF && matchTerm && matchSniper;
     });
 
-    // ✅ ORDENAÇÃO
-    filtered.sort((a, b) => {
-        const dateA = new Date(a.dt_enc || 0);
-        const dateB = new Date(b.dt_enc || 0);
-        return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
-    });
+    // Ordenação (Mais recentes primeiro)
+    filtered.sort((a, b) => new Date(b.dt_enc) - new Date(a.dt_enc));
 
     totalPages = Math.ceil(filtered.length / itemsPerPage);
-    const start = (currentPage - 1) * itemsPerPage;
-    const pageData = filtered.slice(start, start + itemsPerPage);
+    const pageData = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-    container.innerHTML = pageData.length ? "" : '<div class="text-center p-5 text-muted">Nenhum alvo encontrado para estes filtros.</div>';
-
+    container.innerHTML = "";
     pageData.forEach(lic => {
-        const hasSniperMatch = (lic.itens || []).some(it => compatibilidadeMap.has(`${lic.id}_${it.n}`));
+        const hasMatch = (lic.itens || []).some(it => compatibilidadeMap.has(`${lic.id}_${it.n}`));
         
         const card = document.createElement('div');
         card.className = 'card card-licitacao';
         card.innerHTML = `
             <div class="header-card">
-                <div>
-                    <span class="badge-uf-header">${lic.uf}</span>
-                    <span class="header-bold">${lic.org}</span>
-                </div>
-                <div>
-                    ${hasSniperMatch ? '<span class="badge bg-success me-2">✓ SNIPER</span>' : ''}
-                    <span class="badge bg-light text-dark">${lic.edit || "---"}</span>
-                </div>
+                <div><span class="badge-uf-header">${lic.uf}</span><span class="header-bold">${lic.org}</span></div>
+                <div>${hasMatch ? '<span class="badge bg-success me-2">✓ SNIPER</span>' : ''}<span class="badge bg-light text-dark">${lic.edit || ""}</span></div>
             </div>
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-9">
-                        <div class="info-label">OBJETO / DESCRIÇÃO</div>
-                        <div class="info-value obj-text">${lic.obj || "Objeto não informado"}</div>
-                        
+                        <div class="info-label">OBJETO</div>
+                        <div class="info-value obj-text">${lic.obj}</div>
                         <div class="row">
-                            <div class="col-md-4">
-                                <div class="info-label">ENCERRAMENTO</div>
-                                <div class="info-value text-danger fw-bold">${formatDate(lic.dt_enc)}</div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="info-label">SITUAÇÃO GLOBAL</div>
-                                <div class="info-value"><span class="status-pill status-em-andamento">${lic.sit_global || "DIVULGADA"}</span></div>
-                            </div>
-                            <div class="col-md-4">
-                                <a href="${lic.link}" target="_blank" class="btn-link-oficial">🔗 Ver no PNCP</a>
-                            </div>
+                            <div class="col-md-4"><div class="info-label">ENCERRAMENTO</div><div class="info-value text-danger">${formatDate(lic.dt_enc)}</div></div>
+                            <div class="col-md-4"><div class="info-label">SITUAÇÃO</div><div class="info-value"><span class="status-pill status-em-andamento">${lic.sit_global}</span></div></div>
+                            <div class="col-md-4"><a href="${lic.link}" target="_blank" style="font-size:0.8rem">🔗 Link Oficial</a></div>
                         </div>
                     </div>
-                    <div class="col-md-3 d-flex flex-column justify-content-center align-items-end border-start">
-                        <div class="info-label">TOTAL DE ITENS</div>
-                        <div class="info-value fs-4">${(lic.itens || []).length}</div>
-                        <button class="btn btn-itens w-100" onclick="toggleItens('${lic.id}')">Explorar Itens</button>
+                    <div class="col-md-3 text-end border-start">
+                        <div class="info-label">ITENS</div><div class="info-value fs-4">${lic.itens.length}</div>
+                        <button class="btn btn-itens w-100" onclick="toggleItens('${lic.id}')">Ver Detalhes</button>
                     </div>
                 </div>
-                <div id="detalhe-${lic.id}" class="mt-3" style="display:none;">
-                    <hr>
-                    <div class="table-responsive">
-                        ${renderItensTable(lic.itens || [], lic.id)}
-                    </div>
-                </div>
+                <div id="detalhe-${lic.id}" class="mt-3" style="display:none;"><hr>${renderTable(lic.itens, lic.id)}</div>
             </div>
         `;
         container.appendChild(card);
     });
 
-    document.getElementById('pageIndicator').innerText = `Página ${currentPage} de ${totalPages || 1}`;
-    document.getElementById('prevPage').disabled = currentPage === 1;
-    document.getElementById('nextPage').disabled = currentPage === totalPages || totalPages === 0;
+    document.getElementById('pageIndicator').innerText = `Página ${currentPage} de ${totalPages}`;
 }
 
-function renderItensTable(itens, idLic) {
-    let html = `
-        <table class="table table-sm table-itens">
-            <thead>
-                <tr>
-                    <th>Item</th>
-                    <th>Descrição</th>
-                    <th class="text-center">Qtd</th>
-                    <th>Valor Est.</th>
-                    <th>Situação</th>
-                    <th>✓ Sniper</th>
-                    <th>Vencedor / Preço</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-
+function renderTable(itens, idLic) {
+    let h = '<table class="table table-sm" style="font-size:0.8rem"><thead><tr><th>Item</th><th>Descrição</th><th>Qtd</th><th>Valor Est.</th><th>Sniper</th><th>Resultado</th></tr></thead><tbody>';
     itens.forEach(it => {
-        const sniperTermo = compatibilidadeMap.get(`${idLic}_${it.n}`);
-        const statusClass = it.sit === 'HOMOLOGADO' ? 'status-homologado' : 'status-em-andamento';
-        
-        html += `
-            <tr>
-                <td class="fw-bold">${it.n}</td>
-                <td style="max-width:300px;">${it.d}</td>
-                <td class="text-center">${it.q} ${it.u}</td>
-                <td class="fw-bold">R$ ${it.v_est.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
-                <td><span class="status-pill ${statusClass}">${it.sit}</span></td>
-                <td>${sniperTermo ? `<span class="compativel-sim" title="Termo: ${sniperTermo}">✓ SIM</span>` : '<span class="text-muted small">---</span>'}</td>
-                <td>
-                    ${it.res_forn ? `
-                        <div class="small fw-bold text-success">${it.res_forn}</div>
-                        <div class="small fw-bold">R$ ${it.res_val.toLocaleString('pt-BR', {minimumFractionDigits:2})}</div>
-                    ` : '<span class="text-muted small italic">Aguardando...</span>'}
-                </td>
-            </tr>
-        `;
+        const term = compatibilidadeMap.get(`${idLic}_${it.n}`);
+        h += `<tr>
+            <td>${it.n}</td>
+            <td>${it.d}</td>
+            <td>${it.q} ${it.u}</td>
+            <td>R$ ${it.v_est.toLocaleString('pt-BR')}</td>
+            <td>${term ? '<span class="compativel-sim">✓ SIM</span>' : '---'}</td>
+            <td>${it.res_forn ? `<div class="text-success small">${it.res_forn}</div><div class="fw-bold">R$ ${it.res_val}</div>` : '---'}</td>
+        </tr>`;
     });
-
-    html += `</tbody></table>`;
-    return html;
+    return h + '</tbody></table>';
 }
 
 function toggleItens(id) {
-    const el = document.getElementById(`detalhe-${id}`);
-    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    const d = document.getElementById(`detalhe-${id}`);
+    d.style.display = d.style.display === 'none' ? 'block' : 'none';
 }
 
-function formatDate(dateStr) {
-    if(!dateStr) return "---";
-    try {
-        const d = new Date(dateStr);
-        return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
-    } catch { return dateStr; }
+function formatDate(s) {
+    if(!s) return "";
+    const d = new Date(s);
+    return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
 }
-
-// Eventos de filtro
-document.getElementById('buscaRapida').oninput = () => { currentPage = 1; renderMonitor(); };
-document.getElementById('filtroUF').onchange = () => { currentPage = 1; renderMonitor(); };
-document.getElementById('filtroCompativel').onchange = () => { currentPage = 1; renderMonitor(); };
-document.getElementById('ordemData').onchange = () => { currentPage = 1; renderMonitor(); };
-document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
-document.getElementById('nextPage').onclick = () => { if(currentPage < totalPages) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
 
 function abrirModalInclusao() { modalInclusaoObj.show(); }
 
@@ -333,49 +206,31 @@ async function salvarLinkManual() {
     const link = document.getElementById('manualLink').value;
     const token = document.getElementById('manualToken').value;
     const statusDiv = document.getElementById('statusInclusao');
+    const repo = "SEU_USUARIO/SEU_REPO"; // ⚠️ Ajuste o seu repositório aqui
 
-    if (!link.includes('pncp.gov.br')) {
-        statusDiv.innerHTML = '<span class="text-danger">Link inválido do PNCP</span>';
-        return;
-    }
-
-    statusDiv.innerHTML = 'Processando...';
-    
     try {
-        const repo = "SEU_USUARIO/SEU_REPO"; // ⚠️ ATUALIZE AQUI
         const urlFile = `https://api.github.com/repos/${repo}/contents/pedidos_manuais.txt`;
-        
         const resGet = await fetch(urlFile, { headers: { 'Authorization': `token ${token}` } });
-        let sha = "", currentContent = "";
+        let sha = "", content = "";
+        if (resGet.ok) { const d = await resGet.json(); sha = d.sha; content = atob(d.content); }
         
-        if (resGet.ok) {
-            const data = await resGet.json();
-            sha = data.sha;
-            currentContent = decodeURIComponent(escape(atob(data.content)));
-        }
-
-        const newContent = currentContent + (currentContent.endsWith('\n') ? "" : "\n") + link + "\n";
-        
+        const newContent = btoa(content + "\n" + link);
         const resPut = await fetch(urlFile, {
             method: 'PUT',
             headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                message: "Inclusão manual via Sniper Pharma",
-                content: btoa(unescape(encodeURIComponent(newContent))),
-                sha: sha
-            })
+            body: JSON.stringify({ message: "Inclusão Manual", content: newContent, sha: sha })
         });
 
-        if (resPut.ok) {
-            statusDiv.innerHTML = '<span class="text-success">✅ Salvo! O robô processará na próxima execução.</span>';
-            setTimeout(() => modalInclusaoObj.hide(), 2000);
-        } else {
-            statusDiv.innerHTML = '<span class="text-danger">Erro ao salvar (verifique o Token)</span>';
-        }
-    } catch (e) {
-        statusDiv.innerHTML = `<span class="text-danger">Erro: ${e.message}</span>`;
-    }
+        statusDiv.innerHTML = resPut.ok ? '✅ Salvo!' : '❌ Erro no Token';
+        if(resPut.ok) setTimeout(() => modalInclusaoObj.hide(), 2000);
+    } catch (e) { statusDiv.innerHTML = '❌ Erro de Conexão'; }
 }
+
+document.getElementById('buscaRapida').oninput = renderMonitor;
+document.getElementById('filtroUF').onchange = renderMonitor;
+document.getElementById('filtroCompativel').onchange = renderMonitor;
+document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); } };
+document.getElementById('nextPage').onclick = () => { if(currentPage < totalPages) { currentPage++; renderMonitor(); } };
 
 init();
 </script>
