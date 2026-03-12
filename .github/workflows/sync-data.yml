@@ -6,7 +6,7 @@ concurrency:
 
 on:
   schedule:
-    - cron: '0 9 * * *'
+    - cron: '0 9 * * *' # Executa todos os dias às 09:00 BRT
   workflow_dispatch:
     inputs:
       mode:
@@ -23,12 +23,13 @@ on:
         default: '2026-01-01'
 
 env:
+  # Resolve os avisos de depreciação do Node.js
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   extracao_e_limpeza:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: write
       actions: write
@@ -48,10 +49,11 @@ jobs:
       uses: actions/cache@v4.2.0
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/app.py', '**/limpeza.py', '**/avalia_portfolio.py') }}
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/app.py') }}
         restore-keys: |
           ${{ runner.os }}-pip-
 
+    # ✅ OTIMIZADO: Apenas o essencial para velocidade máxima
     - name: Install deps
       run: |
         pip install requests urllib3
@@ -71,37 +73,42 @@ jobs:
             echo "MODE=${{ inputs.mode }}" >> $GITHUB_ENV
         fi
 
-    # ✅ CORREÇÃO: Usando 'python -u' para logs em tempo real na tela do GitHub
+    # ✅ 1. CAPTURA: O app.py usa o dicionario_ouro.json para filtrar editais vagos
     - name: 🚀 1. Run Core Crawler (app.py)
-      run: python -u app.py --start "$START_DATE" --end "$END_DATE" | tee log_crawler.txt
+      run: python app.py --start "$START_DATE" --end "$END_DATE" | tee log_crawler.txt
 
+    # ✅ 2. LIMPEZA: O limpeza.py minifica o banco de dados
     - name: 🧹 2. Run Data Cleaner (limpeza.py)
-      run: python -u limpeza.py | tee log_limpeza.txt
+      run: python limpeza.py | tee log_limpeza.txt
 
+    # ✅ 3. AVALIAÇÃO: Gera o relatório de compatibilidade cirúrgico
     - name: 📊 3. Run Avaliação de Portfólio (avalia_portfolio.py)
       if: always()
-      run: python -u avalia_portfolio.py | tee log_avaliacao.txt
+      run: python avalia_portfolio.py | tee log_avaliacao.txt
 
     - name: 💾 Commit Resultados
       run: |
         git config user.name "Sniper Pharma Bot"
         git config user.email "sniper@pharma.bot"
 
+        # Adiciona os arquivos de dados e o relatório de precisão
         git add dadosoportunidades.json.gz || true
         git add pregacoes_pharma_limpos.json.gz || true
         git add relatorio_compatibilidade_consolidado.csv || true
         
+        # Remove travas e ficheiros temporários
         git rm --cached checkpoint*.json 2>/dev/null || true
         git rm --cached execucao.lock 2>/dev/null || true
 
         if ! git diff --staged --quiet; then
-          git commit -m "📊 Captura PNCP: $START_DATE a $END_DATE [$(date +'%H:%M')]"
+          git commit -m "📊 Captura e Sniper: $START_DATE a $END_DATE [$(date +'%H:%M')]"
           git pull origin main --rebase -X theirs || true
           git push origin main || true
         else
-          echo "ℹ️ Nenhuma mudança para commitar"
+          echo "ℹ️ Nenhuma mudança relevante para commitar hoje."
         fi
 
+    # Mantém a sua lógica de loop para capturas históricas manuais
     - name: 🔁 Trigger Próximo Dia (Loop)
       if: env.MODE == 'manual_loop'
       env:
@@ -117,7 +124,7 @@ jobs:
            echo "🏁 Loop finalizado. O robô alcançou o dia de hoje."
         fi
 
-    - name: 📁 Upload Artefatos
+    - name: 📁 Upload Artefatos (Logs e Dados)
       if: always()
       uses: actions/upload-artifact@v4.6.2
       with:
