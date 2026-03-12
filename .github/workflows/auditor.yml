@@ -41,12 +41,13 @@ jobs:
       run: |
         pip install requests urllib3
 
+    # ✅ CORREÇÃO: Usando 'python -u' para logs em tempo real na tela do GitHub
     - name: 🩺 Run Auditor (atualiza.py)
-      run: python atualiza.py | tee log_atualizacao.txt
+      run: python -u atualiza.py | tee log_atualizacao.txt
 
     - name: 📊 Run Avaliação de Portfólio
       if: always()
-      run: python avalia_portfolio.py | tee log_avaliacao.txt
+      run: python -u avalia_portfolio.py | tee log_avaliacao.txt
 
     - name: 💾 Commit Auditoria
       run: |
