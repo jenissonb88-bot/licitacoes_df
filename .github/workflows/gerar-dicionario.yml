@@ -1,0 +1,37 @@
+name: Gerar Dicionário de Ouro (Manual)
+
+on:
+  workflow_dispatch: # Este comando cria o botão "Run workflow" para você clicar
+
+permissions:
+  contents: write
+
+jobs:
+  gerar_dicionario:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout do código
+      uses: actions/checkout@v4.2.2
+
+    - name: Setup Python
+      uses: actions/setup-python@v5.5.0
+      with:
+        python-version: '3.11'
+
+    - name: 🧠 Gerar Dicionário Inteligente
+      run: python gerador_dicionario.py
+
+    - name: 💾 Guardar Dicionário no GitHub
+      run: |
+        git config user.name "Sniper Pharma Bot"
+        git config user.email "sniper@pharma.bot"
+        
+        git add dicionario_ouro.json || true
+        
+        if ! git diff --staged --quiet; then
+          git commit -m "🧠 Atualização do Dicionário de Ouro"
+          git push origin main
+        else
+          echo "ℹ️ O dicionário já está atualizado. Nenhuma mudança."
+        fi
