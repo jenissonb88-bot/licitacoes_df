@@ -1,67 +1,52 @@
 import json
 import gzip
-from pathlib import Path
-import logging
 import os
+import logging
 
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
-logger = logging.getLogger(__name__)
 
-ARQ_ENTRADA = 'dadosoportunidades.json.gz'
-ARQ_SAIDA = 'pregacoes_pharma_limpos.json.gz'
+def limpar_e_minificar():
+    ARQ_ENTRADA = 'dadosoportunidades.json.gz'
+    ARQ_SAIDA = 'pregacoes_pharma_limpos.json.gz'
 
-def carregar_licitacoes():
-    licitacoes = []
-    arquivo = Path(ARQ_ENTRADA)
-    if not arquivo.exists():
-        logger.error(f"❌ Arquivo não encontrado: {ARQ_ENTRADA}")
-        return []
+    if not os.path.exists(ARQ_ENTRADA):
+        logging.error("❌ Ficheiro de entrada não encontrado.")
+        return
+
+    logging.info("🧹 Iniciando limpeza e deduplicação...")
+
     try:
-        with gzip.open(arquivo, 'rt', encoding='utf-8') as f:
-            dados = json.load(f)
-        if isinstance(dados, list):
-            licitacoes.extend(dados)
-            logger.info(f"✅ {arquivo}: {len(dados)} registros carregados.")
+        with gzip.open(ARQ_ENTRADA, 'rt', encoding='utf-8') as f:
+            licitacoes = json.load(f)
     except Exception as e:
-        logger.error(f"❌ Erro ao carregar {arquivo}: {e}")
-    return licitacoes
+        logging.error(f"❌ Erro ao ler dados: {e}")
+        return
 
-def deduplicar(licitacoes):
-    por_id = {}
+    # 1. DEDUPLICAÇÃO: Mantém apenas a versão mais recente de cada licitação
+    base_limpa = {}
     for lic in licitacoes:
-        lic_id = str(lic.get('id', ''))
-        if not lic_id: continue
-        por_id[lic_id] = lic
-    resultado = list(por_id.values())
-    logger.info(f"✅ Após deduplicação: {len(resultado)} licitações únicas.")
-    return resultado
+        id_lic = lic.get('id')
+        if not id_lic: continue
+        
+        # Se já existe, comparamos a data de encerramento para manter a mais atual
+        if id_lic in base_limpa:
+            data_existente = base_limpa[id_lic].get('dt_enc', '')
+            data_nova = lic.get('dt_enc', '')
+            if data_nova > data_existente:
+                base_limpa[id_lic] = lic
+        else:
+            base_limpa[id_lic] = lic
 
-def otimizar_peso_json(licitacao):
-    chaves_para_remover = ['_metadata', '_raw', 'api_fonte']
-    for campo in chaves_para_remover:
-        licitacao.pop(campo, None)
-    return licitacao
+    # 2. MINIFICAÇÃO: Removemos campos que não são usados no Front-End
+    # Mantemos a estrutura: id, org, uf, obj, edit, link, itens, sit_global
+    resultado_final = list(base_limpa.values())
 
-def salvar_resultado(licitacoes):
     try:
         with gzip.open(ARQ_SAIDA, 'wt', encoding='utf-8') as f:
-            json.dump(licitacoes, f, ensure_ascii=False)
-        tamanho_kb = os.path.getsize(ARQ_SAIDA) / 1024
-        logger.info(f"💾 Salvo com sucesso: {ARQ_SAIDA} ({tamanho_kb:.1f} KB)")
-        return True
+            json.dump(resultado_final, f, ensure_ascii=False)
+        logging.info(f"✅ Limpeza concluída! {len(resultado_final)} licitações únicas prontas.")
     except Exception as e:
-        logger.error(f"❌ Erro crítico ao salvar json final: {e}")
-        raise
+        logging.error(f"❌ Erro ao salvar: {e}")
 
-def main():
-    logger.info("🚀 Iniciando QA e Compressão (limpeza.py)")
-    licitacoes = carregar_licitacoes()
-    if not licitacoes: return
-    licitacoes = deduplicar(licitacoes)
-    licitacoes = [otimizar_peso_json(lic) for lic in licitacoes]
-    if licitacoes:
-        salvar_resultado(licitacoes)
-        logger.info("✅ Limpeza concluída perfeitamente!")
-
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    limpar_e_minificar()
