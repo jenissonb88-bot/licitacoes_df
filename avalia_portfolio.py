@@ -7,118 +7,128 @@ import os
 import re
 from math import ceil
 
-logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+# Configuração de Logs para o GitHub Actions
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
-SINONIMOS_FARMACOS = {
-    "GLICOSE": {"GLICOSE INJETAVEL", "GLICOSE INJETÁVEL", "DEXTROSE"},
-    "AMINOACIDO": {"AMINOÁCIDO", "AMINOACIDOS", "AMINOÁCIDOS"},
-    "HEMODIALISE": {"HEMODIÁLISE", "DIALISE", "DIÁLISE", "TERAPIA RENAL"},
-    "FOSFORO": {"FOSFORICO", "FOSFÓRICO", "FO"},
-    "VITAMINA": {"VITAMINA C", "ACIDO ASCORBICO", "ÁCIDO ASCÓRBICO", "VITAMINA"},
-    "AAS": {"AAS", "ACIDO ACETILSALICILICO", "ÁCIDO ACETILSALICÍLICO"},
-    "MATERIAL_HOSPITALAR": {"MATERIAL MÉDICO-HOSPITALAR", "MÉDICO-HOSPITALAR"}
-}
+# ✅ CONFIGURAÇÃO DE ARQUIVOS
+ARQUIVO_ENTRADA = 'pregacoes_pharma_limpos.json.gz'
+ARQUIVO_DICIONARIO = 'dicionario_ouro.json'
+ARQUIVO_SAIDA = 'relatorio_compatibilidade_consolidado.csv'
+TAMANHO_LOTE = 500 
 
-TERMOS_GENERICOS = {
-    "FRASCO", "FRASCOS", "AMPOLA", "AMPOLAS", "BOLSA", "BOLSAS", "CAIXA", "CX", 
-    "COMPRIMIDO", "COMPRIMIDOS", "CPR", "CAPSULA", "CAPSULAS", "INJETAVEL", 
-    "INJ", "GOTAS", "XAROPE", "SOLUCAO", "MG", "ML", "KG", "LITRO", "LITROS", 
-    "UNIDADE", "UN", "KIT", "KITS", "TIPO", "PARA", "COM", "SEM", "MEDICAMENTO"
-}
+def normalizar_texto(texto):
+    """Remove acentos e padroniza para busca limpa."""
+    if not texto: return ""
+    from unicodedata import normalize
+    # Remove acentos e converte para maiúsculas
+    texto_limpo = "".join(c for c in normalize('NFD', str(texto).upper()) if not (ord(c) >= 768 and ord(c) <= 879))
+    return texto_limpo.strip()
 
-TERMOS_BUSCA = set(SINONIMOS_FARMACOS.keys())
-for sinonimos in SINONIMOS_FARMACOS.values():
-    TERMOS_BUSCA.update(sinonimos)
+def carregar_dicionario_ouro():
+    """Carrega os termos de alta precisão (Princípios Ativos + N-Grams)."""
+    if not os.path.exists(ARQUIVO_DICIONARIO):
+        logger.error(f"❌ Erro: {ARQUIVO_DICIONARIO} não encontrado. Rode o gerador_dicionario.py primeiro.")
+        return []
+    
+    with open(ARQUIVO_DICIONARIO, 'r', encoding='utf-8') as f:
+        termos = json.load(f)
+        # Retorna uma lista de termos normalizados
+        return [normalizar_texto(t) for t in termos if t]
 
-def carregar_portfolio():
-    portfolio = []
-    arquivo_csv = 'Exportar Dados.csv'
-    if not os.path.exists(arquivo_csv): return portfolio
-
-    encodings = ['utf-8-sig', 'utf-8', 'iso-8859-1', 'cp1252']
-    for enc in encodings:
-        try:
-            with open(arquivo_csv, mode='r', encoding=enc) as f:
-                amostra = f.read(1024)
-                f.seek(0)
-                delimitador = ';' if ';' in amostra else ','
-                reader = csv.DictReader(f, delimiter=delimitador)
-                headers = {h.strip().upper(): h for h in reader.fieldnames if h}
-                col_desc = next((h_real for h_upper, h_real in headers.items() if 'DESCRI' in h_upper), None)
-                if not col_desc: continue
-                
-                for row in reader:
-                    desc_completa = str(row.get(col_desc, '')).strip().upper()
-                    if desc_completa:
-                        portfolio.append(desc_completa)
-                        palavras_cruas = desc_completa.replace(',', ' ').replace('.', ' ').split()
-                        for palavra in palavras_cruas:
-                            palavra_limpa = re.sub(r'[^A-Z]', '', palavra)
-                            if len(palavra_limpa) > 2 and palavra_limpa not in TERMOS_GENERICOS:
-                                TERMOS_BUSCA.add(palavra_limpa)
-                                break 
-            if portfolio: break
-        except Exception: continue
-    return portfolio
-
-def extrair_componentes(descricao):
-    if not descricao: return []
-    descricao_limpa = str(descricao).replace(',', ' ').replace('(', ' ').replace(')', ' ').replace('.', ' ')
-    return [palavra.strip().upper() for palavra in descricao_limpa.split() if palavra.strip()]
-
-def processar_lote(lote_licitacoes, arquivo_saida_csv):
+def processar_lote(lote_licitacoes, arquivo_saida_csv, termos_ouro):
+    """Cruza os itens do lote com o Dicionário de Ouro."""
     resultados_lote = []
+    
     for licitacao in lote_licitacoes:
-        for item in licitacao.get('itens', []):
-            descricao = str(item.get('d', '')).upper()
-            if not descricao or descricao == 'NONE': continue
-                
-            componentes = extrair_componentes(descricao)
-            componentes_set = set(componentes)
-            match = componentes_set.intersection(TERMOS_BUSCA)
+        itens = licitacao.get('itens', [])
+        for item in itens:
+            # Pega a descrição do item (chave 'd' vinda do app.py)
+            desc_original = item.get('d', '')
+            desc_norm = normalizar_texto(desc_original)
             
-            if not match:
-                for termo in TERMOS_BUSCA:
-                    if " " in termo and termo in descricao: match.add(termo)
+            if not desc_norm or desc_norm == 'NONE':
+                continue
             
-            if match:
+            matches = []
+            
+            # ✅ BUSCA DE ALTA PRECISÃO
+            for termo in termos_ouro:
+                # Usamos Regex para garantir que o termo seja uma palavra inteira (boundary \b)
+                # Isso evita que "SORO" dê match em "TESOURA", por exemplo.
+                padrao = r'\b' + re.escape(termo) + r'\b'
+                if re.search(padrao, desc_norm):
+                    matches.append(termo)
+            
+            if matches:
                 resultados_lote.append({
-                    'id_licitacao': licitacao.get('id', ''), 'orgao': licitacao.get('org', ''),
-                    'item_num': item.get('n', ''), 'descricao_item': item.get('d', ''),
-                    'termo_encontrado': " | ".join(list(match))
+                    'id_licitacao': licitacao.get('id', ''),
+                    'orgao': licitacao.get('org', ''),
+                    'item_num': item.get('n', ''),
+                    'descricao_item': desc_original,
+                    'termo_encontrado': " | ".join(matches)
                 })
                 
     if resultados_lote:
+        # Modo 'a' (append) para escrever os resultados do lote
         with open(arquivo_saida_csv, mode='a', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=['id_licitacao', 'orgao', 'item_num', 'descricao_item', 'termo_encontrado'])
             writer.writerows(resultados_lote)
+            
     return len(resultados_lote)
 
 def main():
-    ARQUIVO_ENTRADA = 'pregacoes_pharma_limpos.json.gz'
-    ARQUIVO_SAIDA = 'relatorio_compatibilidade_consolidado.csv'
-    TAMANHO_LOTE = 500 
-
-    logging.info("🚀 A iniciar a Avaliação de Portfólio (Escalonada)...")
-    portfolio = carregar_portfolio()
+    logger.info("🚀 Iniciando Sniper de Portfólio (Dicionário de Ouro)")
     
+    # 1. Carrega a inteligência
+    termos_ouro = carregar_dicionario_ouro()
+    if not termos_ouro:
+        logger.error("🛑 Abortando: Dicionário vazio ou não encontrado.")
+        return
+    
+    logger.info(f"🧠 Inteligência carregada: {len(termos_ouro)} termos de busca.")
+
+    # 2. Prepara o arquivo de saída (Zera o CSV anterior)
     with open(ARQUIVO_SAIDA, mode='w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=['id_licitacao', 'orgao', 'item_num', 'descricao_item', 'termo_encontrado'])
         writer.writeheader()
 
-    if not os.path.exists(ARQUIVO_ENTRADA): return
-    with gzip.open(ARQUIVO_ENTRADA, 'rt', encoding='utf-8') as f: licitacoes = json.load(f)
+    # 3. Carrega o banco de dados das pregações
+    if not os.path.exists(ARQUIVO_ENTRADA):
+        logger.error(f"❌ Arquivo {ARQUIVO_ENTRADA} não encontrado.")
+        return
+
+    try:
+        with gzip.open(ARQUIVO_ENTRADA, 'rt', encoding='utf-8') as f:
+            licitacoes = json.load(f)
+    except Exception as e:
+        logger.error(f"❌ Erro ao ler banco de dados: {e}")
+        return
     
     total_licitacoes = len(licitacoes)
-    total_encontrados = 0
+    logger.info(f"📊 Analisando {total_licitacoes} licitações...")
 
+    total_matches = 0
+
+    # 4. Processamento em Lotes (Economia de RAM)
     for i in range(0, total_licitacoes, TAMANHO_LOTE):
         lote = licitacoes[i:i + TAMANHO_LOTE]
-        total_encontrados += processar_lote(lote, ARQUIVO_SAIDA)
+        encontrados = processar_lote(lote, ARQUIVO_SAIDA, termos_ouro)
+        total_matches += encontrados
+        
+        # Limpeza agressiva de memória
         del lote
         gc.collect() 
         
-    logging.info(f"✅ Avaliação concluída! Compatíveis: {total_encontrados}.")
+        progresso = min(100, (i + TAMANHO_LOTE) / total_licitacoes * 100)
+        if (i // TAMANHO_LOTE) % 5 == 0:
+            logger.info(f"   ⏳ Progresso: {progresso:.1f}% | Encontrados: {total_matches}")
+
+    logger.info(f"✅ Concluído! O relatório '{ARQUIVO_SAIDA}' foi gerado com {total_matches} itens compatíveis.")
 
 if __name__ == '__main__':
     main()
