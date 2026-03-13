@@ -1,216 +1,278 @@
+import requests
 import json
-import gzip
-import csv
-import gc
-import logging
 import os
-import re
+import unicodedata
+import gzip
+import concurrent.futures
+import sys
+import time
+import random
+from datetime import datetime, timedelta, date
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
-def destacar_item_inteligente(descricao_original, termos_encontrados):
-    """
-    Aplica Destaque Baseado em Tokens com Regra de Hierarquia (Chave Mestra),
-    Expansão de Fronteira, Flexibilidade de Espaços e Tolerância a Acentos.
-    """
-    if not termos_encontrados:
-        return descricao_original
+# --- CONFIGURAÇÕES ORIGINAIS E DE SEGURANÇA ---
+# ✅ Ficheiro temporário para alimentar o limpeza.py
+ARQDADOS = 'dadosoportunidades.json.gz' 
+ARQ_DICIONARIO = 'dicionario_ouro.json'
+ARQ_CHECKPOINT = 'checkpoint.txt'
+ARQ_LOCK = 'execucao.lock'
+ARQ_LOG = 'log_captura.txt'
 
-    STOPWORDS = {"DE", "DO", "DA", "COM", "SEM", "PARA", "EM", "E", "OU", "A", "O"}
+# Reduzido para 4 para evitar que o Firewall do Governo bloqueie o IP
+MAXWORKERS = 4 
+
+# --- GEOGRAFIA DE PRECISÃO ---
+NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
+UFS_PERMITIDAS_MED = NE_ESTADOS + ['DF', 'ES', 'MG', 'RJ', 'SP', 'GO', 'MT', 'MS', 'AM', 'PA', 'TO', 'BR', '']
+UFS_PERMITIDAS_MMH = NE_ESTADOS + ['DF', 'BR', '']
+ESTADOS_BLOQUEADOS = ['RS', 'SC', 'PR', 'AP', 'AC', 'RO', 'RR']
+
+def normalize(t):
+    if not t: return ""
+    return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
+
+# --- VETOS ABSOLUTOS ---
+VETOS_ABSOLUTOS = [normalize(x) for x in [
+    "SOFTWARE", "IMPLANTACAO", "LICENCA", "COMPUTADOR", "INFORMATICA", "IMPRESSAO",
+    "PRESTACAO DE SERVICO", "TERCEIRIZACAO", "LOCACAO", "ASSINATURA", "LIMPEZA",
+    "EXAME", "RADIOLOGIA", "IMAGEM", "VIGILANCIA", "SEGURANCA", "OFICINA",
+    "GASES MEDICINAIS", "OXIGENIO", "ODONTOLOGICO", "PROTESE", "ORTESE", "CILINDRO",
+    "OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "ALIMENTACAO ESCOLAR", "MERENDA"
+]]
+
+WL_MEDICAMENTOS = [normalize(x) for x in ["MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOLA", "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA"]]
+WL_NUTRI_MMH = [normalize(x) for x in ["NUTRICAO ENTERAL", "FORMULA INFANTIL", "DIETA ENTERAL", "MATERIAL MEDIC", "INSUMO HOSPITALAR", "MMH", "SERINGA", "GAZE", "SONDA", "LUVA"]]
+WL_TERMOS_VAGOS = [normalize(x) for x in ["SAUDE", "HOSPITAL", "MATERNIDADE", "CLINICA", "FUNDO MUNICIPAL", "SECRETARIA DE"]]
+
+def log_mensagem(msg):
+    timestamp = datetime.now().strftime('%H:%M:%S')
+    linha = f"[{timestamp}] {msg}"
+    print(linha)
+    with open(ARQ_LOG, 'a', encoding='utf-8') as f:
+        f.write(linha + '\n')
+
+def criar_sessao():
+    s = requests.Session()
+    # 🎭 CAMUFLAGEM
+    s.headers.update({
+        'Accept': 'application/json', 
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Connection': 'keep-alive'
+    })
+    retry = Retry(total=5, backoff_factor=2, status_forcelist=[403, 429, 500, 502, 503, 504])
+    s.mount('https://', HTTPAdapter(max_retries=retry))
+    return s
+
+def buscar_todos_os_itens(cnpj, ano, seq, session):
+    todos_itens = []
+    pagina_item = 1
+    erro_msg = None
     
-    # 1. Quebra os termos encontrados em palavras soltas (Tokens)
-    tokens = set()
-    for termo in termos_encontrados:
-        unidades = r'(MG|ML|G|KG|UI|MCG|AMP|CPR|CX|CAPS|L)'
-        termo_ajustado = re.sub(rf'(\d)\s+{unidades}\b', r'\1\2', termo, flags=re.IGNORECASE)
-        
-        for palavra in termo_ajustado.split():
-            if palavra not in STOPWORDS and len(palavra) > 1:
-                tokens.add(palavra)
-                
-    if not tokens:
-        return descricao_original
-
-    # 2. Separar Fármacos/Formas (letras) de Dosagens (números)
-    farmacos_formas = []
-    dosagens = []
-    for t in tokens:
-        if any(char.isdigit() for char in t):
-            dosagens.append(t)
-        else:
-            farmacos_formas.append(t)
-
-    # 3. REGRA 2: A Chave Mestra e Flexibilidade de Acentos
-    def flexibilizar_palavra(f):
-        # Primeiro trata os sufixos (PAM/PAN, INO/INA)
-        SUFIXOS = {
-            'PAM': ('PA', '[MN]'), 'PAN': ('PA', '[MN]'),
-            'INO': ('IN', '[OÓÒÔÕÖAÁÀÂÃÄ]'), 'INA': ('IN', '[OÓÒÔÕÖAÁÀÂÃÄ]'),
-            'ONA': ('ON', '[EÉÈÊËAÁÀÂÃÄ]'), 'ONE': ('ON', '[EÉÈÊËAÁÀÂÃÄ]')
-        }
-        base = f
-        final_regex = ""
-        for suf, (prefixo, regex_char) in SUFIXOS.items():
-            if f.endswith(suf):
-                base = f[:-3] + prefixo
-                final_regex = regex_char
+    while True:
+        url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
+        try:
+            time.sleep(random.uniform(0.5, 1.5))
+            
+            r = session.get(url, params={'pagina': pagina_item, 'tamanhoPagina': 500}, timeout=30)
+            
+            if r.status_code != 200: 
+                erro_msg = f"HTTP {r.status_code}"
                 break
-        
-        # Agora injeta a tolerância a acentos em todas as vogais e no C
-        mapa = {
-            'A': '[AÁÀÂÃÄ]', 'E': '[EÉÈÊË]', 'I': '[IÍÌÎÏ]',
-            'O': '[OÓÒÔÕÖ]', 'U': '[UÚÙÛÜ]', 'C': '[CÇ]'
-        }
-        res = ""
-        for char in base:
-            res += mapa.get(char.upper(), re.escape(char))
-        return res + final_regex
-
-    chave_mestra_ativa = False
-    regex_farmacos = []
-    
-    for f in farmacos_formas:
-        padrao = flexibilizar_palavra(f)
-        regex_farmacos.append(padrao)
-        
-        if not chave_mestra_ativa and re.search(rf'\b{padrao}\b', descricao_original, re.IGNORECASE):
-            chave_mestra_ativa = True
-
-    if len(farmacos_formas) > 0 and not chave_mestra_ativa:
-        return descricao_original
-
-    # 4. REGRA 1: Construir os padrões das Dosagens
-    regex_dosagens = []
-    for d in dosagens:
-        padrao_dos = re.escape(d)
-        padrao_dos = re.sub(r'(\d)(?:\\ )*([A-Za-z]+)', r'\1\\s*\2', padrao_dos)
-        # Permite caracteres com acento no final da dosagem, se houver
-        padrao_dos = rf"{padrao_dos}(?:\s*/\s*[A-Za-z0-9À-ÿ]+)?"
-        regex_dosagens.append(padrao_dos)
-
-    # 5. Juntar tudo num único Super Regex
-    todos_padroes = regex_farmacos + regex_dosagens
-    if not todos_padroes:
-        return descricao_original
-        
-    super_regex = r'\b(' + '|'.join(todos_padroes) + r')\b'
-    
-    # 6. Substituição Adicionando o Destaque
-    texto_destacado = re.sub(super_regex, r'<mark><b>\1</b></mark>', descricao_original, flags=re.IGNORECASE)
-    
-    return texto_destacado
-
-# Configuração de Logs
-logging.basicConfig(
-    level=logging.INFO,
-    format='[%(asctime)s] %(levelname)s: %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-logger = logging.getLogger(__name__)
-
-# CONFIGURAÇÃO DE ARQUIVOS
-ARQUIVO_ENTRADA = 'pregacoes_pharma_limpos.json.gz'
-ARQUIVO_DICIONARIO = 'dicionario_ouro.json'
-ARQUIVO_SAIDA = 'relatorio_compatibilidade_consolidado.csv'
-TAMANHO_LOTE = 500 
-
-def normalizar_texto(texto):
-    if not texto: return ""
-    from unicodedata import normalize
-    texto_limpo = "".join(c for c in normalize('NFD', str(texto).upper()) if not (ord(c) >= 768 and ord(c) <= 879))
-    return texto_limpo.strip()
-
-def carregar_dicionario_ouro():
-    if not os.path.exists(ARQUIVO_DICIONARIO):
-        logger.error(f"❌ Erro: {ARQUIVO_DICIONARIO} não encontrado.")
-        return []
-    
-    with open(ARQUIVO_DICIONARIO, 'r', encoding='utf-8') as f:
-        termos = json.load(f)
-        return [normalizar_texto(t) for t in termos if t]
-
-def processar_lote(lote_licitacoes, arquivo_saida_csv, termos_ouro):
-    resultados_lote = []
-    
-    for licitacao in lote_licitacoes:
-        itens = licitacao.get('itens', [])
-        for item in itens:
-            desc_original = item.get('d', '')
-            desc_norm = normalizar_texto(desc_original)
             
-            if not desc_norm or desc_norm == 'NONE':
-                continue
+            json_resp = r.json()
             
-            matches = []
-            
-            for termo in termos_ouro:
-                termo_esc = re.escape(termo)
-                termo_esc = re.sub(r'(\d)(?:\\ )*([A-Za-z]+)', r'\1\\s*\2', termo_esc)
-                padrao = r'\b' + termo_esc + r'\b'
+            if isinstance(json_resp, list):
+                dados = json_resp
+            elif isinstance(json_resp, dict):
+                dados = json_resp.get('data', [])
+            else:
+                dados = []
                 
-                if re.search(padrao, desc_norm):
-                    matches.append(termo)
+            if not dados: break
             
-            if matches:
-                # 🚀 A mágica do destaque acontece aqui
-                descricao_destacada = destacar_item_inteligente(desc_original, matches)
-
-                resultados_lote.append({
-                    'id_licitacao': licitacao.get('id', ''),
-                    'orgao': licitacao.get('org', ''),
-                    'item_num': item.get('n', ''),
-                    'descricao_item': descricao_destacada,
-                    'termo_encontrado': " | ".join(matches)
-                })
-                
-    if resultados_lote:
-        with open(arquivo_saida_csv, mode='a', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=['id_licitacao', 'orgao', 'item_num', 'descricao_item', 'termo_encontrado'])
-            writer.writerows(resultados_lote)
+            todos_itens.extend(dados)
+            if len(dados) < 500: break
+            pagina_item += 1
             
-    return len(resultados_lote)
+        except requests.exceptions.ReadTimeout:
+            erro_msg = "Timeout (Servidor lento)"
+            break
+        except Exception as e: 
+            erro_msg = f"Erro de ligação: {str(e)[:40]}"
+            break
+            
+    return todos_itens, erro_msg
 
-def main():
-    logger.info("🚀 Iniciando Sniper de Portfólio (Dicionário de Ouro)")
-    
-    termos_ouro = carregar_dicionario_ouro()
-    if not termos_ouro:
-        logger.error("🛑 Abortando: Dicionário vazio.")
-        return
-    
-    logger.info(f"🧠 Inteligência carregada: {len(termos_ouro)} termos de busca.")
-
-    with open(ARQUIVO_SAIDA, mode='w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=['id_licitacao', 'orgao', 'item_num', 'descricao_item', 'termo_encontrado'])
-        writer.writeheader()
-
-    if not os.path.exists(ARQUIVO_ENTRADA):
-        logger.error(f"❌ Arquivo {ARQUIVO_ENTRADA} não encontrado.")
-        return
-
+def processar_licitacao(lic, session, termos_ouro):
     try:
-        with gzip.open(ARQUIVO_ENTRADA, 'rt', encoding='utf-8') as f:
-            licitacoes = json.load(f)
-    except Exception as e:
-        logger.error(f"❌ Erro ao ler banco de dados: {e}")
-        return
-    
-    total_licitacoes = len(licitacoes)
-    logger.info(f"📊 Analisando {total_licitacoes} licitações...")
+        uo = lic.get('unidadeOrgao', {})
+        uf = str(uo.get('ufSigla') or 'BR').upper().strip()
+        obj_raw = lic.get('objetoCompra') or ""
+        obj_norm = normalize(obj_raw)
+        edit = f"{lic.get('numeroCompra')}/{lic.get('anoCompra')}"
 
-    total_matches = 0
+        if uf in ESTADOS_BLOQUEADOS: return ('VETO_GEO', None)
+        for v in VETOS_ABSOLUTOS:
+            if v in obj_norm: return ('VETO_TITULO', None)
 
-    for i in range(0, total_licitacoes, TAMANHO_LOTE):
-        lote = licitacoes[i:i + TAMANHO_LOTE]
-        encontrados = processar_lote(lote, ARQUIVO_SAIDA, termos_ouro)
-        total_matches += encontrados
+        tem_med = any(t in obj_norm for t in WL_MEDICAMENTOS)
+        tem_mmh = any(t in obj_norm for t in WL_NUTRI_MMH)
+        tem_vago = any(t in obj_norm for t in WL_TERMOS_VAGOS)
+
+        precisa_checar_itens = False
+        if tem_med:
+            if uf not in UFS_PERMITIDAS_MED: return ('VETO_GEO', None)
+        elif tem_mmh:
+            if uf not in UFS_PERMITIDAS_MMH: return ('VETO_GEO', None)
+        elif tem_vago:
+            precisa_checar_itens = True
+        else:
+            return ('FORA_TEMATICA', None)
+
+        cnpj = lic['orgaoEntidade']['cnpj']
+        ano = lic['anoCompra']
+        seq = lic['sequencialCompra']
         
-        del lote
-        gc.collect() 
+        itens_brutos, erro_api = buscar_todos_os_itens(cnpj, ano, seq, session)
         
-        progresso = min(100, (i + TAMANHO_LOTE) / total_licitacoes * 100)
-        if (i // TAMANHO_LOTE) % 5 == 0:
-            logger.info(f"    ⏳ Progresso: {progresso:.1f}% | Encontrados: {total_matches}")
+        if erro_api: 
+            return ('ERRO_API', f"{edit} -> {erro_api}")
 
-    logger.info(f"✅ Concluído! O relatório '{ARQUIVO_SAIDA}' foi gerado com {total_matches} itens compatíveis.")
+        teve_match = False
+        itens_mapeados = []
+        for it in itens_brutos:
+            desc_item = normalize(it.get('descricao', ''))
+            if not teve_match and any(termo in desc_item for termo in termos_ouro):
+                teve_match = True
+            
+            itens_mapeados.append({
+                'n': it.get('numeroItem'), 'd': it.get('descricao', ''),
+                'q': it.get('quantidade'), 'u': it.get('unidadeMedida', 'UN'),
+                'v_est': it.get('valorUnitarioEstimado', 0), 'sit': 'EM ANDAMENTO'
+            })
+
+        if precisa_checar_itens and not teve_match:
+            return ('VETO_DICIONARIO', None)
+
+        # ✅ DADOS FINAIS CORRIGIDOS (com Cidade, UASG e Unidade Nome)
+        cid = uo.get('municipioNome', '---')
+        uasg = uo.get('codigoUnidade', 'N/A')
+        unid_nome = uo.get('nomeUnidade', '---')
+
+        dados_finais = {
+            'id': f"{cnpj}{ano}{seq}", 
+            'dt_enc': lic.get('dataEncerramentoProposta'),
+            'uf': uf, 
+            'org': lic.get('orgaoEntidade', {}).get('razaoSocial', '---'),
+            'cid': cid,
+            'uasg': uasg,
+            'unid_nome': unid_nome,
+            'obj': obj_raw, 
+            'edit': edit, 
+            'link': f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
+            'itens': itens_mapeados, 
+            'sit_global': 'DIVULGADA'
+        }
+        return ('CAPTURADO', dados_finais)
+
+    except Exception as e: return ('ERRO_API', "Exceção Interna")
 
 if __name__ == '__main__':
-    main()
+    if os.path.exists(ARQ_LOCK): sys.exit(0)
+    with open(ARQ_LOCK, 'w') as f: f.write("lock")
+
+    try:
+        import argparse
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--start', type=str); parser.add_argument('--end', type=str)
+        args = parser.parse_args()
+        
+        if args.start: data_alvo = args.start
+        elif os.path.exists(ARQ_CHECKPOINT):
+            with open(ARQ_CHECKPOINT, 'r') as f: data_alvo = f.read().strip()
+        else: data_alvo = date.today().strftime('%Y-%m-%d')
+
+        log_mensagem(f"🚀 Iniciando Varredura Antibloqueio: {data_alvo}")
+        
+        with open(ARQ_DICIONARIO, 'r', encoding='utf-8') as f:
+            termos_ouro = [normalize(t) for t in json.load(f)]
+
+        session = criar_sessao()
+        banco = {}
+        if os.path.exists(ARQDADOS):
+            with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
+                for x in json.load(f): banco[x['id']] = x
+
+        dia_api = data_alvo.replace('-', '')
+        pagina = 1
+        
+        stats = {
+            'CAPTURADO': 0, 'VETO_GEO': 0, 'VETO_TITULO': 0, 
+            'VETO_DICIONARIO': 0, 'FORA_TEMATICA': 0, 'ERRO_API': 0
+        }
+        
+        while True:
+            r = session.get(f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao", 
+                            params={'dataInicial': dia_api, 'dataFinal': dia_api, 'codigoModalidadeContratacao': 6, 'pagina': pagina, 'tamanhoPagina': 50})
+            if r.status_code != 200: break
+            lics = r.json().get('data', [])
+            if not lics: break
+            
+            log_mensagem(f"📄 Pag {pagina}: Processando {len(lics)} editais no PNCP...")
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
+                futuros = {exe.submit(processar_licitacao, l, session, termos_ouro): l for l in lics}
+                for f in concurrent.futures.as_completed(futuros):
+                    status, resultado = f.result()
+                    stats[status] += 1
+                    
+                    if status == 'CAPTURADO':
+                        # 🚨 DETETOR DE MUDANÇAS NAS DATAS 🚨
+                        if resultado['id'] in banco:
+                            lic_antiga = banco[resultado['id']]
+                            antiga_data = lic_antiga.get('dt_enc')
+                            nova_data = resultado.get('dt_enc')
+                            
+                            if antiga_data and nova_data and antiga_data != nova_data:
+                                resultado['alerta_data'] = True
+                                resultado['dt_enc_antiga'] = antiga_data
+                                log_mensagem(f"   ⚠️ DATA ALTERADA: {resultado['edit']} (Era {antiga_data})")
+                            
+                            elif lic_antiga.get('alerta_data'):
+                                resultado['alerta_data'] = True
+                                resultado['dt_enc_antiga'] = lic_antiga.get('dt_enc_antiga')
+
+                        banco[resultado['id']] = resultado
+                        log_mensagem(f"   🎯 ALVO REGISTADO: {resultado['edit']} - {resultado['org'][:30]}")
+                        
+                    elif status == 'ERRO_API':
+                        log_mensagem(f"   ⚠️ API FALHOU: {resultado}")
+
+            if len(lics) < 50: break
+            pagina += 1
+
+        with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
+            json.dump(list(banco.values()), f, ensure_ascii=False)
+            
+        if not args.start:
+            proximo = (datetime.strptime(data_alvo, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+            with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo)
+            
+        total_analisado = sum(stats.values())
+        log_mensagem("="*50)
+        log_mensagem(f"📊 RESUMO DIÁRIO: {data_alvo}")
+        log_mensagem("="*50)
+        log_mensagem(f"✅ CAPTURADOS (Sniper/Medicamentos): {stats['CAPTURADO']}")
+        log_mensagem(f"❌ DESCARTADOS - Geografia (Bloqueada): {stats['VETO_GEO']}")
+        log_mensagem(f"❌ DESCARTADOS - Veto no Título: {stats['VETO_TITULO']}")
+        log_mensagem(f"❌ DESCARTADOS - Veto Dicionário (Sem produtos): {stats['VETO_DICIONARIO']}")
+        log_mensagem(f"❌ DESCARTADOS - Fora da Temática: {stats['FORA_TEMATICA']}")
+        log_mensagem(f"⚠️ ERROS DE API: {stats['ERRO_API']}")
+        log_mensagem("-" * 50)
+        log_mensagem(f"TOTAL ANALISADO: {total_analisado} editais")
+        log_mensagem("="*50)
+
+    finally:
+        if os.path.exists(ARQ_LOCK): os.remove(ARQ_LOCK)
