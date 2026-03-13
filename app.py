@@ -159,8 +159,21 @@ def processar_licitacao(lic, session, termos_ouro):
             return ('VETO_DICIONARIO', None)
 
         dados_finais = {
+            # 4. Decisão de Captura
+        if precisa_checar_itens and not teve_match:
+            return ('VETO_DICIONARIO', None)
+
+        # ✅ ADICIONADO: Captura de Cidade, UASG e Nome da Unidade
+        cid = uo.get('municipioNome', '---')
+        uasg = uo.get('codigoUnidade', 'N/A')
+        unid_nome = uo.get('nomeUnidade', '---')
+
+        dados_finais = {
             'id': f"{cnpj}{ano}{seq}", 'dt_enc': lic.get('dataEncerramentoProposta'),
             'uf': uf, 'org': lic.get('orgaoEntidade', {}).get('razaoSocial', '---'),
+            'cid': cid,           # <-- NOVA CHAVE
+            'uasg': uasg,         # <-- NOVA CHAVE
+            'unid_nome': unid_nome, # <-- NOVA CHAVE
             'obj': obj_raw, 'edit': edit, 'link': f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
             'itens': itens_mapeados, 'sit_global': 'DIVULGADA'
         }
