@@ -12,7 +12,8 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 # --- CONFIGURAÇÕES ORIGINAIS E DE SEGURANÇA ---
-ARQDADOS = 'pregacoes_pharma_limpos.json.gz'
+# ✅ CORREÇÃO AQUI: Salvar no ficheiro intermédio para o limpeza.py ler!
+ARQDADOS = 'dadosoportunidades.json.gz' 
 ARQ_DICIONARIO = 'dicionario_ouro.json'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_LOCK = 'execucao.lock'
@@ -74,7 +75,7 @@ def buscar_todos_os_itens(cnpj, ano, seq, session):
     while True:
         url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
         try:
-            # 🕰️ PAUSA ALEATÓRIA
+            # 🕰️ PAUSA ALEATÓRIA: Finge o clique humano para não disparar o Firewall
             time.sleep(random.uniform(0.5, 1.5))
             
             r = session.get(url, params={'pagina': pagina_item, 'tamanhoPagina': 500}, timeout=30)
@@ -85,11 +86,11 @@ def buscar_todos_os_itens(cnpj, ano, seq, session):
             
             json_resp = r.json()
             
-            # ✅ CORREÇÃO: Lida com a inconsistência da API do PNCP
+            # ✅ CORREÇÃO: Lida com a inconsistência da API do PNCP (List vs Dict)
             if isinstance(json_resp, list):
-                dados = json_resp # Se a API já mandar a lista direta
+                dados = json_resp
             elif isinstance(json_resp, dict):
-                dados = json_resp.get('data', []) # Se mandar dentro de "data"
+                dados = json_resp.get('data', [])
             else:
                 dados = []
                 
@@ -233,7 +234,7 @@ if __name__ == '__main__':
             if len(lics) < 50: break
             pagina += 1
 
-        # Guarda na base de dados (formato gzip)
+        # Guarda na base de dados intermédia (formato gzip) para o limpeza.py ler
         with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
             json.dump(list(banco.values()), f, ensure_ascii=False)
         
