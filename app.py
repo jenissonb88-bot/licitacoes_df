@@ -6,18 +6,19 @@ import gzip
 import concurrent.futures
 import sys
 import time
+import random
 from datetime import datetime, timedelta, date
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-# --- CONFIGURAÇÕES ORIGINAIS ---
+# --- CONFIGURAÇÕES ORIGINAIS E DE SEGURANÇA ---
 ARQDADOS = 'pregacoes_pharma_limpos.json.gz'
 ARQ_DICIONARIO = 'dicionario_ouro.json'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_LOCK = 'execucao.lock'
 ARQ_LOG = 'log_captura.txt'
 
-# ⬇️ REDUZIDO PARA 4 PARA EVITAR BLOQUEIO DO FIREWALL DO PNCP
+# Reduzido para 4 para evitar que o Firewall do Governo bloqueie o IP
 MAXWORKERS = 4 
 
 # --- GEOGRAFIA DE PRECISÃO ---
@@ -31,6 +32,7 @@ def normalize(t):
     return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
 
 # --- VETOS ABSOLUTOS ---
+# Retirados "SISTEMA" e "MANUTENCAO" para evitar a perda de Registos de Preços
 VETOS_ABSOLUTOS = [normalize(x) for x in [
     "SOFTWARE", "IMPLANTACAO", "LICENCA", "COMPUTADOR", "INFORMATICA", "IMPRESSAO",
     "PRESTACAO DE SERVICO", "TERCEIRIZACAO", "LOCACAO", "ASSINATURA", "LIMPEZA",
@@ -52,9 +54,15 @@ def log_mensagem(msg):
 
 def criar_sessao():
     s = requests.Session()
-    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/24.7'})
-    # ⬆️ BACKOFF FACTOR = 1 (Espera mais tempo antes de tentar de novo)
-    retry = Retry(total=5, backoff_factor=1, status_forcelist=[403, 429, 500, 502, 503, 504])
+    # 🎭 CAMUFLAGEM: Finge ser um utilizador real no Google Chrome
+    s.headers.update({
+        'Accept': 'application/json', 
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Connection': 'keep-alive'
+    })
+    # Maior paciência (backoff_factor=2) antes de tentar de novo
+    retry = Retry(total=5, backoff_factor=2, status_forcelist=[403, 429, 500, 502, 503, 504])
     s.mount('https://', HTTPAdapter(max_retries=retry))
     return s
 
@@ -66,8 +74,11 @@ def buscar_todos_os_itens(cnpj, ano, seq, session):
     while True:
         url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
         try:
-            # ⬆️ TIMEOUT AUMENTADO PARA 30 SEGUNDOS
+            # 🕰️ PAUSA ALEATÓRIA: Finge o clique humano para não disparar o Firewall
+            time.sleep(random.uniform(0.5, 1.5))
+            
             r = session.get(url, params={'pagina': pagina_item, 'tamanhoPagina': 500}, timeout=30)
+            
             if r.status_code != 200: 
                 erro_msg = f"HTTP {r.status_code}"
                 break
@@ -78,13 +89,12 @@ def buscar_todos_os_itens(cnpj, ano, seq, session):
             todos_itens.extend(dados)
             if len(dados) < 500: break
             pagina_item += 1
-            time.sleep(0.5) # Breve pausa para não irritar o firewall
             
         except requests.exceptions.ReadTimeout:
             erro_msg = "Timeout (Servidor lento)"
             break
         except Exception as e: 
-            erro_msg = f"Erro de conexão"
+            erro_msg = f"Erro de ligação: {str(e)[:40]}"
             break
             
     return todos_itens, erro_msg
@@ -97,10 +107,12 @@ def processar_licitacao(lic, session, termos_ouro):
         obj_norm = normalize(obj_raw)
         edit = f"{lic.get('numeroCompra')}/{lic.get('anoCompra')}"
 
+        # 1. Filtros Geográficos e de Objeto
         if uf in ESTADOS_BLOQUEADOS: return ('VETO_GEO', None)
         for v in VETOS_ABSOLUTOS:
             if v in obj_norm: return ('VETO_TITULO', None)
 
+        # 2. Avaliação de Temática
         tem_med = any(t in obj_norm for t in WL_MEDICAMENTOS)
         tem_mmh = any(t in obj_norm for t in WL_NUTRI_MMH)
         tem_vago = any(t in obj_norm for t in WL_TERMOS_VAGOS)
@@ -115,11 +127,11 @@ def processar_licitacao(lic, session, termos_ouro):
         else:
             return ('FORA_TEMATICA', None)
 
+        # 3. Extração Exaustiva de Itens
         cnpj = lic['orgaoEntidade']['cnpj']
         ano = lic['anoCompra']
         seq = lic['sequencialCompra']
         
-        # Recebendo os itens e possíveis erros
         itens_brutos, erro_api = buscar_todos_os_itens(cnpj, ano, seq, session)
         
         if erro_api: 
@@ -138,6 +150,7 @@ def processar_licitacao(lic, session, termos_ouro):
                 'v_est': it.get('valorUnitarioEstimado', 0), 'sit': 'EM ANDAMENTO'
             })
 
+        # 4. Decisão de Captura
         if precisa_checar_itens and not teve_match:
             return ('VETO_DICIONARIO', None)
 
@@ -161,6 +174,7 @@ if __name__ == '__main__':
         parser.add_argument('--start', type=str); parser.add_argument('--end', type=str)
         args = parser.parse_args()
         
+        # Define a data a pesquisar
         if args.start: data_alvo = args.start
         elif os.path.exists(ARQ_CHECKPOINT):
             with open(ARQ_CHECKPOINT, 'r') as f: data_alvo = f.read().strip()
@@ -180,6 +194,7 @@ if __name__ == '__main__':
         dia_api = data_alvo.replace('-', '')
         pagina = 1
         
+        # Painel de métricas
         stats = {
             'CAPTURADO': 0, 'VETO_GEO': 0, 'VETO_TITULO': 0, 
             'VETO_DICIONARIO': 0, 'FORA_TEMATICA': 0, 'ERRO_API': 0
@@ -204,19 +219,21 @@ if __name__ == '__main__':
                         banco[resultado['id']] = resultado
                         log_mensagem(f"   🎯 ALVO NOVO: {resultado['edit']} - {resultado['org'][:30]}")
                     elif status == 'ERRO_API':
-                        # Agora ele avisa exatamente QUAL edital falhou e POR QUÊ
                         log_mensagem(f"   ⚠️ API FALHOU: {resultado}")
 
             if len(lics) < 50: break
             pagina += 1
 
+        # Guarda na base de dados (formato gzip)
         with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
             json.dump(list(banco.values()), f, ensure_ascii=False)
         
+        # Atualiza o ficheiro de checkpoint
         if not args.start:
             proximo = (datetime.strptime(data_alvo, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
             with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo)
             
+        # Apresenta o Resumo Diário
         total_analisado = sum(stats.values())
         log_mensagem("="*50)
         log_mensagem(f"📊 RESUMO DIÁRIO: {data_alvo}")
