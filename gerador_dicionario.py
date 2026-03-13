@@ -34,43 +34,54 @@ def gerar():
         print(f"❌ Erro: Ficheiro {arquivo_csv} não encontrado.")
         return
 
+    # Tenta ler com diferentes encondings para evitar erros de acentuação no CSV
     for enc in ['utf-8-sig', 'utf-8', 'iso-8859-1', 'cp1252']:
         try:
             with open(arquivo_csv, mode='r', encoding=enc) as f:
-                cabecalho = f.readline()
-                f.seek(0)
-                separador = ';' if ';' in cabecalho else ','
-                reader = csv.DictReader(f, delimiter=separador)
+                # Forçamos o delimitador como vírgula conforme a sua instrução
+                reader = csv.DictReader(f, delimiter=',')
                 
                 for row in reader:
-                    # ✅ Captura as colunas oficiais
+                    # Captura exatamente as colunas do seu cabeçalho
                     farmaco_bruto = row.get('Fármaco', '')
+                    dosagem_bruta = row.get('Dosagem', '')
                     forma_bruta = row.get('Forma Farmacêutica', '')
                     
                     farmaco = normalizar(farmaco_bruto)
+                    dosagem = normalizar(dosagem_bruta)
                     forma = normalizar(forma_bruta)
                     
-                    # Só processa se o fármaco for um nome válido (não dosagem)
+                    # Só processa se o fármaco for um nome válido
                     if eh_termo_valido(farmaco):
-                        # 1. Adiciona o Princípio Ativo limpo (ex: ACICLOVIR)
+                        # 1. LINHA 1: Princípio Ativo limpo (ex: ACICLOVIR)
                         termos_ouro.add(farmaco)
                         
-                        # 2. Adiciona a combinação (ex: ACICLOVIR CREME)
+                        # 2. LINHA 2: Fármaco + Forma (ex: ACICLOVIR CREME)
                         if forma and len(forma) > 2:
                             termos_ouro.add(f"{farmaco} {forma}")
                             
-                break 
-        except Exception:
+                        # Verifica se existe dosagem preenchida
+                        if dosagem:
+                            # 3. LINHA 3: Fármaco + Dosagem (ex: ACICLOVIR 50MG)
+                            termos_ouro.add(f"{farmaco} {dosagem}")
+                            
+                            # 4. LINHA 4: Fármaco + Dosagem + Forma (ex: ACICLOVIR 50MG CREME)
+                            if forma and len(forma) > 2:
+                                termos_ouro.add(f"{farmaco} {dosagem} {forma}")
+                            
+                break # Se leu com sucesso, sai do loop de encodings
+        except Exception as e:
             continue
 
-    # 3. Filtro final de segurança contra termos genéricos de material médico
+    # Filtro final de segurança contra lixo residual
     LIXO_EXTRA = {"PARA", "COM", "SEM", "USO", "GERAL", "TIPO", "ACOMPANHA"}
     termos_finais = [t for t in termos_ouro if t not in LIXO_EXTRA]
 
+    # Salva o JSON final
     with open('dicionario_ouro.json', 'w', encoding='utf-8') as f:
         json.dump(sorted(list(set(termos_finais))), f, ensure_ascii=False, indent=2)
 
-    print(f"✅ Dicionário REFINADO gerado com {len(termos_finais)} termos puros!")
+    print(f"✅ Dicionário REFINADO gerado com {len(termos_finais)} combinações puras!")
 
 if __name__ == '__main__':
     gerar()
