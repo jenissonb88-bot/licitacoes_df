@@ -5,433 +5,152 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sniper Pharma - Painel de Licitações</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-
     <style>
-        :root { --blue-df: #004a99; --green-df: #198754; --red-df: #dc3545; --yellow-df: #ffc107; }
-        body { background-color: #f0f2f5; font-family: 'Segoe UI', system-ui, sans-serif; color: #333; font-size: 0.92rem; }
+        :root { --blue-df: #004a99; --green-df: #198754; --red-df: #dc3545; }
+        body { background-color: #f0f2f5; font-family: 'Segoe UI', sans-serif; font-size: 0.9rem; }
+        .header-card { background: linear-gradient(90deg, #002d5a, #004a99); color: white; padding: 12px; border-radius: 8px 8px 0 0; }
+        .badge-uf { background: #000; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+        .card-licitacao { border-radius: 8px; border: none; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; }
         
-        .header-card { 
-            background: linear-gradient(90deg, #002d5a 0%, #004a99 100%); 
-            color: white; padding: 12px 20px; border-radius: 10px 10px 0 0; font-size: 1.05rem;
-            display: flex; justify-content: space-between; align-items: center;
-        }
-        .header-bold { font-weight: 700; }
-        .badge-uf-header { background-color: #000; color: #fff; font-weight: 800; padding: 2px 8px; border-radius: 4px; margin-right: 5px; }
-
-        .alerta-pisca {
-            background-color: #ffc107; color: #000; font-weight: 800; padding: 3px 8px;
-            border-radius: 4px; font-size: 0.7rem; margin-left: 10px;
-            animation: piscar 1.5s infinite;
-        }
-        @keyframes piscar {
-            0% { opacity: 1; }
-            50% { opacity: 0.3; background-color: #ff9800; }
-            100% { opacity: 1; }
-        }
-
-        .compat-badge {
-            display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px;
-            border-radius: 12px; font-size: 0.75rem; font-weight: 700; margin-right: 8px;
-            border: 1px solid rgba(255,255,255,0.4);
-        }
-        .compat-alta { background: #28a745; color: white; }
-        .compat-media { background: #ffc107; color: #212529; }
-        .compat-baixa { background: #dc3545; color: white; }
-        .compat-na { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.6); }
-
-        .item-compativel {
-            background-color: #d4edda !important;
-            border-left: 4px solid #28a745 !important;
-        }
-        .item-compativel td { color: #155724 !important; } 
+        /* Badges de ME/EPP solicitadas */
+        .benef-sim { background-color: #dc3545; color: white !important; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 0.75rem; }
+        .benef-nao { background-color: #198754; color: white !important; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 0.75rem; }
         
-        mark { background-color: #ffeeb6; padding: 0.1em 0.2em; border-radius: 3px; }
-
-        .compat-indicador {
-            display: inline-flex; align-items: center; justify-content: center;
-            width: 20px; height: 20px; background: #28a745; color: white;
-            border-radius: 50%; font-size: 0.7rem; margin-right: 6px;
-        }
-
-        .benef-sim { color: var(--red-df) !important; font-weight: bold !important; }
-        .benef-nao { color: var(--green-df) !important; font-weight: bold !important; }
-
-        .badge-tipo { font-weight: 800; padding: 5px 10px; border-radius: 4px; font-size: 0.75rem; letter-spacing: 0.5px; display: inline-flex; align-items: center; }
-        .badge-amplo { background-color: var(--green-df); color: white; }
-        .badge-exclusivo { background-color: var(--red-df); color: white; }
-        .badge-parcial { background-color: var(--yellow-df); color: #212529; }
-
-        .card-licitacao { border-radius: 10px; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; overflow: hidden; }
-        .filter-box { background: white; padding: 15px; border-radius: 10px; border: 1px solid #e0e6ed; margin-bottom: 20px; }
-        .filter-label { font-size: 0.65rem; font-weight: 800; color: var(--blue-df); margin-bottom: 2px; display: block; text-transform: uppercase; }
+        .badge-tipo { font-weight: bold; padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; }
+        .badge-amplo { background: var(--green-df); color: white; }
+        .badge-exclusivo { background: var(--red-df); color: white; }
+        .badge-parcial { background: #ffc107; color: #000; }
         
-        .table-itens { font-size: 0.82em; }
+        .alerta-pisca { background: #ffc107; color: #000; font-weight: bold; padding: 2px 6px; border-radius: 4px; animation: piscar 1.5s infinite; font-size: 0.7rem; }
+        @keyframes piscar { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
         
-        .pagination-container { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 20px; padding-bottom: 40px; flex-wrap: wrap; }
-        .page-input { width: 60px; text-align: center; padding: 4px 8px; border: 1px solid #004a99; border-radius: 4px; font-size: 0.875rem; font-weight: 600; }
-        .btn-go { background: #004a99; color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 0.875rem; font-weight: 600; cursor: pointer; }
-        .btn-go:hover { background: #003366; }
-        .page-info-text { font-size: 0.875rem; color: #666; }
-        
-        .btn-excluir { font-size: 0.7rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 2px 8px; border-radius: 4px; cursor: pointer; }
-        .btn-excluir:hover { background: var(--red-df); border-color: var(--red-df); }
+        mark { background: #ffeeb6; border-radius: 2px; }
+        .item-compativel { background-color: #f0fff4 !important; }
     </style>
 </head>
 <body>
 
-<div class="container-fluid px-4 py-3">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <div>
-            <h3 class="fw-bold mb-0" style="color: #003366;">🔭 Sniper Pharma Monitor</h3>
-            <span class="badge bg-dark" style="font-size: 0.7rem;">ANALISTA DE LICITAÇÕES | PNCP & COMPRASGOV</span>
-        </div>
-        <button class="btn btn-success fw-bold" onclick="abrirInclusaoManual()">+ Inclusão Manual (PNCP)</button>
-    </div>
-    
-    <div class="filter-box shadow-sm">
-        <div class="row g-2">
-            <div class="col-md-2">
-                <label class="filter-label">DATA ENCERRAMENTO</label>
-                <input type="date" id="filterData" class="form-control form-control-sm" onchange="filtrar()">
-            </div>
-            <div class="col-md-1">
-                <label class="filter-label">UF</label>
-                <input type="text" id="filterUF" class="form-control form-control-sm" placeholder="Ex: PE" oninput="filtrar()">
-            </div>
-            <div class="col-md-2">
-                <label class="filter-label">CIDADE</label>
-                <input type="text" id="filterCidade" class="form-control form-control-sm" placeholder="Busque a cidade..." oninput="filtrar()">
-            </div>
-            <div class="col-md-3">
-                <label class="filter-label">ÓRGÃO / CÓDIGO</label>
-                <input type="text" id="filterOrgao" class="form-control form-control-sm" placeholder="Nome ou UASG" oninput="filtrar()">
-            </div>
-            <div class="col-md-2">
-                <label class="filter-label">Nº EDITAL</label>
-                <input type="text" id="filterEdital" class="form-control form-control-sm" placeholder="00000/2026" oninput="filtrar()">
-            </div>
-            <div class="col-md-2 d-flex align-items-end">
-                <button class="btn btn-sm btn-outline-secondary w-100 fw-bold" onclick="limparFiltros()">LIMPAR FILTROS</button>
-            </div>
-        </div>
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3>🔭 Sniper Pharma Monitor</h3>
+        <button class="btn btn-sm btn-outline-secondary" onclick="limparFiltros()">Limpar Filtros</button>
     </div>
 
-    <div id="monitor-content">
-        <div class="text-center py-5">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Carregando...</span>
-            </div>
-            <p class="mt-2 text-muted">Carregando licitações...</p>
-        </div>
+    <div class="row g-2 mb-4">
+        <div class="col-md-3"><input type="text" id="filterOrgao" class="form-control form-control-sm" placeholder="Órgão ou UASG" oninput="filtrar()"></div>
+        <div class="col-md-2"><input type="text" id="filterCidade" class="form-control form-control-sm" placeholder="Cidade" oninput="filtrar()"></div>
+        <div class="col-md-1"><input type="text" id="filterUF" class="form-control form-control-sm" placeholder="UF" oninput="filtrar()"></div>
+        <div class="col-md-3"><input type="date" id="filterData" class="form-control form-control-sm" onchange="filtrar()"></div>
     </div>
 
-    <div class="pagination-container">
-        <button class="btn btn-sm btn-outline-primary px-3" id="prevPage">Anterior</button>
-        <span class="page-info-text">Página</span>
-        <input type="number" id="pageInput" class="page-input" min="1" value="1" onkeypress="if(event.key==='Enter')irParaPagina()">
-        <span class="page-info-text">de <span id="totalPages">1</span></span>
-        <button class="btn-go" onclick="irParaPagina()">Ir</button>
-        <button class="btn btn-sm btn-outline-primary px-3" id="nextPage">Próxima</button>
-    </div>
+    <div id="monitor-content"></div>
 </div>
 
-<div class="modal fade" id="modalDetalhes" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
-            <div class="modal-header header-card py-2">
-                <h6 class="modal-title fw-bold" id="modalTitle">Itens da Licitação</h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body p-3" id="modalBody"></div>
-            <div class="modal-footer bg-light border-0 py-2">
-                <a id="linkPncp" href="#" target="_blank" class="btn btn-sm btn-primary px-4 fw-bold">VER NO PNCP</a>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">FECHAR</button>
-            </div>
-        </div>
-    </div>
-</div>
+<div class="modal fade" id="modalDetalhes" tabindex="-1"><div class="modal-dialog modal-xl"><div class="modal-content">
+    <div class="modal-header header-card"><h6 id="modalTitle"></h6><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body" id="modalBody"></div>
+</div></div></div>
 
-<div class="modal fade" id="modalInclusao" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content border-0 shadow-lg">
-            <div class="modal-header bg-dark text-white py-2">
-                <h6 class="modal-title fw-bold">➕ Incluir Novo Link no Repositório</h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body p-4">
-                <div class="mb-3">
-                    <label class="filter-label">URL DA LICITAÇÃO NO PNCP</label>
-                    <input type="text" id="inputLinkPncp" class="form-control shadow-sm" placeholder="https://pncp.gov.br/app/editais/...">
-                </div>
-                <div class="mb-3">
-                    <label class="filter-label">GITHUB PERSONAL ACCESS TOKEN (PAT)</label>
-                    <input type="password" id="inputGithubToken" class="form-control shadow-sm" placeholder="ghp_xxxxxxxxxxxx">
-                </div>
-                <div id="statusInclusao" class="mt-3 text-center fw-bold" style="font-size: 0.8rem;"></div>
-            </div>
-            <div class="modal-footer bg-light">
-                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-sm btn-success fw-bold px-4" onclick="processarInclusaoManual()">SALVAR NO GITHUB</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-let allData = [];
-let filteredData = [];
-let compatData = {};  
-let currentPage = 1;
-let totalPages = 1;
-const itemsPerPage = 20;
-
-const GITHUB_OWNER = 'jenissonb88-bot';
-const GITHUB_REPO = 'licitacoes_df';
-const GITHUB_FILE_PATH = 'links_manuais.txt';
-
+let allData = [], filteredData = [], compatData = {};
 const modalObj = new bootstrap.Modal(document.getElementById('modalDetalhes'));
-const modalInclusaoObj = new bootstrap.Modal(document.getElementById('modalInclusao'));
-
-function formatDate(dateString) {
-    if (!dateString) return 'Data Desconhecida';
-    return new Date(dateString).toLocaleString('pt-BR');
-}
-
-async function loadCompatData() {
-    try {
-        let response = await fetch('relatorio_compatibilidade_consolidado.csv');
-        if (!response.ok) return;
-        const csvText = await response.text();
-        
-        Papa.parse(csvText, {
-            header: true,
-            skipEmptyLines: true,
-            complete: function(results) {
-                results.data.forEach(row => {
-                    const id = row.id_licitacao;
-                    const itemNum = row.item_num;
-                    const descDestacada = row.descricao_item;
-                    
-                    if (!id || !itemNum) return;
-                    
-                    if (!compatData[id]) compatData[id] = { itens_formatados: {} };
-                    compatData[id].itens_formatados[itemNum] = descDestacada;
-                });
-            }
-        });
-    } catch (e) { console.log('Erro compat:', e); }
-}
 
 async function loadData() {
     try {
-        await loadCompatData();
-        const response = await fetch('pregacoes_pharma_limpos.json.gz');
-        
-        const arrayBuffer = await response.arrayBuffer();
-        const charData = pako.ungzip(new Uint8Array(arrayBuffer), { to: 'string' });
-        allData = JSON.parse(charData);
-        
-        allData.sort((a, b) => new Date(b.dt_enc || 0) - new Date(a.dt_enc || 0));
-        filteredData = [...allData];
-        renderMonitor();
-        
-    } catch (e) {
-        console.error('Erro carregamento:', e);
-        document.getElementById('monitor-content').innerHTML = `<div class="alert alert-danger m-4">Erro ao carregar banco de dados.</div>`;
-    }
-}
-
-function calcularCompatibilidadeLic(lic) {
-    const compat = compatData[lic.id];
-    if (!compat || !compat.itens_formatados) return { percentual: 0, itensCompat: 0, totalItens: (lic.itens?.length || 0) };
-    
-    const itensCompat = Object.keys(compat.itens_formatados).length;
-    const pct = Math.round((itensCompat / (lic.itens?.length || 1)) * 100);
-    return { percentual: pct, itensCompat, totalItens: lic.itens.length };
-}
-
-function renderMonitor() {
-    const container = document.getElementById('monitor-content');
-    container.innerHTML = '';
-    
-    const start = (currentPage - 1) * itemsPerPage;
-    const end = start + itemsPerPage;
-    const pageItems = filteredData.slice(start, end);
-
-    pageItems.forEach(lic => {
-        const div = document.createElement('div');
-        div.className = 'card card-licitacao';
-        
-        let somaReal = 0;
-        let qtdMeEpp = 0;
-        const totalItens = lic.itens?.length || 0;
-
-        (lic.itens || []).forEach(it => {
-            somaReal += (parseFloat(it.v_est) || 0) * (parseFloat(it.q) || 0);
-            if ([1, 2, 3].includes(parseInt(it.benef))) qtdMeEpp++; 
-        });
-        
-        const valorFinal = somaReal > 0 ? somaReal : (parseFloat(lic.val_tot) || 0);
-
-        let badgeProcessoHtml = '';
-        if (totalItens > 0) {
-            if (qtdMeEpp === totalItens) {
-                badgeProcessoHtml = '<span class="badge-tipo badge-exclusivo ms-2">ME/EPP EXCLUSIVO</span>';
-            } else if (qtdMeEpp > 0) {
-                badgeProcessoHtml = '<span class="badge-tipo badge-parcial ms-2">ME/EPP PARCIAL</span>';
-            } else {
-                badgeProcessoHtml = '<span class="badge-tipo badge-amplo ms-2">AMPLA PARTICIPAÇÃO</span>';
-            }
+        const resCompat = await fetch('relatorio_compatibilidade_consolidado.csv');
+        if(resCompat.ok) {
+            const text = await resCompat.text();
+            Papa.parse(text, { header: true, complete: r => {
+                r.data.forEach(row => {
+                    if(!compatData[row.id_licitacao]) compatData[row.id_licitacao] = {};
+                    compatData[row.id_licitacao][row.item_num] = row.descricao_item;
+                });
+            }});
         }
 
-        const compat = calcularCompatibilidadeLic(lic);
-        let badgeClass = compat.percentual >= 70 ? 'compat-alta' : compat.percentual >= 40 ? 'compat-media' : 'compat-baixa';
-        if (compat.percentual === 0) badgeClass = 'compat-na';
-
-        const alertaHTML = lic.alerta_data 
-            ? `<span class="alerta-pisca" title="Data antiga era: ${formatDate(lic.dt_enc_antiga)}">⏳ ADIADO/ALTERADO</span>` 
-            : '';
-
-        div.innerHTML = ` 
-            <div class="header-card">
-                <div>
-                    <span class="badge-uf-header">${lic.uf || '??'}</span>
-                    <span class="header-bold">${lic.org || '---'}</span>
-                    ${alertaHTML}
-                    ${badgeProcessoHtml}
-                    <span class="ms-2 opacity-75 small">| Edital: ${lic.edit || '---'}</span>
-                    <span class="compat-badge ${badgeClass} ms-2">${compat.percentual}% (${compat.itensCompat}/${compat.totalItens})</span>
-                </div>
-                <button class="btn-excluir" onclick="excluirLicitacao('${lic.id}')">Excluir</button>
-            </div>
-            <div class="card-body py-3">
-                <div class="row align-items-center">
-                    <div class="col-md-8 border-end">
-                        <small class="text-muted d-block mb-1">${lic.cid || '---'} - ${lic.unid_nome || '---'}</small>
-                        <h6 class="fw-bold mb-2">${lic.obj || 'Sem descrição'}</h6>
-                        <div class="d-flex gap-2">
-                            <span class="badge bg-secondary">UASG: ${lic.uasg || 'N/A'}</span>
-                            <span class="badge bg-info text-dark">Venc: ${lic.dt_enc ? new Date(lic.dt_enc).toLocaleString('pt-BR') : 'N/A'}</span>
-                        </div>
-                    </div>
-                    <div class="col-md-4 text-center">
-                        <small class="text-muted">VALOR ESTIMADO TOTAL</small>
-                        <h5 class="fw-bold text-primary mb-0">R$ ${valorFinal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</h5>
-                        <button class="btn btn-sm btn-primary mt-3 fw-bold" onclick="abrirItens('${lic.id}')">DETALHAR ${totalItens} ITENS</button>
-                    </div>
-                </div>
-             </div>`;
-        container.appendChild(div);
-    });
-
-    totalPages = Math.ceil(filteredData.length / itemsPerPage) || 1;
-    document.getElementById('totalPages').textContent = totalPages;
-    document.getElementById('pageInput').value = currentPage;
+        const res = await fetch('pregacoes_pharma_limpos.json.gz');
+        const buffer = await res.arrayBuffer();
+        allData = JSON.parse(pako.ungzip(new Uint8Array(buffer), { to: 'string' }));
+        allData.sort((a,b) => new Date(b.dt_enc) - new Date(a.dt_enc));
+        filteredData = [...allData];
+        render();
+    } catch(e) { console.error(e); }
 }
 
-function filtrar() {
-    const dataEnc = document.getElementById('filterData').value;
-    const uf = document.getElementById('filterUF').value.toUpperCase();
-    const cid = document.getElementById('filterCidade').value.toUpperCase();
-    const org = document.getElementById('filterOrgao').value.toUpperCase();
-    const edt = document.getElementById('filterEdital').value.toUpperCase();
+function render() {
+    const container = document.getElementById('monitor-content');
+    container.innerHTML = '';
+    filteredData.forEach(lic => {
+        let qtdMeEpp = 0, total = lic.itens?.length || 0;
+        lic.itens?.forEach(it => { if([1,2,3].includes(it.benef)) qtdMeEpp++; });
+        
+        let badgeTipo = qtdMeEpp === total ? '<span class="badge-tipo badge-exclusivo">EXCLUSIVO ME/EPP</span>' : 
+                        qtdMeEpp > 0 ? '<span class="badge-tipo badge-parcial">ME/EPP PARCIAL</span>' : 
+                        '<span class="badge-tipo badge-amplo">AMPLA PARTICIPAÇÃO</span>';
 
-    filteredData = allData.filter(lic => {
-        const dataLic = lic.dt_enc ? lic.dt_enc.split('T')[0] : '';
-        return (!dataEnc || dataLic === dataEnc) &&
-               (!uf || (lic.uf || '').toUpperCase().includes(uf)) &&
-               (!cid || (lic.cid || '').toUpperCase().includes(cid)) &&
-               (!org || (lic.org || '').toUpperCase().includes(org) || (lic.uasg || '').includes(org)) &&
-               (!edt || (lic.edit || '').toUpperCase().includes(edt));
+        const div = document.createElement('div');
+        div.className = 'card card-licitacao';
+        div.innerHTML = `
+            <div class="header-card d-flex justify-content-between">
+                <div><span class="badge-uf">${lic.uf}</span> <b>${lic.org}</b> ${lic.alerta_data ? '<span class="alerta-pisca">ADIADO</span>' : ''}</div>
+                <div>${badgeTipo}</div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-9">
+                        <small class="text-muted">${lic.cid} | UASG: ${lic.uasg}</small>
+                        <p class="mb-1"><b>${lic.obj}</b></p>
+                        <small>Edital: ${lic.edit} | Vencimento: ${new Date(lic.dt_enc).toLocaleString()}</small>
+                    </div>
+                    <div class="col-md-3 text-end">
+                        <button class="btn btn-primary btn-sm" onclick="abrirItens('${lic.id}')">DETALHAR ${total} ITENS</button>
+                    </div>
+                </div>
+            </div>`;
+        container.appendChild(div);
     });
-    currentPage = 1;
-    renderMonitor();
 }
 
 function abrirItens(id) {
     const lic = allData.find(x => x.id === id);
-    if (!lic) return;
+    document.getElementById('modalTitle').innerText = lic.org;
+    let html = `<table class="table table-sm table-bordered" style="font-size:0.8rem"><thead><tr class="table-dark"><th>#</th><th>Descrição</th><th>ME/EPP</th><th>Qtd</th><th>Valor Est.</th></tr></thead><tbody>`;
     
-    document.getElementById('modalTitle').innerText = `Itens: ${lic.org} (Edital ${lic.edit})`;
-    document.getElementById('linkPncp').href = lic.link || '#';
-
-    // Coluna "ME/EPP" reduzida para ganhar espaço
-    let html = `<div class="table-responsive"><table class="table table-sm table-bordered table-itens"><thead class="table-dark"> 
-        <tr><th>#</th><th>Descrição</th><th>✓</th><th style="width: 80px;">ME/EPP</th><th>Qtd</th><th>Est. Unit.</th><th>Final Unit.</th><th>Total</th></tr></thead><tbody>`;
-
-    (lic.itens || []).forEach(it => {
-        const formatacaoPython = compatData[lic.id]?.itens_formatados[it.n];
-        const isCompat = !!formatacaoPython;
-        
-        // Retornando ao padrão SIM/NÃO com cores
-        const txtMeEpp = [1,2,3].includes(parseInt(it.benef)) 
-            ? '<span class="benef-sim">SIM</span>' // Vermelho (Exclusivo/Cota)
-            : '<span class="benef-nao">NÃO</span>'; // Verde (Ampla)
-        
-        const descExibicao = isCompat ? formatacaoPython : it.d;
-
-        html += `<tr class="${isCompat ? 'item-compativel' : ''}">
+    lic.itens.forEach(it => {
+        const formatado = compatData[lic.id]?.[it.n];
+        const meEpp = [1,2,3].includes(it.benef) ? '<span class="benef-sim">SIM</span>' : '<span class="benef-nao">NÃO</span>';
+        html += `<tr class="${formatado ? 'item-compativel' : ''}">
             <td>${it.n}</td>
-            <td>${isCompat ? '<span class="compat-indicador">✓</span>' : ''}${descExibicao}</td>
-            <td class="text-center">${isCompat ? '✅' : '-'}</td>
-            <td class="text-center">${txtMeEpp}</td> <td>${it.q} ${it.u}</td>
-            <td>R$ ${parseFloat(it.v_est).toLocaleString('pt-BR', {minimumFractionDigits: 4})}</td>
-            <td>${it.res_val ? 'R$ ' + parseFloat(it.res_val).toLocaleString('pt-BR', {minimumFractionDigits: 4}) : '---'}</td>
-            <td class="fw-bold">R$ ${((parseFloat(it.res_val) || parseFloat(it.v_est)) * parseFloat(it.q)).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+            <td>${formatado || it.d}</td>
+            <td class="text-center">${meEpp}</td>
+            <td>${it.q} ${it.u}</td>
+            <td>R$ ${it.v_est.toLocaleString()}</td>
         </tr>`;
     });
-
-    document.getElementById('modalBody').innerHTML = html + '</tbody></table></div>';
+    document.getElementById('modalBody').innerHTML = html + '</tbody></table>';
     modalObj.show();
 }
 
-function irParaPagina() {
-    let p = parseInt(document.getElementById('pageInput').value) || 1;
-    currentPage = Math.max(1, Math.min(p, totalPages));
-    renderMonitor();
-    window.scrollTo(0,0);
+function filtrar() {
+    const org = document.getElementById('filterOrgao').value.toUpperCase();
+    const cid = document.getElementById('filterCidade').value.toUpperCase();
+    const uf = document.getElementById('filterUF').value.toUpperCase();
+    const dt = document.getElementById('filterData').value;
+    filteredData = allData.filter(l => 
+        (!org || l.org.includes(org) || l.uasg.includes(org)) &&
+        (!cid || l.cid.includes(cid)) &&
+        (!uf || l.uf.includes(uf)) &&
+        (!dt || l.dt_enc.includes(dt))
+    );
+    render();
 }
 
-function limparFiltros() {
-    document.querySelectorAll('input').forEach(i => i.value = '');
-    filteredData = [...allData];
-    currentPage = 1;
-    renderMonitor();
-}
-
-function excluirLicitacao(id) {
-    if(confirm("Remover licitação?")) { allData = allData.filter(x => x.id !== id); filtrar(); }
-}
-
-function abrirInclusaoManual() { modalInclusaoObj.show(); }
-
-async function processarInclusaoManual() {
-    const link = document.getElementById('inputLinkPncp').value.trim();
-    const token = document.getElementById('inputGithubToken').value.trim();
-    if (!link || !token) return;
-
-    try {
-        const urlFile = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE_PATH}`;
-        const resGet = await fetch(urlFile, { headers: { 'Authorization': `token ${token}` } });
-        let sha = ""; if (resGet.ok) { const d = await resGet.json(); sha = d.sha; }
-
-        const resPut = await fetch(urlFile, {
-            method: 'PUT',
-            headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: "Inclusão manual", content: btoa(link + "\n"), sha: sha })
-        });
-        if (resPut.ok) modalInclusaoObj.hide();
-    } catch (e) { alert("Erro ao salvar no GitHub"); }
-}
-
-document.getElementById('prevPage').onclick = () => { if(currentPage > 1) { currentPage--; renderMonitor(); window.scrollTo(0,0); } };
-document.getElementById('nextPage').onclick = () => { if(currentPage < totalPages) { currentPage++; renderMonitor(); window.scrollTo(0,0); } };
+function limparFiltros() { document.querySelectorAll('input').forEach(i => i.value = ''); filteredData = [...allData]; render(); }
 
 loadData();
 </script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
