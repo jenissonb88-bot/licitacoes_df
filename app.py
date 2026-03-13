@@ -5,6 +5,7 @@ import unicodedata
 import gzip
 import concurrent.futures
 import sys
+import time
 from datetime import datetime, timedelta, date
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -15,7 +16,9 @@ ARQ_DICIONARIO = 'dicionario_ouro.json'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_LOCK = 'execucao.lock'
 ARQ_LOG = 'log_captura.txt'
-MAXWORKERS = 10
+
+# ⬇️ REDUZIDO PARA 4 PARA EVITAR BLOQUEIO DO FIREWALL DO PNCP
+MAXWORKERS = 4 
 
 # --- GEOGRAFIA DE PRECISÃO ---
 NE_ESTADOS = ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE']
@@ -49,27 +52,42 @@ def log_mensagem(msg):
 
 def criar_sessao():
     s = requests.Session()
-    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/24.6'})
-    retry = Retry(total=5, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
+    s.headers.update({'Accept': 'application/json', 'User-Agent': 'Sniper Pharma/24.7'})
+    # ⬆️ BACKOFF FACTOR = 1 (Espera mais tempo antes de tentar de novo)
+    retry = Retry(total=5, backoff_factor=1, status_forcelist=[403, 429, 500, 502, 503, 504])
     s.mount('https://', HTTPAdapter(max_retries=retry))
     return s
 
 def buscar_todos_os_itens(cnpj, ano, seq, session):
-    """Garante a busca de todos os itens, sem limite de páginas"""
     todos_itens = []
     pagina_item = 1
+    erro_msg = None
+    
     while True:
         url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
         try:
-            r = session.get(url, params={'pagina': pagina_item, 'tamanhoPagina': 500}, timeout=20)
-            if r.status_code != 200: break
+            # ⬆️ TIMEOUT AUMENTADO PARA 30 SEGUNDOS
+            r = session.get(url, params={'pagina': pagina_item, 'tamanhoPagina': 500}, timeout=30)
+            if r.status_code != 200: 
+                erro_msg = f"HTTP {r.status_code}"
+                break
+            
             dados = r.json().get('data', [])
             if not dados: break
+            
             todos_itens.extend(dados)
             if len(dados) < 500: break
             pagina_item += 1
-        except: break
-    return todos_itens
+            time.sleep(0.5) # Breve pausa para não irritar o firewall
+            
+        except requests.exceptions.ReadTimeout:
+            erro_msg = "Timeout (Servidor lento)"
+            break
+        except Exception as e: 
+            erro_msg = f"Erro de conexão"
+            break
+            
+    return todos_itens, erro_msg
 
 def processar_licitacao(lic, session, termos_ouro):
     try:
@@ -79,12 +97,10 @@ def processar_licitacao(lic, session, termos_ouro):
         obj_norm = normalize(obj_raw)
         edit = f"{lic.get('numeroCompra')}/{lic.get('anoCompra')}"
 
-        # 1. Guilhotina Geográfica e de Vetos
         if uf in ESTADOS_BLOQUEADOS: return ('VETO_GEO', None)
         for v in VETOS_ABSOLUTOS:
             if v in obj_norm: return ('VETO_TITULO', None)
 
-        # 2. Radar de Interesse
         tem_med = any(t in obj_norm for t in WL_MEDICAMENTOS)
         tem_mmh = any(t in obj_norm for t in WL_NUTRI_MMH)
         tem_vago = any(t in obj_norm for t in WL_TERMOS_VAGOS)
@@ -99,13 +115,15 @@ def processar_licitacao(lic, session, termos_ouro):
         else:
             return ('FORA_TEMATICA', None)
 
-        # 3. Busca de Itens Exaustiva
         cnpj = lic['orgaoEntidade']['cnpj']
         ano = lic['anoCompra']
         seq = lic['sequencialCompra']
         
-        itens_brutos = buscar_todos_os_itens(cnpj, ano, seq, session)
-        if not itens_brutos: return ('ERRO_API', None)
+        # Recebendo os itens e possíveis erros
+        itens_brutos, erro_api = buscar_todos_os_itens(cnpj, ano, seq, session)
+        
+        if erro_api: 
+            return ('ERRO_API', f"{edit} -> {erro_api}")
 
         teve_match = False
         itens_mapeados = []
@@ -120,7 +138,6 @@ def processar_licitacao(lic, session, termos_ouro):
                 'v_est': it.get('valorUnitarioEstimado', 0), 'sit': 'EM ANDAMENTO'
             })
 
-        # 4. Juiz Final
         if precisa_checar_itens and not teve_match:
             return ('VETO_DICIONARIO', None)
 
@@ -132,7 +149,7 @@ def processar_licitacao(lic, session, termos_ouro):
         }
         return ('CAPTURADO', dados_finais)
 
-    except Exception as e: return ('ERRO_API', None)
+    except Exception as e: return ('ERRO_API', "Exceção Interna")
 
 if __name__ == '__main__':
     if os.path.exists(ARQ_LOCK): sys.exit(0)
@@ -149,7 +166,7 @@ if __name__ == '__main__':
             with open(ARQ_CHECKPOINT, 'r') as f: data_alvo = f.read().strip()
         else: data_alvo = date.today().strftime('%Y-%m-%d')
 
-        log_mensagem(f"🚀 Iniciando Varredura Estratégica: {data_alvo}")
+        log_mensagem(f"🚀 Iniciando Varredura Antibloqueio: {data_alvo}")
         
         with open(ARQ_DICIONARIO, 'r', encoding='utf-8') as f:
             termos_ouro = [normalize(t) for t in json.load(f)]
@@ -163,7 +180,6 @@ if __name__ == '__main__':
         dia_api = data_alvo.replace('-', '')
         pagina = 1
         
-        # --- PAINEL DE ESTATÍSTICAS ---
         stats = {
             'CAPTURADO': 0, 'VETO_GEO': 0, 'VETO_TITULO': 0, 
             'VETO_DICIONARIO': 0, 'FORA_TEMATICA': 0, 'ERRO_API': 0
@@ -182,12 +198,14 @@ if __name__ == '__main__':
                 futuros = {exe.submit(processar_licitacao, l, session, termos_ouro): l for l in lics}
                 for f in concurrent.futures.as_completed(futuros):
                     status, resultado = f.result()
-                    
                     stats[status] += 1
                     
                     if status == 'CAPTURADO':
                         banco[resultado['id']] = resultado
                         log_mensagem(f"   🎯 ALVO NOVO: {resultado['edit']} - {resultado['org'][:30]}")
+                    elif status == 'ERRO_API':
+                        # Agora ele avisa exatamente QUAL edital falhou e POR QUÊ
+                        log_mensagem(f"   ⚠️ API FALHOU: {resultado}")
 
             if len(lics) < 50: break
             pagina += 1
@@ -199,7 +217,6 @@ if __name__ == '__main__':
             proximo = (datetime.strptime(data_alvo, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
             with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo)
             
-        # --- IMPRESSÃO DO DASHBOARD FINAL ---
         total_analisado = sum(stats.values())
         log_mensagem("="*50)
         log_mensagem(f"📊 RESUMO DIÁRIO: {data_alvo}")
