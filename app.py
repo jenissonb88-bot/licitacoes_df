@@ -74,7 +74,7 @@ def buscar_todos_os_itens(cnpj, ano, seq, session):
     while True:
         url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
         try:
-            # 🕰️ PAUSA ALEATÓRIA: Finge o clique humano para não disparar o Firewall
+            # 🕰️ PAUSA ALEATÓRIA
             time.sleep(random.uniform(0.5, 1.5))
             
             r = session.get(url, params={'pagina': pagina_item, 'tamanhoPagina': 500}, timeout=30)
@@ -83,7 +83,16 @@ def buscar_todos_os_itens(cnpj, ano, seq, session):
                 erro_msg = f"HTTP {r.status_code}"
                 break
             
-            dados = r.json().get('data', [])
+            json_resp = r.json()
+            
+            # ✅ CORREÇÃO: Lida com a inconsistência da API do PNCP
+            if isinstance(json_resp, list):
+                dados = json_resp # Se a API já mandar a lista direta
+            elif isinstance(json_resp, dict):
+                dados = json_resp.get('data', []) # Se mandar dentro de "data"
+            else:
+                dados = []
+                
             if not dados: break
             
             todos_itens.extend(dados)
