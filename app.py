@@ -12,14 +12,12 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 # --- CONFIGURAÇÕES ORIGINAIS E DE SEGURANÇA ---
-# ✅ Ficheiro temporário para alimentar o limpeza.py
 ARQDADOS = 'dadosoportunidades.json.gz' 
 ARQ_DICIONARIO = 'dicionario_ouro.json'
 ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_LOCK = 'execucao.lock'
 ARQ_LOG = 'log_captura.txt'
 
-# Reduzido para 4 para evitar que o Firewall do Governo bloqueie o IP
 MAXWORKERS = 4 
 
 # --- GEOGRAFIA DE PRECISÃO ---
@@ -39,7 +37,7 @@ VETOS_ABSOLUTOS = [normalize(x) for x in [
     "PRESTACAO DE SERVICO", "TERCEIRIZACAO", "LOCACAO", "ASSINATURA", "LIMPEZA",
     "VIGILANCIA", "SEGURANCA", "OFICINA",
     
-    # Saúde (Fora do escopo de Medicamentos/MMH padrão)
+    # Saúde (Fora do escopo)
     "EXAME", "RADIOLOGIA", "IMAGEM", "GASES MEDICINAIS", "OXIGENIO", 
     "ODONTOLOGICO", "PROTESE", "ORTESE", "CILINDRO",
     
@@ -63,7 +61,6 @@ def log_mensagem(msg):
 
 def criar_sessao():
     s = requests.Session()
-    # 🎭 CAMUFLAGEM
     s.headers.update({
         'Accept': 'application/json', 
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -156,16 +153,17 @@ def processar_licitacao(lic, session, termos_ouro):
             if not teve_match and any(termo in desc_item for termo in termos_ouro):
                 teve_match = True
             
+            # ✅ CAPTURA DE ME/EPP
             itens_mapeados.append({
                 'n': it.get('numeroItem'), 'd': it.get('descricao', ''),
                 'q': it.get('quantidade'), 'u': it.get('unidadeMedida', 'UN'),
-                'v_est': it.get('valorUnitarioEstimado', 0), 'sit': 'EM ANDAMENTO'
+                'v_est': it.get('valorUnitarioEstimado', 0), 'sit': 'EM ANDAMENTO',
+                'benef': it.get('tipoBeneficio', 0) 
             })
 
         if precisa_checar_itens and not teve_match:
             return ('VETO_DICIONARIO', None)
 
-        # ✅ DADOS FINAIS CORRIGIDOS (com Cidade, UASG e Unidade Nome)
         cid = uo.get('municipioNome', '---')
         uasg = uo.get('codigoUnidade', 'N/A')
         unid_nome = uo.get('nomeUnidade', '---')
