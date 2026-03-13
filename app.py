@@ -12,7 +12,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 # --- CONFIGURAÇÕES ORIGINAIS E DE SEGURANÇA ---
-# ✅ CORREÇÃO AQUI: Salvar no ficheiro intermédio para o limpeza.py ler!
+# ✅ GUARDA NA BASE TEMPORÁRIA PARA O LIMPEZA.PY
 ARQDADOS = 'dadosoportunidades.json.gz' 
 ARQ_DICIONARIO = 'dicionario_ouro.json'
 ARQ_CHECKPOINT = 'checkpoint.txt'
@@ -33,7 +33,6 @@ def normalize(t):
     return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
 
 # --- VETOS ABSOLUTOS ---
-# Retirados "SISTEMA" e "MANUTENCAO" para evitar a perda de Registos de Preços
 VETOS_ABSOLUTOS = [normalize(x) for x in [
     "SOFTWARE", "IMPLANTACAO", "LICENCA", "COMPUTADOR", "INFORMATICA", "IMPRESSAO",
     "PRESTACAO DE SERVICO", "TERCEIRIZACAO", "LOCACAO", "ASSINATURA", "LIMPEZA",
@@ -62,7 +61,6 @@ def criar_sessao():
         'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
         'Connection': 'keep-alive'
     })
-    # Maior paciência (backoff_factor=2) antes de tentar de novo
     retry = Retry(total=5, backoff_factor=2, status_forcelist=[403, 429, 500, 502, 503, 504])
     s.mount('https://', HTTPAdapter(max_retries=retry))
     return s
@@ -75,7 +73,7 @@ def buscar_todos_os_itens(cnpj, ano, seq, session):
     while True:
         url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
         try:
-            # 🕰️ PAUSA ALEATÓRIA: Finge o clique humano para não disparar o Firewall
+            # 🕰️ PAUSA ALEATÓRIA: Evita o bloqueio de IP
             time.sleep(random.uniform(0.5, 1.5))
             
             r = session.get(url, params={'pagina': pagina_item, 'tamanhoPagina': 500}, timeout=30)
@@ -86,7 +84,7 @@ def buscar_todos_os_itens(cnpj, ano, seq, session):
             
             json_resp = r.json()
             
-            # ✅ CORREÇÃO: Lida com a inconsistência da API do PNCP (List vs Dict)
+            # ✅ CORREÇÃO DA API PNCP: Lida com Listas ou Dicionários
             if isinstance(json_resp, list):
                 dados = json_resp
             elif isinstance(json_resp, dict):
@@ -117,12 +115,10 @@ def processar_licitacao(lic, session, termos_ouro):
         obj_norm = normalize(obj_raw)
         edit = f"{lic.get('numeroCompra')}/{lic.get('anoCompra')}"
 
-        # 1. Filtros Geográficos e de Objeto
         if uf in ESTADOS_BLOQUEADOS: return ('VETO_GEO', None)
         for v in VETOS_ABSOLUTOS:
             if v in obj_norm: return ('VETO_TITULO', None)
 
-        # 2. Avaliação de Temática
         tem_med = any(t in obj_norm for t in WL_MEDICAMENTOS)
         tem_mmh = any(t in obj_norm for t in WL_NUTRI_MMH)
         tem_vago = any(t in obj_norm for t in WL_TERMOS_VAGOS)
@@ -137,7 +133,6 @@ def processar_licitacao(lic, session, termos_ouro):
         else:
             return ('FORA_TEMATICA', None)
 
-        # 3. Extração Exaustiva de Itens
         cnpj = lic['orgaoEntidade']['cnpj']
         ano = lic['anoCompra']
         seq = lic['sequencialCompra']
@@ -160,7 +155,6 @@ def processar_licitacao(lic, session, termos_ouro):
                 'v_est': it.get('valorUnitarioEstimado', 0), 'sit': 'EM ANDAMENTO'
             })
 
-        # 4. Decisão de Captura
         if precisa_checar_itens and not teve_match:
             return ('VETO_DICIONARIO', None)
 
@@ -184,7 +178,6 @@ if __name__ == '__main__':
         parser.add_argument('--start', type=str); parser.add_argument('--end', type=str)
         args = parser.parse_args()
         
-        # Define a data a pesquisar
         if args.start: data_alvo = args.start
         elif os.path.exists(ARQ_CHECKPOINT):
             with open(ARQ_CHECKPOINT, 'r') as f: data_alvo = f.read().strip()
@@ -204,7 +197,6 @@ if __name__ == '__main__':
         dia_api = data_alvo.replace('-', '')
         pagina = 1
         
-        # Painel de métricas
         stats = {
             'CAPTURADO': 0, 'VETO_GEO': 0, 'VETO_TITULO': 0, 
             'VETO_DICIONARIO': 0, 'FORA_TEMATICA': 0, 'ERRO_API': 0
@@ -226,24 +218,36 @@ if __name__ == '__main__':
                     stats[status] += 1
                     
                     if status == 'CAPTURADO':
+                        # 🚨 DETETOR DE MUDANÇAS NAS DATAS 🚨
+                        if resultado['id'] in banco:
+                            lic_antiga = banco[resultado['id']]
+                            antiga_data = lic_antiga.get('dt_enc')
+                            nova_data = resultado.get('dt_enc')
+                            
+                            # Se a data mudou
+                            if antiga_data and nova_data and antiga_data != nova_data:
+                                resultado['alerta_data'] = True
+                                resultado['dt_enc_antiga'] = antiga_data
+                                log_mensagem(f"   ⚠️ DATA ALTERADA: {resultado['edit']} (Era {antiga_data})")
+                            
+                            # Mantém o alerta caso já tenha sido alterada numa varredura anterior
+                            elif lic_antiga.get('alerta_data'):
+                                resultado['alerta_data'] = True
+                                resultado['dt_enc_antiga'] = lic_antiga.get('dt_enc_antiga')
+
                         banco[resultado['id']] = resultado
-                        log_mensagem(f"   🎯 ALVO NOVO: {resultado['edit']} - {resultado['org'][:30]}")
+                        log_mensagem(f"   🎯 ALVO REGISTADO: {resultado['edit']} - {resultado['org'][:30]}")
+                        
                     elif status == 'ERRO_API':
                         log_mensagem(f"   ⚠️ API FALHOU: {resultado}")
 
             if len(lics) < 50: break
             pagina += 1
 
-        # Guarda na base de dados intermédia (formato gzip) para o limpeza.py ler
+        # Guarda no ficheiro que o 'limpeza.py' vai procurar
         with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
             json.dump(list(banco.values()), f, ensure_ascii=False)
-        
-        # Atualiza o ficheiro de checkpoint
-        if not args.start:
-            proximo = (datetime.strptime(data_alvo, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
-            with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo)
             
-        # Apresenta o Resumo Diário
         total_analisado = sum(stats.values())
         log_mensagem("="*50)
         log_mensagem(f"📊 RESUMO DIÁRIO: {data_alvo}")
