@@ -12,7 +12,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 # --- CONFIGURAÇÕES ORIGINAIS E DE SEGURANÇA ---
-# ✅ GUARDA NA BASE TEMPORÁRIA PARA O LIMPEZA.PY
+# ✅ Ficheiro temporário para alimentar o limpeza.py
 ARQDADOS = 'dadosoportunidades.json.gz' 
 ARQ_DICIONARIO = 'dicionario_ouro.json'
 ARQ_CHECKPOINT = 'checkpoint.txt'
@@ -54,7 +54,7 @@ def log_mensagem(msg):
 
 def criar_sessao():
     s = requests.Session()
-    # 🎭 CAMUFLAGEM: Finge ser um utilizador real no Google Chrome
+    # 🎭 CAMUFLAGEM
     s.headers.update({
         'Accept': 'application/json', 
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -73,7 +73,6 @@ def buscar_todos_os_itens(cnpj, ano, seq, session):
     while True:
         url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
         try:
-            # 🕰️ PAUSA ALEATÓRIA: Evita o bloqueio de IP
             time.sleep(random.uniform(0.5, 1.5))
             
             r = session.get(url, params={'pagina': pagina_item, 'tamanhoPagina': 500}, timeout=30)
@@ -84,7 +83,6 @@ def buscar_todos_os_itens(cnpj, ano, seq, session):
             
             json_resp = r.json()
             
-            # ✅ CORREÇÃO DA API PNCP: Lida com Listas ou Dicionários
             if isinstance(json_resp, list):
                 dados = json_resp
             elif isinstance(json_resp, dict):
@@ -158,24 +156,24 @@ def processar_licitacao(lic, session, termos_ouro):
         if precisa_checar_itens and not teve_match:
             return ('VETO_DICIONARIO', None)
 
-        dados_finais = {
-            # 4. Decisão de Captura
-        if precisa_checar_itens and not teve_match:
-            return ('VETO_DICIONARIO', None)
-
-        # ✅ ADICIONADO: Captura de Cidade, UASG e Nome da Unidade
+        # ✅ DADOS FINAIS CORRIGIDOS (com Cidade, UASG e Unidade Nome)
         cid = uo.get('municipioNome', '---')
         uasg = uo.get('codigoUnidade', 'N/A')
         unid_nome = uo.get('nomeUnidade', '---')
 
         dados_finais = {
-            'id': f"{cnpj}{ano}{seq}", 'dt_enc': lic.get('dataEncerramentoProposta'),
-            'uf': uf, 'org': lic.get('orgaoEntidade', {}).get('razaoSocial', '---'),
-            'cid': cid,           # <-- NOVA CHAVE
-            'uasg': uasg,         # <-- NOVA CHAVE
-            'unid_nome': unid_nome, # <-- NOVA CHAVE
-            'obj': obj_raw, 'edit': edit, 'link': f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
-            'itens': itens_mapeados, 'sit_global': 'DIVULGADA'
+            'id': f"{cnpj}{ano}{seq}", 
+            'dt_enc': lic.get('dataEncerramentoProposta'),
+            'uf': uf, 
+            'org': lic.get('orgaoEntidade', {}).get('razaoSocial', '---'),
+            'cid': cid,
+            'uasg': uasg,
+            'unid_nome': unid_nome,
+            'obj': obj_raw, 
+            'edit': edit, 
+            'link': f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
+            'itens': itens_mapeados, 
+            'sit_global': 'DIVULGADA'
         }
         return ('CAPTURADO', dados_finais)
 
@@ -237,13 +235,11 @@ if __name__ == '__main__':
                             antiga_data = lic_antiga.get('dt_enc')
                             nova_data = resultado.get('dt_enc')
                             
-                            # Se a data mudou
                             if antiga_data and nova_data and antiga_data != nova_data:
                                 resultado['alerta_data'] = True
                                 resultado['dt_enc_antiga'] = antiga_data
                                 log_mensagem(f"   ⚠️ DATA ALTERADA: {resultado['edit']} (Era {antiga_data})")
                             
-                            # Mantém o alerta caso já tenha sido alterada numa varredura anterior
                             elif lic_antiga.get('alerta_data'):
                                 resultado['alerta_data'] = True
                                 resultado['dt_enc_antiga'] = lic_antiga.get('dt_enc_antiga')
@@ -257,9 +253,12 @@ if __name__ == '__main__':
             if len(lics) < 50: break
             pagina += 1
 
-        # Guarda no ficheiro que o 'limpeza.py' vai procurar
         with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
             json.dump(list(banco.values()), f, ensure_ascii=False)
+            
+        if not args.start:
+            proximo = (datetime.strptime(data_alvo, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+            with open(ARQ_CHECKPOINT, 'w') as f: f.write(proximo)
             
         total_analisado = sum(stats.values())
         log_mensagem("="*50)
