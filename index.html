@@ -359,16 +359,18 @@ function abrirItens(id) {
     document.getElementById('modalTitle').innerText = `Itens: ${lic.org} (Edital ${lic.edit})`;
     document.getElementById('linkPncp').href = lic.link || '#';
 
+    // Coluna "ME/EPP" reduzida para ganhar espaço
     let html = `<div class="table-responsive"><table class="table table-sm table-bordered table-itens"><thead class="table-dark"> 
-        <tr><th>#</th><th>Descrição</th><th>✓</th><th>Participação</th><th>Qtd</th><th>Est. Unit.</th><th>Final Unit.</th><th>Total</th></tr></thead><tbody>`;
+        <tr><th>#</th><th>Descrição</th><th>✓</th><th style="width: 80px;">ME/EPP</th><th>Qtd</th><th>Est. Unit.</th><th>Final Unit.</th><th>Total</th></tr></thead><tbody>`;
 
     (lic.itens || []).forEach(it => {
         const formatacaoPython = compatData[lic.id]?.itens_formatados[it.n];
         const isCompat = !!formatacaoPython;
         
-        const txtParticipacao = [1,2,3].includes(parseInt(it.benef)) 
-            ? '<span class="benef-sim">EXCLUSIVO/COTA</span>' 
-            : '<span class="benef-nao">AMPLA</span>';
+        // Retornando ao padrão SIM/NÃO com cores
+        const txtMeEpp = [1,2,3].includes(parseInt(it.benef)) 
+            ? '<span class="benef-sim">SIM</span>' // Vermelho (Exclusivo/Cota)
+            : '<span class="benef-nao">NÃO</span>'; // Verde (Ampla)
         
         const descExibicao = isCompat ? formatacaoPython : it.d;
 
@@ -376,8 +378,7 @@ function abrirItens(id) {
             <td>${it.n}</td>
             <td>${isCompat ? '<span class="compat-indicador">✓</span>' : ''}${descExibicao}</td>
             <td class="text-center">${isCompat ? '✅' : '-'}</td>
-            <td>${txtParticipacao}</td>
-            <td>${it.q} ${it.u}</td>
+            <td class="text-center">${txtMeEpp}</td> <td>${it.q} ${it.u}</td>
             <td>R$ ${parseFloat(it.v_est).toLocaleString('pt-BR', {minimumFractionDigits: 4})}</td>
             <td>${it.res_val ? 'R$ ' + parseFloat(it.res_val).toLocaleString('pt-BR', {minimumFractionDigits: 4}) : '---'}</td>
             <td class="fw-bold">R$ ${((parseFloat(it.res_val) || parseFloat(it.v_est)) * parseFloat(it.q)).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
