@@ -7,6 +7,79 @@ import os
 import re
 from math import ceil
 
+def destacar_item_inteligente(descricao_original, termos_encontrados):
+    """
+    Aplica Destaque Baseado em Tokens com Regra de Hierarquia (Chave Mestra) 
+    e Expansão de Fronteira para concentrações.
+    """
+    if not termos_encontrados:
+        return descricao_original
+
+    STOPWORDS = {"DE", "DO", "DA", "COM", "SEM", "PARA", "EM", "E", "OU", "A", "O"}
+    
+    # 1. Quebra os termos encontrados em palavras soltas (Tokens)
+    tokens = set()
+    for termo in termos_encontrados:
+        for palavra in termo.split():
+            if palavra not in STOPWORDS and len(palavra) > 1:
+                tokens.add(palavra)
+                
+    if not tokens:
+        return descricao_original
+
+    # 2. Separar Fármacos/Formas (letras) de Dosagens (números)
+    farmacos_formas = []
+    dosagens = []
+    for t in tokens:
+        if any(char.isdigit() for char in t):
+            dosagens.append(t)
+        else:
+            farmacos_formas.append(t)
+
+    # 3. REGRA 2: A Chave Mestra (Obriga a ter pelo menos uma palavra não-numérica no edital)
+    chave_mestra_ativa = False
+    regex_farmacos = []
+    
+    for f in farmacos_formas:
+        padrao = re.escape(f)
+        # Regras flexíveis de sufixo (INO/INA, PAM/PAN, ONA/ONE)
+        padrao = re.sub(r'PAM\\b', r'PA[MN]', padrao)
+        padrao = re.sub(r'PAN\\b', r'PA[MN]', padrao)
+        padrao = re.sub(r'INO\\b', r'IN[OA]', padrao)
+        padrao = re.sub(r'INA\\b', r'IN[OA]', padrao)
+        padrao = re.sub(r'ONA\\b', r'ON[AE]', padrao)
+        padrao = re.sub(r'ONE\\b', r'ON[AE]', padrao)
+        regex_farmacos.append(padrao)
+        
+        # Testa se essa palavra-chave (Fármaco/Forma) existe no texto original
+        if not chave_mestra_ativa and re.search(rf'\b{padrao}\b', descricao_original, re.IGNORECASE):
+            chave_mestra_ativa = True
+
+    # Se há fármacos no match, mas nenhum foi encontrado no texto (falso positivo), aborta o destaque.
+    if len(farmacos_formas) > 0 and not chave_mestra_ativa:
+        return descricao_original
+
+    # 4. REGRA 1: Construir os padrões das Dosagens com Expansão de Fronteira
+    regex_dosagens = []
+    for d in dosagens:
+        # Captura a dosagem exata (ex: 20MG) e opcionalmente estica se houver barra (ex: /G, /ML, / 2ML)
+        # O \s* permite que ele pegue mesmo se o pregoeiro digitar com espaços "20MG / G"
+        padrao_dos = rf"{re.escape(d)}(?:\s*/\s*[A-Z0-9]+)?"
+        regex_dosagens.append(padrao_dos)
+
+    # 5. Juntar tudo num único Super Regex
+    todos_padroes = regex_farmacos + regex_dosagens
+    if not todos_padroes:
+        return descricao_original
+        
+    # O "OR" (|) garante que ele procure todas as palavras simultaneamente sem sobrepor tags HTML
+    super_regex = r'\b(' + '|'.join(todos_padroes) + r')\b'
+    
+    # 6. Substituição Única Adicionando o Destaque (<mark> e <b> para negrito)
+    texto_destacado = re.sub(super_regex, r'<mark><b>\1</b></mark>', descricao_original, flags=re.IGNORECASE)
+    
+    return texto_destacado
+
 # Configuração de Logs para o GitHub Actions
 logging.basicConfig(
     level=logging.INFO,
@@ -65,11 +138,14 @@ def processar_lote(lote_licitacoes, arquivo_saida_csv, termos_ouro):
                     matches.append(termo)
             
             if matches:
+                # 🚀 AQUI ACONTECE A MÁGICA: Aplica o destaque na descrição antes de salvar!
+                descricao_destacada = destacar_item_inteligente(desc_original, matches)
+
                 resultados_lote.append({
                     'id_licitacao': licitacao.get('id', ''),
                     'orgao': licitacao.get('org', ''),
                     'item_num': item.get('n', ''),
-                    'descricao_item': desc_original,
+                    'descricao_item': descricao_destacada, # <- Salva o texto já com o HTML
                     'termo_encontrado': " | ".join(matches)
                 })
                 
@@ -126,7 +202,7 @@ def main():
         
         progresso = min(100, (i + TAMANHO_LOTE) / total_licitacoes * 100)
         if (i // TAMANHO_LOTE) % 5 == 0:
-            logger.info(f"   ⏳ Progresso: {progresso:.1f}% | Encontrados: {total_matches}")
+            logger.info(f"    ⏳ Progresso: {progresso:.1f}% | Encontrados: {total_matches}")
 
     logger.info(f"✅ Concluído! O relatório '{ARQUIVO_SAIDA}' foi gerado com {total_matches} itens compatíveis.")
 
