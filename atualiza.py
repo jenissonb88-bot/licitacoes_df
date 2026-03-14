@@ -48,7 +48,8 @@ def auditoria_licitacao(lic, session):
     
     # Percorre os itens que ainda não foram homologados
     for it in lic.get('itens', []):
-        if it.get('sit') == "EM ANDAMENTO":
+        # ✅ CORREÇÃO 1: Se estiver vazio, assume "EM ANDAMENTO"
+        if it.get('sit', 'EM ANDAMENTO') == "EM ANDAMENTO":
             resultado = buscar_resultado_no_pncp(lic_id, it.get('n'), session)
             
             if resultado:
@@ -77,8 +78,8 @@ if __name__ == '__main__':
     session = criar_sessao()
     mudancas_totais = 0
     
-    # Filtra apenas quem tem o que auditar para não sobrecarregar
-    pendentes = [l for l in banco if any(it.get('sit') == "EM ANDAMENTO" for it in l.get('itens', []))]
+    # ✅ CORREÇÃO 2: Filtra considerando o padrão "EM ANDAMENTO" para campos vazios
+    pendentes = [l for l in banco if any(it.get('sit', 'EM ANDAMENTO') == "EM ANDAMENTO" for it in l.get('itens', []))]
 
     if not pendentes:
         log_mensagem("✅ Todos os itens já estão homologados.")
