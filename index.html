@@ -299,12 +299,10 @@ function renderMonitor() {
         let badgeClass = compat.percentual >= 70 ? 'compat-alta' : compat.percentual >= 40 ? 'compat-media' : 'compat-baixa';
         if (compat.percentual === 0) badgeClass = 'compat-na';
 
-        // O Alerta de Data alterada continua no topo (padrão)
         const alertaHTML = lic.alerta_data 
             ? `<span class="alerta-pisca" title="Data antiga era: ${formatDate(lic.dt_enc_antiga)}">⏳ ADIADO/ALTERADO</span>` 
             : '';
 
-        // ✅ NOVO: Alerta de Status Global abaixo do Valor Estimado
         let statusGlobalHtml = '';
         const sitGlobal = (lic.sit_global || '').toUpperCase();
         if (sitGlobal && sitGlobal !== 'DIVULGADA' && sitGlobal !== 'EM ANDAMENTO') {
@@ -313,7 +311,6 @@ function renderMonitor() {
             statusGlobalHtml = `<div class="mt-2"><span class="badge ${corBadge} px-3 py-1 text-uppercase">${sitGlobal}</span></div>`;
         }
 
-        // ✅ NOVO: Aviso textual de data abaixo do Valor Estimado
         let avisoDataBaixo = lic.alerta_data ? `<div class="text-danger fw-bold mt-1" style="font-size: 0.75rem;">⚠️ DATA ALTERADA</div>` : '';
 
         div.innerHTML = ` 
@@ -362,7 +359,6 @@ function abrirItens(id) {
     document.getElementById('modalTitle').innerText = `Itens: ${lic.org} (Edital ${lic.edit})`;
     document.getElementById('linkPncp').href = lic.link || '#';
 
-    // 1. AGRUPAMENTO DOS ITENS PELA SITUAÇÃO E FORNECEDOR
     const grupos = {
         fornecedores: {},
         fracassados: [],
@@ -383,14 +379,13 @@ function abrirItens(id) {
 
     let html = '';
 
-    // Função interna para gerar as linhas da tabela (mantendo as regras do ME/EPP)
     const gerarLinhasHTML = (itensLote) => {
         let linhas = '';
         itensLote.forEach(it => {
             const formatacaoPython = compatData[lic.id]?.itens_formatados?.[it.n];
             const isCompat = !!formatacaoPython;
             
-            // Regra do ME/EPP mantida intacta
+            // LÓGICA DO ME/EPP SOLICITADA (1,2,3 = SIM Vermelho / 4,5 = NÃO Verde)
             const txtMeEpp = [1,2,3].includes(parseInt(it.benef)) 
                 ? '<span class="benef-sim">SIM</span>' 
                 : '<span class="benef-nao">NÃO</span>';
@@ -414,9 +409,6 @@ function abrirItens(id) {
 
     const theadHTML = `<thead class="table-dark"><tr><th>#</th><th>Descrição</th><th>✓</th><th style="width: 80px;">ME/EPP</th><th>Qtd</th><th>Est. Unit.</th><th>Final Unit.</th><th>Total</th></tr></thead><tbody>`;
 
-    // 2. MONTAGEM VISUAL DOS GRUPOS
-    
-    // A. Fornecedores (Homologados)
     for (const [forn, itensForn] of Object.entries(grupos.fornecedores)) {
         let subtotal = itensForn.reduce((acc, i) => acc + (parseFloat(i.res_val || 0) * parseFloat(i.q || 0)), 0);
         html += `<div class="table-responsive mb-4 shadow-sm"><table class="table table-sm table-bordered table-itens">`;
@@ -424,14 +416,12 @@ function abrirItens(id) {
         html += theadHTML + gerarLinhasHTML(itensForn) + `</tbody></table></div>`;
     }
 
-    // B. Fracassados / Desertos / Cancelados
     if (grupos.fracassados.length > 0) {
         html += `<div class="table-responsive mb-4 shadow-sm"><table class="table table-sm table-bordered table-itens">`;
         html += `<tr><td colspan="8" class="header-status-deserto py-2 text-center text-uppercase">❌ ITENS FRACASSADOS / DESERTOS / CANCELADOS (${grupos.fracassados.length} itens)</td></tr>`;
         html += theadHTML + gerarLinhasHTML(grupos.fracassados) + `</tbody></table></div>`;
     }
 
-    // C. Em Andamento (Default)
     if (grupos.andamento.length > 0) {
         html += `<div class="table-responsive mb-4 shadow-sm"><table class="table table-sm table-bordered table-itens">`;
         html += `<tr><td colspan="8" class="header-status-andamento py-2 text-center text-uppercase">⏳ ITENS EM ANDAMENTO (${grupos.andamento.length} itens)</td></tr>`;
@@ -459,50 +449,6 @@ function filtrar() {
     });
     currentPage = 1;
     renderMonitor();
-}
-
-function abrirItens(id) {
-    const lic = allData.find(x => x.id === id);
-    if (!lic) return;
-    
-    document.getElementById('modalTitle').innerText = `Itens: ${lic.org} (Edital ${lic.edit})`;
-    document.getElementById('linkPncp').href = lic.link || '#';
-
-    let html = `<div class="table-responsive"><table class="table table-sm table-bordered table-itens"><thead class="table-dark"> 
-        <tr><th>#</th><th>Descrição</th><th>✓</th><th style="width: 80px;">ME/EPP</th><th>Qtd</th><th>Est. Unit.</th><th>Final Unit.</th><th>Total</th></tr></thead><tbody>`;
-
-    (lic.itens || []).forEach(it => {
-        const formatacaoPython = compatData[lic.id]?.itens_formatados[it.n];
-        const isCompat = !!formatacaoPython;
-        
-        // REGRA FINAL: 1, 2, 3 = SIM (Vermelho) | 4, 5 = NÃO (Verde)
-        const cod = parseInt(it.benef);
-        const txtMeEpp = [1, 2, 3].includes(cod) 
-            ? '<span class="benef-sim">SIM</span>' 
-            : '<span class="benef-nao">NÃO</span>';
-        
-        const descExibicao = isCompat ? formatacaoPython : it.d;
-
-        html += `<tr class="${isCompat ? 'item-compativel' : ''}">
-            <td>${it.n}</td>
-            <td>${isCompat ? '<span class="compat-indicador">✓</span>' : ''}${descExibicao}</td>
-            <td class="text-center">${isCompat ? '✅' : '-'}</td>
-            <td class="text-center">${txtMeEpp}</td> <td>${it.q} ${it.u}</td>
-            <td>R$ ${parseFloat(it.v_est).toLocaleString('pt-BR', {minimumFractionDigits: 4})}</td>
-            <td>${it.res_val ? 'R$ ' + parseFloat(it.res_val).toLocaleString('pt-BR', {minimumFractionDigits: 4}) : '---'}</td>
-            <td class="fw-bold">R$ ${((parseFloat(it.res_val) || parseFloat(it.v_est)) * parseFloat(it.q)).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-        </tr>`;
-    });
-
-    document.getElementById('modalBody').innerHTML = html + '</tbody></table></div>';
-    modalObj.show();
-}
-
-function irParaPagina() {
-    let p = parseInt(document.getElementById('pageInput').value) || 1;
-    currentPage = Math.max(1, Math.min(p, totalPages));
-    renderMonitor();
-    window.scrollTo(0,0);
 }
 
 function limparFiltros() {
