@@ -26,8 +26,22 @@ def log_mensagem(msg):
     with open(ARQ_LOG, 'a', encoding='utf-8') as f:
         f.write(linha + '\n')
 
+def buscar_status_global_pncp(lic_id, session):
+    """Consulta a página principal do edital para ver se foi Anulado/Revogado/Suspenso"""
+    try:
+        cnpj = lic_id[:14]
+        ano = lic_id[14:18]
+        seq = lic_id[18:]
+        url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}"
+        
+        r = session.get(url, timeout=15)
+        if r.status_code == 200:
+            return r.json().get('situacaoCompraNome')
+    except: pass
+    return None
+
 def buscar_resultado_no_pncp(lic_id, item_num, session):
-    """lic_id formato: CNPJ+ANO+SEQ"""
+    """Consulta os vencedores de um item específico"""
     try:
         cnpj = lic_id[:14]
         ano = lic_id[14:18]
@@ -46,9 +60,19 @@ def auditoria_licitacao(lic, session):
     teve_mudanca = False
     lic_id = lic.get('id')
     
-    # Percorre os itens que ainda não foram homologados
+    # 1️⃣ AUDITORIA GLOBAL: O Edital foi cancelado/anulado?
+    novo_status_global = buscar_status_global_pncp(lic_id, session)
+    if novo_status_global:
+        novo_status_upper = novo_status_global.upper()
+        status_atual = lic.get('sit_global', '').upper()
+        
+        # Se o status mudou, atualiza no banco
+        if novo_status_upper != status_atual:
+            lic['sit_global'] = novo_status_upper
+            teve_mudanca = True
+
+    # 2️⃣ AUDITORIA DE ITENS: Quem ganhou o quê?
     for it in lic.get('itens', []):
-        # ✅ CORREÇÃO 1: Se estiver vazio, assume "EM ANDAMENTO"
         if it.get('sit', 'EM ANDAMENTO') == "EM ANDAMENTO":
             resultado = buscar_resultado_no_pncp(lic_id, it.get('n'), session)
             
@@ -70,7 +94,7 @@ if __name__ == '__main__':
         log_mensagem("❌ Banco de dados não encontrado.")
         exit(0)
 
-    log_mensagem("🚀 Iniciando Auditoria de Vencedores...")
+    log_mensagem("🚀 Iniciando Auditoria Completa (Status Global e Vencedores)...")
     
     with gzip.open(ARQDADOS, 'rt', encoding='utf-8') as f:
         banco = json.load(f)
@@ -78,14 +102,20 @@ if __name__ == '__main__':
     session = criar_sessao()
     mudancas_totais = 0
     
-    # ✅ CORREÇÃO 2: Filtra considerando o padrão "EM ANDAMENTO" para campos vazios
+    # Filtra licitações que ainda têm itens em andamento ou que não estão com status finalizado
     pendentes = [l for l in banco if any(it.get('sit', 'EM ANDAMENTO') == "EM ANDAMENTO" for it in l.get('itens', []))]
 
     if not pendentes:
-        log_mensagem("✅ Todos os itens já estão homologados.")
+        log_mensagem("✅ Todas as licitações já estão homologadas/finalizadas.")
         exit(0)
 
-    log_mensagem(f"⏳ Verificando {len(pendentes)} licitações pendentes...")
+    # Fatiamento para evitar Timeout do GitHub Actions (Máx 45 min)
+    LIMITE_POR_RODADA = 500
+    if len(pendentes) > LIMITE_POR_RODADA:
+        log_mensagem(f"⚠️ {len(pendentes)} pendentes encontrados. Limitando a {LIMITE_POR_RODADA} nesta rodada.")
+        pendentes = pendentes[:LIMITE_POR_RODADA]
+    else:
+        log_mensagem(f"⏳ Verificando {len(pendentes)} licitações pendentes...")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAXWORKERS) as exe:
         futuros = {exe.submit(auditoria_licitacao, l, session): l for l in pendentes}
@@ -96,6 +126,6 @@ if __name__ == '__main__':
     if mudancas_totais > 0:
         with gzip.open(ARQDADOS, 'wt', encoding='utf-8') as f:
             json.dump(banco, f, ensure_ascii=False)
-        log_mensagem(f"💾 Auditoria finalizada: {mudancas_totais} licitações atualizadas.")
+        log_mensagem(f"💾 Auditoria finalizada: {mudancas_totais} licitações atualizadas com novos status/vencedores.")
     else:
-        log_mensagem("ℹ️ Nenhuma nova homologação encontrada nesta rodada.")
+        log_mensagem("ℹ️ Nenhuma alteração encontrada nesta rodada.")
