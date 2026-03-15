@@ -7,14 +7,14 @@ import concurrent.futures
 import sys
 import time
 import random
-from datetime import datetime, timedelta, date
+import re
+from datetime import datetime, date
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 # --- CONFIGURAÇÕES DE ARQUIVOS ---
-ARQDADOS = 'dadosoportunidades.json.gz' 
+ARQDADOS = 'pregacoes_pharma_limpos.json.gz' 
 ARQ_DICIONARIO = 'dicionario_ouro.json'
-ARQ_CHECKPOINT = 'checkpoint.txt'
 ARQ_LOCK = 'execucao.lock'
 ARQ_LOG = 'log_captura.txt'
 
@@ -31,16 +31,36 @@ def normalize(t):
     if not t: return ""
     return ''.join(c for c in unicodedata.normalize('NFD', str(t)).upper() if unicodedata.category(c) != 'Mn')
 
-# --- VETOS ABSOLUTOS (Incluindo Administrativos) ---
+# 🛑 MURALHA 1: VETOS ABSOLUTOS DO EDITAL (O Objeto Inteiro Morre Aqui)
 VETOS_ABSOLUTOS = [normalize(x) for x in [
+    # Serviços, TI e Administrativo
     "SOFTWARE", "IMPLANTACAO", "LICENCA", "COMPUTADOR", "INFORMATICA", "IMPRESSAO",
     "PRESTACAO DE SERVICO", "TERCEIRIZACAO", "LOCACAO", "ASSINATURA", "LIMPEZA",
-    "VIGILANCIA", "SEGURANCA", "OFICINA", "EXAME", "RADIOLOGIA", "IMAGEM", 
-    "GASES MEDICINAIS", "OXIGENIO", "ODONTOLOGICO", "PROTESE", "ORTESE", "CILINDRO",
-    "OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "ALIMENTACAO ESCOLAR", "MERENDA",
-    # Vetos Administrativos solicitados:
+    "VIGILANCIA", "SEGURANCA", "OFICINA", "BUFFET", "EVENTOS", "HOSPEDAGEM", "PASSAGENS",
+    "FARDAMENTO", "MARMITEX", "REFEICAO", "LAVANDERIA", "PUBLICIDADE",
+    
+    # Obras, Frota e Alimentação Geral
+    "OBRAS", "CONSTRUCAO", "PAVIMENTACAO", "ALIMENTACAO ESCOLAR", "MERENDA", "CESTA BASICA",
+    "AGRICULTURA", "VEICULOS", "FROTA", "MANUTENCAO PREVENTIVA", "PECAS AUTOMOTIVAS",
+    
+    # Saúde (Fora do escopo do seu projeto)
+    "EXAME", "RADIOLOGIA", "IMAGEM", "GASES MEDICINAIS", "OXIGENIO", 
+    "ODONTOLOGICO", "PROTESE", "ORTESE", "CILINDRO",
+    
+    # Vetos Administrativos (Adesão, IRP, etc)
     "ADESAO", "IRP", "INTENCAO DE REGISTRO", "CREDENCIAMENTO", "LEILAO", "CHAMAMENTO PUBLICO"
 ]]
+
+# 🛑 MURALHA 2: BLACKLIST DE ITENS (O "Pão Doce" Morre Aqui)
+BLACKLIST_ITENS = [
+    "BISCOITO", "FARINHA", "ACUCAR", "DOCE", "BOLO", "MISTURA", "RACAO", "PAO", "ARROZ", 
+    "MACARRAO", "LEITE", "SUCO", "ALIMENTO", "CESTA", "HORTIFRUTI", "CARNE", "FRANGO", 
+    "PEIXE", "FEIJAO", "CAFE", "ACHOCOLATADO", "SOPA", "POLPA", "IOGURTE", "BEBIDA", "FRUTA",
+    "AMBULANCIA", "PNEU", "PAPEL", "CANETA", "TONER", "CARTUCHO", "IMPRESSORA", "MOTO", 
+    "TRATOR", "ESCOLA", "DETERGENTE", "SABAO", "CIMENTO", "ASFALTO", "TINTA", "LIXO", 
+    "FUNERARI", "URNA", "COPO", "DESCARTAVEL", "CADEIRA", "MESA", "GRAMPEADOR", "MOCHILA"
+]
+REGEX_BLACKLIST_ITENS = re.compile(r'\b(?:' + '|'.join(BLACKLIST_ITENS) + r')\b')
 
 WL_MEDICAMENTOS = [normalize(x) for x in ["MEDICAMENT", "FARMAC", "REMEDIO", "SORO", "FARMACO", "AMPOLA", "COMPRIMIDO", "INJETAVEL", "VACINA", "INSULINA"]]
 WL_NUTRI_MMH = [normalize(x) for x in ["NUTRICAO ENTERAL", "FORMULA INFANTIL", "DIETA ENTERAL", "MATERIAL MEDIC", "INSUMO HOSPITALAR", "MMH", "SERINGA", "GAZE", "SONDA", "LUVA"]]
@@ -57,8 +77,8 @@ def criar_sessao():
     s = requests.Session()
     s.headers.update({
         'Accept': 'application/json', 
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept-Language': 'pt-BR,pt;q=0.9'
     })
     retry = Retry(total=5, backoff_factor=2, status_forcelist=[403, 429, 500, 502, 503, 504])
     s.mount('https://', HTTPAdapter(max_retries=retry))
@@ -95,7 +115,7 @@ def processar_licitacao(lic, session, termos_ouro):
         obj_norm = normalize(obj_raw)
         edit = f"{lic.get('numeroCompra')}/{lic.get('anoCompra')}"
 
-        # 1. Filtros Iniciais (Geo e Título)
+        # 1. Filtros Iniciais (Geo e Muralha 1 do Objeto)
         if uf in ESTADOS_BLOQUEADOS: return ('VETO_GEO', None)
         for v in VETOS_ABSOLUTOS:
             if v in obj_norm: return ('VETO_TITULO', None)
@@ -124,12 +144,19 @@ def processar_licitacao(lic, session, termos_ouro):
 
         teve_match = False
         itens_mapeados = []
+        
         for it in itens_brutos:
             desc_item = normalize(it.get('descricao', ''))
+            
+            # 🛑 MURALHA 2: Elimina comida, veículos e material de escritório
+            if REGEX_BLACKLIST_ITENS.search(desc_item):
+                continue
+            
+            # Verifica Match com o Dicionário de Fármacos
             if not teve_match and any(termo in desc_item for termo in termos_ouro):
                 teve_match = True
             
-            # ✅ CORREÇÃO: Captura precisa do Tipo de Benefício (1 a 5)
+            # Captura precisa do Tipo de Benefício ME/EPP
             try:
                 cod_benef = int(it.get('tipoBeneficio', 5))
             except:
@@ -141,13 +168,17 @@ def processar_licitacao(lic, session, termos_ouro):
                 'q': it.get('quantidade'), 
                 'u': it.get('unidadeMedida', 'UN'),
                 'v_est': it.get('valorUnitarioEstimado', 0), 
-                'benef': cod_benef # 1,2,3=ME/EPP | 4,5=Amplo
+                'benef': cod_benef
             })
 
         if precisa_checar_itens and not teve_match:
             return ('VETO_DICIONARIO', None)
+            
+        # Se todos os itens foram eliminados pela Blacklist (ex: edital só de merenda)
+        if not itens_mapeados:
+            return ('FORA_TEMATICA', None)
 
-        # 3. Dados de Localização e Identificação
+        # 3. Dados Finais para o Banco de Dados
         cid = uo.get('municipioNome', '---')
         uasg = uo.get('codigoUnidade', 'N/A')
         unid_nome = uo.get('nomeUnidade', '---')
@@ -159,6 +190,7 @@ def processar_licitacao(lic, session, termos_ouro):
             'org': lic.get('orgaoEntidade', {}).get('razaoSocial', '---'),
             'cid': cid, 'uasg': uasg, 'unid_nome': unid_nome,
             'obj': obj_raw, 'edit': edit, 
+            'sit_global': lic.get('situacaoCompraNome', 'EM ANDAMENTO'), # <--- NOVA LINHA ADICIONADA AQUI
             'link': f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
             'itens': itens_mapeados
         }
@@ -206,6 +238,7 @@ if __name__ == '__main__':
                 for f in concurrent.futures.as_completed(futuros):
                     status, resultado = f.result()
                     stats[status] += 1
+                    
                     if status == 'CAPTURADO':
                         # Detetor de Alteração de Data
                         if resultado['id'] in banco:
