@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(m
 
 # --- MURALHA DE BLOQUEIO (FALSOS POSITIVOS) ---
 # Adicione ou remova termos conforme a sua necessidade diária
-BLACKLIST = {
+BLACKLIST = [
     # Alimentação
     "BISCOITO", "FARINHA", "ACUCAR", "DOCE", "BOLO", "MISTURA", "RACAO", "PAO", "ARROZ", 
     "MACARRAO", "LEITE", "SUCO", "MERENDA", "ALIMENTO", "CESTA", "HORTIFRUTI", "CARNE", 
@@ -26,7 +26,8 @@ BLACKLIST = {
     "IMPRESSORA", "MOTO", "TRATOR", "ESCOLA", "LIMPEZA", "DETERGENTE", "SABAO", "OBRA", 
     "CIMENTO", "ASFALTO", "TINTA", "LIXO", "FUNERARI", "URNA", "COPO", "DESCARTAVEL", 
     "OFFICE", "CADEIRA", "MESA", "AR CONDICIONADO", "GRAMPEADOR", "LIVRO", "MOCHILA", "UNIFORME"
-}
+]
+REGEX_BLACKLIST = re.compile(r'\b(?:' + '|'.join(BLACKLIST) + r')\b')
 
 def normalizar(texto):
     """Remove acentos e converte para maiúsculas para facilitar a busca."""
@@ -35,21 +36,34 @@ def normalizar(texto):
     return t.upper()
 
 def criar_regex_token(token):
-    """Cria expressões regulares flexíveis para capturar variações do pregoeiro."""
+    """Cria expressões regulares flexíveis para capturar variações e acentos no texto original."""
     if token.isalpha():
-        # Se for só letras (Nome do remédio): Tolerância a A/O e S/Z
         t = token.upper()
-        t = t.replace('S', '[SZ]').replace('Z', '[SZ]')
-        t = t.replace('I', '[IY]').replace('Y', '[IY]')
+        
+        # Mapa supremo de flexibilidade (Acentos, S/Z, I/Y e C/Ç)
+        mapa = {
+            'A': '[AÁÀÂÃÄ]', 'E': '[EÉÈÊË]', 'I': '[IÍÌÎÏY]', 
+            'O': '[OÓÒÔÕÖ]', 'U': '[UÚÙÛÜ]', 'C': '[CÇ]', 
+            'S': '[SZ]', 'Z': '[SZ]', 'Y': '[IY]'
+        }
+        
+        # Trata o final A/O para pegar masculino/feminino (ex: Nifedipina/Nifedipino)
         if t.endswith('A') or t.endswith('O'):
-            t = t[:-1] + '[AO]'
-        return t + r'S?' # Permite que esteja no plural (ex: AMPOLAS)
+            base = t[:-1]
+            sufixo = '[AÁÀÂÃOÓÒÔÕ]'
+        else:
+            base = t
+            sufixo = ''
+            
+        # Monta a palavra substituindo cada letra pelo seu grupo de variações
+        t_flex = "".join(mapa.get(c, c) for c in base) + sufixo + r'S?'
+        return t_flex
     else:
-        # Se for dosagem ou medida (ex: 10MG/ML ou 0,9%)
+        # Tratamento para números e dosagens (ex: 10MG/ML ou 0,9%)
         t = re.escape(token.upper())
-        # Permite espaços entre números e letras (ex: 10MG vira 10 MG)
-        t = re.sub(r'(\d)(\w)', r'\1\\s*\2', t)
-        # Permite espaços ao redor de barras e vírgulas
+        # Permite espaço opcional entre número e letra (ex: "10 MG" ou "10MG")
+        t = re.sub(r'(\d)([A-Z])', r'\1\s*\2', t, flags=re.IGNORECASE) 
+        # Permite espaços ao redor de barras e vírgulas (ex: "10 MG / ML")
         t = t.replace(r'\/', r'\s*/\s*').replace(r'\,', r'\s*,\s*')
         return t
 
@@ -75,7 +89,7 @@ def processar_item(desc_original, dicionario_inteligente):
     desc_norm = normalizar(desc_original)
 
     # 🛑 BARREIRA 1: Blacklist (O Item morre aqui se for pão ou pneu)
-    if any(b in desc_norm for b in BLACKLIST):
+    if REGEX_BLACKLIST.search(desc_norm):
         return None, None
 
     # 🎯 BARREIRA 2: Busca da Chave Mestra
@@ -84,9 +98,9 @@ def processar_item(desc_original, dicionario_inteligente):
         
         # Procura os nomes dos fármacos (Core)
         for ct in termo['core']:
-            # (?<!\w) e (?!\w) funcionam como \b, mas suportam símbolos como % melhor
+            # (?<!\w) e (?!\w) funcionam como limites de palavra, mas suportam símbolos
             regex_ct = r'(?<!\w)' + criar_regex_token(ct) + r'(?!\w)'
-            if re.search(regex_ct, desc_norm):
+            if re.search(regex_ct, desc_original, flags=re.IGNORECASE):
                 core_matches.append(ct)
 
         # Se achou TODAS as palavras principais do fármaco...
@@ -98,7 +112,7 @@ def processar_item(desc_original, dicionario_inteligente):
             # ...e também procura as dosagens perdidas na frase (CATMAT)
             for at in termo['attrs']:
                 regex_at = r'(?<!\w)' + criar_regex_token(at) + r'(?!\w)'
-                if re.search(regex_at, desc_norm):
+                if re.search(regex_at, desc_original, flags=re.IGNORECASE):
                     tokens_para_pintar.append(criar_regex_token(at))
 
             # 🖌️ APLICAÇÃO DO MARCA-TEXTO
