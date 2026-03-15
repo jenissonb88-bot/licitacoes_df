@@ -62,7 +62,7 @@ def criar_regex_token(token):
         # Tratamento para números e dosagens (ex: 10MG/ML ou 0,9%)
         t = re.escape(token.upper())
         # Permite espaço opcional entre número e letra (ex: "10 MG" ou "10MG")
-        t = re.sub(r'(\d)([A-Z])', r'\1\s*\2', t, flags=re.IGNORECASE) 
+        t = re.sub(r'(\d)([A-Z])', r'\1\\s*\2', t, flags=re.IGNORECASE)
         # Permite espaços ao redor de barras e vírgulas (ex: "10 MG / ML")
         t = t.replace(r'\/', r'\s*/\s*').replace(r'\,', r'\s*,\s*')
         return t
